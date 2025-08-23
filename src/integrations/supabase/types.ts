@@ -14,6 +14,69 @@ export type Database = {
   }
   public: {
     Tables: {
+      checklist_items: {
+        Row: {
+          city: string | null
+          code_identifier: string | null
+          code_source: string | null
+          created_at: string
+          id: string
+          issue_to_check: string
+          location: string | null
+          long_code_requirement: string | null
+          project_type: string | null
+          reviewer_name: string | null
+          sheet_name: string | null
+          short_code_requirement: string | null
+          source_link: string | null
+          type_of_correction: string | null
+          type_of_issue: string | null
+          updated_at: string
+          user_id: string
+          zip_code: string | null
+        }
+        Insert: {
+          city?: string | null
+          code_identifier?: string | null
+          code_source?: string | null
+          created_at?: string
+          id?: string
+          issue_to_check: string
+          location?: string | null
+          long_code_requirement?: string | null
+          project_type?: string | null
+          reviewer_name?: string | null
+          sheet_name?: string | null
+          short_code_requirement?: string | null
+          source_link?: string | null
+          type_of_correction?: string | null
+          type_of_issue?: string | null
+          updated_at?: string
+          user_id: string
+          zip_code?: string | null
+        }
+        Update: {
+          city?: string | null
+          code_identifier?: string | null
+          code_source?: string | null
+          created_at?: string
+          id?: string
+          issue_to_check?: string
+          location?: string | null
+          long_code_requirement?: string | null
+          project_type?: string | null
+          reviewer_name?: string | null
+          sheet_name?: string | null
+          short_code_requirement?: string | null
+          source_link?: string | null
+          type_of_correction?: string | null
+          type_of_issue?: string | null
+          updated_at?: string
+          user_id?: string
+          zip_code?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
