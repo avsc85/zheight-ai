@@ -59,19 +59,19 @@ serve(async (req) => {
     }
 
     // Check file sizes and convert files to base64 with memory optimization
-    const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB limit
-    const MAX_TOTAL_SIZE = 10 * 1024 * 1024; // 10MB total limit
+    const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB limit
+    const MAX_TOTAL_SIZE = 25 * 1024 * 1024; // 25MB total limit
     
     let totalSize = 0;
     for (const file of files) {
       if (file.size > MAX_FILE_SIZE) {
-        throw new Error(`File ${file.name} is too large. Maximum size is 5MB.`);
+        throw new Error(`File ${file.name} is too large. Maximum size is 20MB.`);
       }
       totalSize += file.size;
     }
     
     if (totalSize > MAX_TOTAL_SIZE) {
-      throw new Error(`Total file size is too large. Maximum total size is 10MB.`);
+      throw new Error(`Total file size is too large. Maximum total size is 25MB.`);
     }
 
     // Process files sequentially to avoid memory spikes

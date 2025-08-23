@@ -130,7 +130,7 @@ export const ChecklistExtractor = () => {
 
       <DocumentUpload
         title="Upload Historical Documents"
-        description="Upload city correction letters and corresponding architectural plans (PDF files only)"
+        description="Upload city correction letters and corresponding architectural plans (PDF files only, max 20MB per file, 25MB total)"
         acceptedTypes={["application/pdf"]}
         onFilesUploaded={handleFilesUploaded}
         maxFiles={10}
