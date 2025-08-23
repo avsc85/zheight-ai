@@ -58,19 +58,47 @@ serve(async (req) => {
       systemPrompt = promptData?.prompt_text || 'You are an AI assistant specialized in analyzing architectural plans and city correction letters to extract compliance checklists.';
     }
 
-    // Convert files to base64
-    const filePromises = files.map(async (file) => {
+    // Check file sizes and convert files to base64 with memory optimization
+    const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB limit
+    const MAX_TOTAL_SIZE = 10 * 1024 * 1024; // 10MB total limit
+    
+    let totalSize = 0;
+    for (const file of files) {
+      if (file.size > MAX_FILE_SIZE) {
+        throw new Error(`File ${file.name} is too large. Maximum size is 5MB.`);
+      }
+      totalSize += file.size;
+    }
+    
+    if (totalSize > MAX_TOTAL_SIZE) {
+      throw new Error(`Total file size is too large. Maximum total size is 10MB.`);
+    }
+
+    // Process files sequentially to avoid memory spikes
+    const fileContents = [];
+    for (const file of files) {
+      console.log(`Processing file: ${file.name}, size: ${file.size} bytes`);
+      
       const arrayBuffer = await file.arrayBuffer();
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-      return {
+      // Use more memory-efficient base64 conversion
+      const uint8Array = new Uint8Array(arrayBuffer);
+      let base64 = '';
+      const chunkSize = 8192;
+      
+      for (let i = 0; i < uint8Array.length; i += chunkSize) {
+        const chunk = uint8Array.slice(i, i + chunkSize);
+        base64 += btoa(String.fromCharCode.apply(null, Array.from(chunk)));
+      }
+      
+      fileContents.push({
         type: "image_url",
         image_url: {
           url: `data:${file.type};base64,${base64}`
         }
-      };
-    });
-
-    const fileContents = await Promise.all(filePromises);
+      });
+      
+      console.log(`Processed file: ${file.name} successfully`);
+    }
 
     // Create OpenAI request
     const openAIRequest = {
