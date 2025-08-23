@@ -91,10 +91,8 @@ serve(async (req) => {
       }
       
       fileContents.push({
-        type: "image_url",
-        image_url: {
-          url: `data:${file.type};base64,${base64}`
-        }
+        type: "text",
+        text: `[Document: ${file.name}]\ndata:${file.type};base64,${base64}`
       });
       
       console.log(`Processed file: ${file.name} successfully`);
