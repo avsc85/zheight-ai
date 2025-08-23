@@ -118,8 +118,13 @@ serve(async (req) => {
       body: JSON.stringify({
         name: "Architectural Compliance Extractor",
         instructions: systemPrompt + "\n\nPlease respond with a JSON object containing an 'items' array. Each item should have these exact field names: sheet_name, issue_to_check, location, type_of_issue, code_source, code_identifier, short_code_requirement, long_code_requirement, source_link, project_type, city, zip_code, reviewer_name, type_of_correction. Return the result as: {\"items\": [...]}.",
-        model: "gpt-4o-mini",
-        tools: [{ type: "file_search" }]
+        model: "gpt-4o",
+        tools: [{ type: "file_search" }],
+        tool_resources: {
+          file_search: {
+            file_ids: uploadedFiles
+          }
+        }
       }),
     });
 
@@ -142,13 +147,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
         'OpenAI-Beta': 'assistants=v2',
       },
-      body: JSON.stringify({
-        tool_resources: {
-          file_search: {
-            file_ids: uploadedFiles
-          }
-        }
-      }),
+      body: JSON.stringify({}),
     });
 
     if (!threadResponse.ok) {
