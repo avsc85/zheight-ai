@@ -7,19 +7,31 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { FileSearch, Download, Eye } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
-interface ExtractedItem {
+interface ChecklistItem {
   id: string;
-  category: string;
-  requirement: string;
-  source: string;
-  confidence: number;
+  sheet_name?: string;
+  issue_to_check: string;
+  location?: string;
+  type_of_issue?: string;
+  code_source?: string;
+  code_identifier?: string;
+  short_code_requirement?: string;
+  long_code_requirement?: string;
+  source_link?: string;
+  project_type?: string;
+  city?: string;
+  zip_code?: string;
+  reviewer_name?: string;
+  type_of_correction?: string;
+  created_at: string;
 }
 
 export const ChecklistExtractor = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [extractedItems, setExtractedItems] = useState<ExtractedItem[]>([]);
+  const [extractedItems, setExtractedItems] = useState<ChecklistItem[]>([]);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const { toast } = useToast();
 
@@ -40,58 +52,59 @@ export const ChecklistExtractor = () => {
     setIsProcessing(true);
     setProgress(0);
 
-    // Simulate AI processing
-    const totalSteps = 5;
-    for (let i = 0; i <= totalSteps; i++) {
-      setTimeout(() => {
-        setProgress((i / totalSteps) * 100);
-        if (i === totalSteps) {
-          setIsProcessing(false);
-          // Simulate extracted checklist items
-          const mockItems: ExtractedItem[] = [
-            {
-              id: "1",
-              category: "Structural",
-              requirement: "Foundation details must include reinforcement schedule",
-              source: "City Correction Letter #2024-001",
-              confidence: 0.95
-            },
-            {
-              id: "2", 
-              category: "Fire Safety",
-              requirement: "Smoke detectors required in all bedrooms and hallways",
-              source: "Building Code Section 310.9",
-              confidence: 0.88
-            },
-            {
-              id: "3",
-              category: "Accessibility",
-              requirement: "Door width minimum 32 inches for primary entrance",
-              source: "ADA Compliance Guidelines",
-              confidence: 0.92
-            },
-            {
-              id: "4",
-              category: "Electrical",
-              requirement: "GFCI outlets required within 6 feet of sinks",
-              source: "City Correction Letter #2024-045",
-              confidence: 0.87
-            }
-          ];
-          setExtractedItems(mockItems);
-          toast({
-            title: "Extraction complete",
-            description: `Successfully extracted ${mockItems.length} compliance items`,
-          });
-        }
-      }, i * 1500);
-    }
-  };
+    try {
+      // Get current user session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error("Please log in to use this feature");
+      }
 
-  const getConfidenceColor = (confidence: number) => {
-    if (confidence >= 0.9) return "bg-accent text-accent-foreground";
-    if (confidence >= 0.8) return "bg-primary text-primary-foreground";
-    return "bg-muted text-muted-foreground";
+      // Create FormData with files
+      const formData = new FormData();
+      uploadedFiles.forEach(file => {
+        formData.append('files', file);
+      });
+
+      // Update progress
+      setProgress(25);
+
+      // Call the edge function
+      const { data, error } = await supabase.functions.invoke('agent1-extract-checklist', {
+        body: formData,
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
+        }
+      });
+
+      setProgress(75);
+
+      if (error) {
+        throw error;
+      }
+
+      if (!data.success) {
+        throw new Error(data.error || 'Extraction failed');
+      }
+
+      setProgress(100);
+      setExtractedItems(data.data || []);
+      
+      toast({
+        title: "Extraction complete",
+        description: `Successfully extracted and saved ${data.extractedCount || 0} compliance items`,
+      });
+
+    } catch (error: any) {
+      console.error('Extraction error:', error);
+      toast({
+        title: "Extraction failed",
+        description: error.message || "Failed to process documents",
+        variant: "destructive"
+      });
+    } finally {
+      setIsProcessing(false);
+      setProgress(0);
+    }
   };
 
   return (
@@ -107,7 +120,7 @@ export const ChecklistExtractor = () => {
         {isProcessing && (
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Analyzing documents...</span>
+              <span className="text-muted-foreground">Analyzing documents with AI...</span>
               <span className="text-foreground font-medium">{Math.round(progress)}%</span>
             </div>
             <Progress value={progress} className="h-2" />
@@ -117,10 +130,10 @@ export const ChecklistExtractor = () => {
 
       <DocumentUpload
         title="Upload Historical Documents"
-        description="Upload city correction letters and corresponding architectural plans"
-        acceptedTypes={[".pdf", ".doc", ".docx", ".dwg", ".dxf"]}
+        description="Upload city correction letters and corresponding architectural plans (PDF files only)"
+        acceptedTypes={[".pdf"]}
         onFilesUploaded={handleFilesUploaded}
-        maxFiles={20}
+        maxFiles={10}
       />
 
       {extractedItems.length > 0 && (
@@ -129,7 +142,7 @@ export const ChecklistExtractor = () => {
             <div>
               <h3 className="text-lg font-semibold text-foreground">Extracted Checklist</h3>
               <p className="text-muted-foreground text-sm">
-                {extractedItems.length} compliance items identified
+                {extractedItems.length} compliance items identified and saved
               </p>
             </div>
             <div className="flex gap-2">
@@ -149,14 +162,33 @@ export const ChecklistExtractor = () => {
               <div key={item.id} className="p-4 bg-muted rounded-lg">
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <Badge variant="outline">{item.category}</Badge>
-                    <Badge className={getConfidenceColor(item.confidence)}>
-                      {Math.round(item.confidence * 100)}% confidence
-                    </Badge>
+                    {item.type_of_correction && (
+                      <Badge variant="outline">{item.type_of_correction}</Badge>
+                    )}
+                    {item.type_of_issue && (
+                      <Badge variant="secondary">{item.type_of_issue}</Badge>
+                    )}
+                    {item.city && (
+                      <Badge className="bg-primary text-primary-foreground">{item.city}</Badge>
+                    )}
                   </div>
                 </div>
-                <p className="text-foreground font-medium mb-2">{item.requirement}</p>
-                <p className="text-muted-foreground text-sm">Source: {item.source}</p>
+                <p className="text-foreground font-medium mb-2">{item.issue_to_check}</p>
+                {item.location && (
+                  <p className="text-muted-foreground text-sm mb-1">
+                    <strong>Location:</strong> {item.location}
+                  </p>
+                )}
+                {item.code_identifier && (
+                  <p className="text-muted-foreground text-sm mb-1">
+                    <strong>Code:</strong> {item.code_identifier}
+                  </p>
+                )}
+                {item.short_code_requirement && (
+                  <p className="text-muted-foreground text-sm">
+                    <strong>Requirement:</strong> {item.short_code_requirement}
+                  </p>
+                )}
               </div>
             ))}
           </div>

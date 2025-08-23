@@ -1,1 +1,4 @@
 project_id = "tiiuowhbntuoepxpnobs"
+
+[functions.agent1-extract-checklist]
+verify_jwt = false
