@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_prompts: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          prompt: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          prompt: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          prompt?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       checklist_items: {
         Row: {
           city: string | null
