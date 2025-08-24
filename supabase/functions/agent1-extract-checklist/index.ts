@@ -105,7 +105,32 @@ serve(async (req) => {
       console.log(`Successfully uploaded file: ${file.name} with ID: ${uploadResult.id}`);
     }
 
-    // Create an assistant with file analysis capabilities
+    // Create a vector store first
+    console.log('Creating vector store...');
+    
+    const vectorStoreResponse = await fetch('https://api.openai.com/v1/vector_stores', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openAIApiKey}`,
+        'Content-Type': 'application/json',
+        'OpenAI-Beta': 'assistants=v2',
+      },
+      body: JSON.stringify({
+        name: "Architectural Documents Store",
+        file_ids: uploadedFiles
+      }),
+    });
+
+    if (!vectorStoreResponse.ok) {
+      const errorText = await vectorStoreResponse.text();
+      console.error('Vector store creation error:', errorText);
+      throw new Error(`Failed to create vector store: ${vectorStoreResponse.status}`);
+    }
+
+    const vectorStore = await vectorStoreResponse.json();
+    console.log(`Created vector store: ${vectorStore.id}`);
+
+    // Create OpenAI assistant with the vector store
     console.log('Creating OpenAI assistant for document analysis...');
     
     const assistantResponse = await fetch('https://api.openai.com/v1/assistants', {
@@ -122,7 +147,7 @@ serve(async (req) => {
         tools: [{ type: "file_search" }],
         tool_resources: {
           file_search: {
-            file_ids: uploadedFiles
+            vector_store_ids: [vectorStore.id]
           }
         }
       }),
@@ -254,6 +279,15 @@ serve(async (req) => {
     try {
       // Delete assistant
       await fetch(`https://api.openai.com/v1/assistants/${assistant.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${openAIApiKey}`,
+          'OpenAI-Beta': 'assistants=v2',
+        },
+      });
+      
+      // Delete vector store
+      await fetch(`https://api.openai.com/v1/vector_stores/${vectorStore.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${openAIApiKey}`,
