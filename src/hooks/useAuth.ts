@@ -14,30 +14,51 @@ interface Profile {
   updated_at: string;
 }
 
+interface UserRole {
+  id: string;
+  user_id: string;
+  role: 'user' | 'admin';
+  created_at: string;
+  updated_at: string;
+}
+
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  // Fetch user profile
+  // Fetch user profile and role
   const fetchProfile = async (userId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', userId)
-        .single();
+      const [profileResult, roleResult] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('*')
+          .eq('user_id', userId)
+          .single(),
+        supabase
+          .from('user_roles')
+          .select('*')
+          .eq('user_id', userId)
+          .single()
+      ]);
 
-      if (error) {
-        console.error('Error fetching profile:', error);
-        return;
+      if (profileResult.error) {
+        console.error('Error fetching profile:', profileResult.error);
+      } else {
+        setProfile(profileResult.data);
       }
 
-      setProfile(data);
+      if (roleResult.error) {
+        console.error('Error fetching user role:', roleResult.error);
+      } else {
+        setUserRole(roleResult.data);
+      }
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      console.error('Error fetching profile or role:', error);
     }
   };
 
@@ -55,6 +76,7 @@ export const useAuth = () => {
           }, 0);
         } else {
           setProfile(null);
+          setUserRole(null);
         }
         
         setLoading(false);
@@ -116,8 +138,10 @@ export const useAuth = () => {
     user,
     session,
     profile,
+    userRole,
     loading,
     signOut,
     isAuthenticated: !!session?.user,
+    isAdmin: userRole?.role === 'admin',
   };
 };

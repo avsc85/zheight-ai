@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { AgentCard } from "./AgentCard";
 import { DocumentUpload } from "./DocumentUpload";
+import { PromptEditor } from "./PromptEditor";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { FileSearch, Download, Eye } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 
 interface ChecklistItem {
@@ -33,10 +35,16 @@ export const ChecklistExtractor = () => {
   const [progress, setProgress] = useState(0);
   const [extractedItems, setExtractedItems] = useState<ChecklistItem[]>([]);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  const [customPrompt, setCustomPrompt] = useState<string>("");
   const { toast } = useToast();
+  const { isAdmin } = useAuth();
 
   const handleFilesUploaded = (files: File[]) => {
     setUploadedFiles(prev => [...prev, ...files]);
+  };
+
+  const handlePromptChange = (prompt: string) => {
+    setCustomPrompt(prompt);
   };
 
   const startExtraction = async () => {
@@ -59,11 +67,16 @@ export const ChecklistExtractor = () => {
         throw new Error("Please log in to use this feature");
       }
 
-      // Create FormData with files
+      // Create FormData with files and custom prompt if available
       const formData = new FormData();
       uploadedFiles.forEach(file => {
         formData.append('files', file);
       });
+      
+      // Add custom prompt if it exists
+      if (customPrompt) {
+        formData.append('prompt', customPrompt);
+      }
 
       // Update progress
       setProgress(25);
@@ -127,6 +140,12 @@ export const ChecklistExtractor = () => {
           </div>
         )}
       </AgentCard>
+
+      {/* Prompt Editor - Show for all users, but admin can edit */}
+      <PromptEditor 
+        onPromptChange={handlePromptChange}
+        isReadonly={!isAdmin}
+      />
 
       <DocumentUpload
         title="Upload Historical Documents"
