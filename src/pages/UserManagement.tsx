@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -240,6 +240,7 @@ const UserManagement = () => {
                 <Users className="w-5 h-5" />
                 <h2 className="text-lg font-semibold text-foreground">All Users</h2>
               </div>
+            <div className="flex items-center gap-2">
               <Button 
                 onClick={fetchUsers} 
                 variant="outline" 
@@ -248,6 +249,14 @@ const UserManagement = () => {
               >
                 {isLoadingUsers ? "Refreshing..." : "Refresh"}
               </Button>
+              <Button 
+                asChild
+                variant="default"
+                size="sm"
+              >
+                <Link to="/">Save Changes and Exit</Link>
+              </Button>
+            </div>
             </div>
 
             {isLoadingUsers ? (
