@@ -1,4 +1,4 @@
-import { Building2, Bot, User, LogOut } from "lucide-react";
+import { Building2, Bot, User, LogOut, Users } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { 
@@ -9,9 +9,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel
 } from "@/components/ui/dropdown-menu";
+import { Link } from "react-router-dom";
 
 export const Header = () => {
-  const { user, profile, signOut, isAuthenticated } = useAuth();
+  const { user, profile, signOut, isAuthenticated, isAdmin } = useAuth();
 
   return (
     <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
@@ -60,6 +61,17 @@ export const Header = () => {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                  {isAdmin && (
+                    <>
+                      <DropdownMenuItem asChild>
+                        <Link to="/admin/users" className="flex items-center">
+                          <Users className="mr-2 h-4 w-4" />
+                          <span>User Management</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                    </>
+                  )}
                   <DropdownMenuItem onClick={signOut}>
                     <LogOut className="mr-2 h-4 w-4" />
                     <span>Log out</span>
