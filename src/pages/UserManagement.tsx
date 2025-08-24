@@ -46,7 +46,7 @@ interface UserWithRole {
 }
 
 const UserManagement = () => {
-  const { isAuthenticated, isAdmin, loading } = useAuth();
+  const { isAuthenticated, isAdmin, userRole, loading } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [users, setUsers] = useState<UserWithRole[]>([]);
@@ -60,12 +60,13 @@ const UserManagement = () => {
         navigate('/auth');
         return;
       }
-      if (!isAdmin) {
+      // Only redirect if we have determined the user role (not null) and they're not admin
+      if (userRole !== null && !isAdmin) {
         navigate('/');
         return;
       }
     }
-  }, [isAuthenticated, isAdmin, loading, navigate]);
+  }, [isAuthenticated, isAdmin, userRole, loading, navigate]);
 
   // Fetch all users with their roles
   const fetchUsers = async () => {
