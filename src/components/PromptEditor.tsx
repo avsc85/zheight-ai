@@ -36,22 +36,19 @@ export const PromptEditor = ({ onPromptChange, isReadonly = false }: PromptEdito
         
         const fetchedPrompt = data?.prompt || defaultPrompt;
         setPrompt(fetchedPrompt);
-        onPromptChange(fetchedPrompt);
       } catch (error) {
         console.error('Error fetching prompt:', error);
         setPrompt(defaultPrompt);
-        onPromptChange(defaultPrompt);
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchDefaultPrompt();
-  }, [onPromptChange]);
+  }, []);
 
   const handlePromptChange = (newPrompt: string) => {
     setPrompt(newPrompt);
-    onPromptChange(newPrompt);
   };
 
   const savePrompt = async () => {
@@ -79,6 +76,9 @@ export const PromptEditor = ({ onPromptChange, isReadonly = false }: PromptEdito
         throw updateError;
       }
 
+      // Notify parent component of the saved prompt
+      onPromptChange(prompt);
+      
       toast({
         title: "Prompt saved",
         description: "Default extraction prompt has been updated successfully.",
