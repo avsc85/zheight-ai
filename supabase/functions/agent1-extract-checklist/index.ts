@@ -11,6 +11,43 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY')!;
 
+// Helper function for cleanup - defined at module level
+async function cleanupOpenAIResources(assistantId: string, vectorStoreId: string, fileIds: string[], apiKey: string) {
+  try {
+    // Delete assistant
+    await fetch(`https://api.openai.com/v1/assistants/${assistantId}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'OpenAI-Beta': 'assistants=v2',
+      },
+    });
+    
+    // Delete vector store
+    await fetch(`https://api.openai.com/v1/vector_stores/${vectorStoreId}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'OpenAI-Beta': 'assistants=v2',
+      },
+    });
+    
+    // Clean up uploaded files
+    for (const fileId of fileIds) {
+      await fetch(`https://api.openai.com/v1/files/${fileId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+        },
+      });
+    }
+    
+    console.log('Cleaned up OpenAI resources');
+  } catch (cleanupError) {
+    console.warn('Failed to cleanup some OpenAI resources:', cleanupError);
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -143,7 +180,7 @@ serve(async (req) => {
       body: JSON.stringify({
         name: "Architectural Compliance Extractor",
         instructions: systemPrompt + "\n\nIMPORTANT: Respond ONLY with valid JSON without any comments, markdown formatting, or additional text. Each item should have these exact field names: sheet_name, issue_to_check, location, type_of_issue, code_source, code_identifier, short_code_requirement, long_code_requirement, source_link, project_type, city, zip_code, reviewer_name, type_of_correction, zone_primary, occupancy_group, natural_hazard_zone. Return the result as: {\"items\": [...]}. Do not include any JavaScript-style comments (//) or any text outside the JSON object.",
-        model: "gpt-4o",
+        model: "gpt-4.1-2025-04-14",
         tools: [{ type: "file_search" }],
         tool_resources: {
           file_search: {
@@ -274,41 +311,26 @@ serve(async (req) => {
     const responseContent = messagesData.data[0].content[0].text.value;
 
     console.log('OpenAI assistant response received:', responseContent);
+    console.log('Response preview:', responseContent.substring(0, 500) + '...');
+    console.log('Original response length:', responseContent.length);
 
-    // Clean up resources
+    // CRITICAL: Parse JSON BEFORE cleanup to avoid losing response data
+    let extractedItems;
     try {
-      // Delete assistant
-      await fetch(`https://api.openai.com/v1/assistants/${assistant.id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${openAIApiKey}`,
-          'OpenAI-Beta': 'assistants=v2',
-        },
-      });
+      extractedItems = robustJsonParse(responseContent);
+      console.log('Successfully parsed response, found items:', extractedItems.items?.length || 0);
+    } catch (parseError) {
+      console.error('Parse error:', parseError.message);
+      console.error('Original response:', responseContent);
+      console.error('Response preview:', responseContent.substring(0, 1000));
       
-      // Delete vector store
-      await fetch(`https://api.openai.com/v1/vector_stores/${vectorStore.id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${openAIApiKey}`,
-          'OpenAI-Beta': 'assistants=v2',
-        },
-      });
-      
-      // Clean up uploaded files
-      for (const fileId of uploadedFiles) {
-        await fetch(`https://api.openai.com/v1/files/${fileId}`, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${openAIApiKey}`,
-          },
-        });
-      }
-      
-      console.log('Cleaned up OpenAI resources');
-    } catch (cleanupError) {
-      console.warn('Failed to cleanup some OpenAI resources:', cleanupError);
+      // Clean up resources before throwing error
+      await cleanupOpenAIResources(assistant.id, vectorStore.id, uploadedFiles, openAIApiKey);
+      throw new Error(`Failed to parse OpenAI response: ${parseError.message}`);
     }
+
+    // Clean up resources after successful parsing
+    await cleanupOpenAIResources(assistant.id, vectorStore.id, uploadedFiles, openAIApiKey);
 
     // Enhanced JSON validation and sanitization functions
     function sanitizeUrl(url: string): string {
@@ -505,41 +527,8 @@ serve(async (req) => {
       throw new Error('All parsing strategies failed');
     }
 
-    // Parse the JSON response with robust error handling
-    let extractedItems;
-    
-    console.log('Original response:', responseContent);
-    
-    try {
-      const parseResult = robustJsonParse(responseContent);
-      
-      if (parseResult.items && Array.isArray(parseResult.items)) {
-        extractedItems = parseResult.items;
-      } else if (Array.isArray(parseResult)) {
-        extractedItems = parseResult;
-      } else {
-        throw new Error('No valid items array found in parsed result');
-      }
-      
-      console.log(`Successfully parsed ${extractedItems.length} items`);
-      
-    } catch (parseError) {
-      console.error('Robust JSON parsing failed');
-      console.error('Parse error:', parseError.message);
-      console.error('Original response length:', responseContent.length);
-      console.error('Response preview:', responseContent.substring(0, 500));
-      
-      throw new Error(`Failed to parse OpenAI response: ${parseError.message}. The AI returned malformed JSON that could not be recovered.`);
-    }
-
-    if (!Array.isArray(extractedItems)) {
-      throw new Error('OpenAI response does not contain a valid items array');
-    }
-
-    console.log(`Extracted ${extractedItems.length} items from OpenAI response`);
-
-    // Prepare data for database insertion
-    const checklistItems = extractedItems.map((item: any) => ({
+    // Prepare data for database insertion using already parsed items
+    const checklistItems = extractedItems.items.map((item: any) => ({
       user_id: user.id,
       sheet_name: item.sheet_name || null,
       issue_to_check: item.issue_to_check || 'Not specified',
@@ -580,7 +569,7 @@ serve(async (req) => {
         success: true,
         message: `Successfully extracted and saved ${insertedData.length} checklist items`,
         data: insertedData,
-        extractedCount: extractedItems.length
+        extractedCount: extractedItems.items.length
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
