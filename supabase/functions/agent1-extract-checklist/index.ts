@@ -161,6 +161,10 @@ serve(async (req) => {
     console.log('Creating OpenAI assistant for document analysis...');
     console.log('Using model: gpt-4o');
     
+    // Declare variables outside try-catch for proper scope
+    let assistantResponse;
+    let assistant;
+    
     try {
       const assistantPayload = {
         name: "Architectural Compliance Extractor",
@@ -176,7 +180,7 @@ serve(async (req) => {
       
       console.log('Assistant payload model:', assistantPayload.model);
       
-      const assistantResponse = await fetch('https://api.openai.com/v1/assistants', {
+      assistantResponse = await fetch('https://api.openai.com/v1/assistants', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${openAIApiKey}`,
@@ -192,13 +196,13 @@ serve(async (req) => {
         console.error(`Response status: ${assistantResponse.status}, headers:`, Object.fromEntries(assistantResponse.headers.entries()));
         throw new Error(`Failed to create assistant: ${assistantResponse.status} - ${errorText}`);
       }
+      
+      assistant = await assistantResponse.json();
+      console.log(`Created assistant: ${assistant.id}`);
     } catch (assistantError) {
       console.error('Critical error creating assistant:', assistantError);
       throw assistantError;
     }
-
-    const assistant = await assistantResponse.json();
-    console.log(`Created assistant: ${assistant.id}`);
 
     // Create a thread with the uploaded files
     console.log('Creating thread with uploaded files...');
@@ -247,6 +251,10 @@ serve(async (req) => {
     // Run the assistant
     console.log('Running assistant analysis...');
     
+    // Declare variables outside try-catch for proper scope
+    let runResponse;
+    let run;
+    
     try {
       const runPayload = {
         assistant_id: assistant.id,
@@ -255,7 +263,7 @@ serve(async (req) => {
       
       console.log('Run payload using max_tokens:', runPayload.max_tokens);
       
-      const runResponse = await fetch(`https://api.openai.com/v1/threads/${thread.id}/runs`, {
+      runResponse = await fetch(`https://api.openai.com/v1/threads/${thread.id}/runs`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${openAIApiKey}`,
@@ -271,13 +279,13 @@ serve(async (req) => {
         console.error(`Response status: ${runResponse.status}, headers:`, Object.fromEntries(runResponse.headers.entries()));
         throw new Error(`Failed to start run: ${runResponse.status} - ${errorText}`);
       }
+      
+      run = await runResponse.json();
+      console.log(`Started run: ${run.id}`);
     } catch (runError) {
       console.error('Critical error starting run:', runError);
       throw runError;
     }
-
-    const run = await runResponse.json();
-    console.log(`Started run: ${run.id}`);
 
     // Poll for completion with increased timeout
     let runStatus = run.status;
