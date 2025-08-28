@@ -142,8 +142,8 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         name: "Architectural Compliance Extractor",
-        instructions: systemPrompt + "\n\nIMPORTANT: Process ALL correction items from the documents. Count the total number of corrections first, then ensure you extract every single one. Please respond with a JSON object containing an 'items' array. Each item should have these exact field names: sheet_name, issue_to_check, location, type_of_issue, code_source, code_identifier, short_code_requirement, long_code_requirement, source_link, project_type, city, zip_code, reviewer_name, type_of_correction. Use 'unspecified' for any unknown values instead of leaving them blank. Return the result as: {\"items\": [...]}. DO NOT truncate the response - include all correction items found.",
-        model: "gpt-5-2025-08-07",
+        instructions: systemPrompt + "\n\nIMPORTANT: Process ALL correction items from the documents. Count the total number of corrections first, then ensure you extract every single one. Please respond with a JSON object containing an 'items' array. Each item should have these exact field names: sheet_name, issue_to_check, location, type_of_issue, code_source, code_identifier, short_code_requirement, long_code_requirement, source_link, project_type, city, zip_code, reviewer_name, type_of_correction, zone_primary, occupancy_group, natural_hazard_zone. Use 'unspecified' for any unknown values instead of leaving them blank. Return the result as: {\"items\": [...]}. DO NOT truncate the response - include all correction items found.",
+        model: "gpt-4o",
         tools: [{ type: "file_search" }],
         tool_resources: {
           file_search: {
@@ -218,7 +218,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         assistant_id: assistant.id,
-        max_completion_tokens: 4000,
+        max_tokens: 4000,
       }),
     });
 
@@ -231,7 +231,7 @@ serve(async (req) => {
     const run = await runResponse.json();
     console.log(`Started run: ${run.id}`);
 
-    // Poll for completion with increased timeout for GPT-5
+    // Poll for completion with increased timeout
     let runStatus = run.status;
     let attempts = 0;
     const maxAttempts = 120; // 10 minutes timeout for better processing
@@ -417,6 +417,9 @@ serve(async (req) => {
       zip_code: item.zip_code || null,
       reviewer_name: item.reviewer_name || null,
       type_of_correction: item.type_of_correction || null,
+      zone_primary: item.zone_primary || null,
+      occupancy_group: item.occupancy_group || null,
+      natural_hazard_zone: item.natural_hazard_zone || null,
     }));
 
     console.log(`Inserting ${checklistItems.length} items into database...`);
