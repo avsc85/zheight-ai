@@ -7,9 +7,20 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const openAIApiKey = Deno.env.get('OPENAI_API_KEY')!;
+// Environment variable validation with detailed logging
+const supabaseUrl = Deno.env.get('SUPABASE_URL');
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
+
+console.log('Environment validation:');
+console.log('- SUPABASE_URL:', supabaseUrl ? '✓ Set' : '✗ Missing');
+console.log('- SUPABASE_SERVICE_ROLE_KEY:', supabaseServiceKey ? '✓ Set' : '✗ Missing');
+console.log('- OPENAI_API_KEY:', openAIApiKey ? '✓ Set' : '✗ Missing');
+
+if (!supabaseUrl || !supabaseServiceKey || !openAIApiKey) {
+  console.error('Missing required environment variables');
+  throw new Error('Server configuration error: Missing required environment variables');
+}
 
 // Helper function for cleanup - defined at module level
 async function cleanupOpenAIResources(assistantId: string, vectorStoreId: string, fileIds: string[], apiKey: string) {
@@ -49,27 +60,23 @@ async function cleanupOpenAIResources(assistantId: string, vectorStoreId: string
 }
 
 serve(async (req) => {
+  console.log(`Incoming ${req.method} request to agent1-extract-checklist`);
+  
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    // Initialize Supabase client (function is public, no auth required)
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
-    // Get authorization header
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      throw new Error('No authorization header');
-    }
-
-    // Verify user authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace('Bearer ', '')
-    );
-
-    if (authError || !user) {
-      throw new Error('Unauthorized');
-    }
+    // Log request details for debugging
+    console.log('Request headers:', Object.fromEntries(req.headers.entries()));
+    console.log('Content-Type:', req.headers.get('content-type'));
+    
+    // Since function is public (verify_jwt = false), we don't require authentication
+    // but we'll use a default user context for database operations
+    const defaultUserId = '00000000-0000-0000-0000-000000000000';
 
     const formData = await req.formData();
     const files = formData.getAll('files') as File[];
@@ -79,7 +86,7 @@ serve(async (req) => {
       throw new Error('No files provided');
     }
 
-    console.log(`Processing ${files.length} files for user ${user.id}`);
+    console.log(`Processing ${files.length} files (public function mode)`);
 
     // Get the agent prompt (use custom if provided, otherwise get default)
     let systemPrompt = customPrompt;
@@ -529,7 +536,7 @@ serve(async (req) => {
 
     // Prepare data for database insertion using already parsed items
     const checklistItems = extractedItems.items.map((item: any) => ({
-      user_id: user.id,
+      user_id: defaultUserId,
       sheet_name: item.sheet_name || null,
       issue_to_check: item.issue_to_check || 'Not specified',
       location: item.location || null,
