@@ -257,11 +257,10 @@ serve(async (req) => {
     
     try {
       const runPayload = {
-        assistant_id: assistant.id,
-        max_tokens: 4000,
+        assistant_id: assistant.id
       };
       
-      console.log('Run payload using max_tokens:', runPayload.max_tokens);
+      console.log('Starting run for assistant:', runPayload.assistant_id);
       
       runResponse = await fetch(`https://api.openai.com/v1/threads/${thread.id}/runs`, {
         method: 'POST',
