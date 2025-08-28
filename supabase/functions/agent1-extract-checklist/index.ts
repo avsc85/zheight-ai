@@ -7,6 +7,110 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Enhanced debugging and logging utilities
+const logStep = (step: string, data?: any) => {
+  const timestamp = new Date().toISOString();
+  console.log(`🔧 [${timestamp}] [STEP] ${step}`, data ? JSON.stringify(data, null, 2).substring(0, 300) : '');
+};
+
+const logError = (step: string, error: any, context?: any) => {
+  const timestamp = new Date().toISOString();
+  console.error(`❌ [${timestamp}] [ERROR] ${step}:`, error.message || error);
+  if (error.stack) console.error(`Stack: ${error.stack}`);
+  if (context) console.error(`Context:`, JSON.stringify(context, null, 2).substring(0, 300));
+};
+
+const logWarning = (step: string, message: string, data?: any) => {
+  const timestamp = new Date().toISOString();
+  console.warn(`⚠️  [${timestamp}] [WARNING] ${step}: ${message}`, data ? JSON.stringify(data, null, 2).substring(0, 200) : '');
+};
+
+const logSuccess = (step: string, data?: any) => {
+  const timestamp = new Date().toISOString();
+  console.log(`✅ [${timestamp}] [SUCCESS] ${step}`, data ? JSON.stringify(data, null, 2).substring(0, 200) : '');
+};
+
+// Enhanced timeout utility with progress tracking
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, operation: string): Promise<T> => {
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => {
+      logError('TIMEOUT', new Error(`Operation '${operation}' timed out after ${timeoutMs}ms`));
+      reject(new Error(`Operation '${operation}' timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+  
+  try {
+    logStep(`TIMEOUT_START`, { operation, timeoutMs });
+    const result = await Promise.race([promise, timeoutPromise]);
+    logSuccess(`TIMEOUT_COMPLETED`, { operation });
+    return result;
+  } catch (error) {
+    logError('TIMEOUT_FAILED', error, { operation });
+    throw error;
+  }
+};
+
+// Enhanced API call wrapper with retry logic
+const apiCallWithRetry = async (url: string, options: RequestInit, operation: string, retries = 2): Promise<Response> => {
+  let lastError: Error;
+  
+  for (let attempt = 1; attempt <= retries + 1; attempt++) {
+    try {
+      logStep(`API_CALL_ATTEMPT_${attempt}`, { operation, url: url.substring(0, 50) });
+      
+      const response = await withTimeout(
+        fetch(url, options),
+        60000, // 60 second timeout for API calls
+        `${operation} (attempt ${attempt})`
+      );
+      
+      // Log response details
+      logStep(`API_RESPONSE`, {
+        operation,
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries())
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        logError(`API_ERROR_RESPONSE`, new Error(`${response.status}: ${errorText}`), { operation, attempt });
+        
+        // Don't retry on client errors (4xx)
+        if (response.status >= 400 && response.status < 500) {
+          throw new Error(`API Error ${response.status}: ${errorText}`);
+        }
+        
+        // Retry on server errors (5xx) and network issues
+        if (attempt <= retries) {
+          logWarning(`API_RETRY`, `Retrying ${operation} in ${attempt * 2} seconds`, { attempt, status: response.status });
+          await new Promise(resolve => setTimeout(resolve, attempt * 2000));
+          continue;
+        }
+        
+        throw new Error(`API Error ${response.status}: ${errorText}`);
+      }
+      
+      logSuccess(`API_CALL_SUCCESS`, { operation, attempt });
+      return response;
+      
+    } catch (error) {
+      lastError = error as Error;
+      logError(`API_CALL_ERROR`, error, { operation, attempt });
+      
+      if (attempt <= retries) {
+        logWarning(`API_RETRY`, `Retrying ${operation} in ${attempt * 2} seconds due to error`, { attempt, error: error.message });
+        await new Promise(resolve => setTimeout(resolve, attempt * 2000));
+        continue;
+      }
+      
+      throw lastError;
+    }
+  }
+  
+  throw lastError!;
+};
+
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY')!;
@@ -16,159 +120,246 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Track execution time
+  const startTime = Date.now();
+  let userId: string | null = null;
+  let uploadedFiles: string[] = [];
+  let vectorStoreId: string | null = null;
+  let assistantId: string | null = null;
+
   try {
-    console.log('Edge function starting...');
+    logStep('FUNCTION_START', { method: req.method, url: req.url });
     
-    // Validate environment variables
+    // Phase 1: Environment and Authentication Validation
+    logStep('ENV_VALIDATION_START');
     if (!supabaseUrl || !supabaseServiceKey || !openAIApiKey) {
-      console.error('Missing environment variables:', { 
-        hasSupabaseUrl: !!supabaseUrl, 
-        hasServiceKey: !!supabaseServiceKey, 
-        hasOpenAI: !!openAIApiKey 
-      });
+      const missingVars = {
+        hasSupabaseUrl: !!supabaseUrl,
+        hasServiceKey: !!supabaseServiceKey,
+        hasOpenAI: !!openAIApiKey
+      };
+      logError('ENV_VALIDATION_FAILED', new Error('Missing environment variables'), missingVars);
       throw new Error('Missing required environment variables');
     }
+    logSuccess('ENV_VALIDATION');
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
     // Get authorization header
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
-      console.error('No authorization header provided');
+      logError('AUTH_HEADER_MISSING', new Error('No authorization header provided'));
       throw new Error('No authorization header');
     }
 
-    console.log('Verifying user authentication...');
-    // Verify user authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace('Bearer ', '')
+    logStep('USER_AUTH_START');
+    // Verify user authentication with timeout
+    const authResult = await withTimeout(
+      supabase.auth.getUser(authHeader.replace('Bearer ', '')),
+      10000,
+      'User Authentication'
     );
 
-    if (authError || !user) {
-      console.error('Authentication failed:', authError);
+    if (authResult.error || !authResult.data?.user) {
+      logError('USER_AUTH_FAILED', authResult.error || new Error('No user data'));
       throw new Error('Unauthorized');
     }
 
-    console.log(`User authenticated: ${user.id}`);
+    userId = authResult.data.user.id;
+    logSuccess('USER_AUTH', { userId });
 
-    const formData = await req.formData();
+    // Phase 2: Request Data Validation
+    logStep('REQUEST_PARSING_START');
+    const formData = await withTimeout(
+      req.formData(),
+      30000,
+      'Form Data Parsing'
+    );
+    
     const files = formData.getAll('files') as File[];
     const customPrompt = formData.get('prompt') as string;
 
     if (!files.length) {
+      logError('FILE_VALIDATION_FAILED', new Error('No files provided'));
       throw new Error('No files provided');
     }
 
-    console.log(`Processing ${files.length} files for user ${user.id}`);
+    logSuccess('REQUEST_PARSING', { fileCount: files.length, hasCustomPrompt: !!customPrompt });
 
-    // Get the agent prompt (use custom if provided, otherwise get default)
-    let systemPrompt = customPrompt;
-    
-    if (!customPrompt) {
-      const { data: promptData, error: promptError } = await supabase
-        .from('agent_prompts')
-        .select('prompt')
-        .eq('name', 'default_checklist_extractor')
-        .single();
-      
-      if (promptError) {
-        console.log('No default prompt found, using fallback');
-      }
-      
-      systemPrompt = promptData?.prompt || 'You are an AI assistant specialized in analyzing architectural plans and city correction letters to extract compliance checklists.';
-    }
-
-    // Check file sizes - reduced limits due to OpenAI file upload constraints
-    const MAX_FILE_SIZE = 512 * 1024 * 1024; // 512MB limit for OpenAI file uploads
-    const MAX_TOTAL_FILES = 10; // Reasonable limit for processing
+    // Validate file constraints
+    const MAX_FILE_SIZE = 512 * 1024 * 1024; // 512MB
+    const MAX_TOTAL_FILES = 10;
     
     if (files.length > MAX_TOTAL_FILES) {
+      logError('FILE_COUNT_EXCEEDED', new Error(`Too many files: ${files.length}`));
       throw new Error(`Too many files. Maximum ${MAX_TOTAL_FILES} files allowed.`);
     }
 
     for (const file of files) {
       if (file.size > MAX_FILE_SIZE) {
+        logError('FILE_SIZE_EXCEEDED', new Error(`File too large: ${file.name} (${file.size} bytes)`));
         throw new Error(`File ${file.name} is too large. Maximum size is 512MB.`);
+      }
+      if (file.size === 0) {
+        logError('EMPTY_FILE', new Error(`Empty file detected: ${file.name}`));
+        throw new Error(`File ${file.name} is empty`);
       }
     }
 
-    // Upload files to OpenAI using File Upload API
-    const uploadedFiles = [];
+    // Phase 3: Prompt Retrieval
+    let systemPrompt = customPrompt;
     
-    console.log(`Starting file upload process for ${files.length} files`);
+    if (!customPrompt) {
+      logStep('DEFAULT_PROMPT_FETCH_START');
+      try {
+        const promptResult = await withTimeout(
+          supabase
+            .from('agent_prompts')
+            .select('prompt')
+            .eq('name', 'default_checklist_extractor')
+            .single(),
+          5000,
+          'Default Prompt Retrieval'
+        );
+        
+        if (promptResult.error) {
+          logWarning('DEFAULT_PROMPT_NOT_FOUND', 'Using fallback prompt', { error: promptResult.error.message });
+        } else {
+          systemPrompt = promptResult.data?.prompt;
+          logSuccess('DEFAULT_PROMPT_FETCH');
+        }
+      } catch (promptError) {
+        logWarning('DEFAULT_PROMPT_ERROR', 'Using fallback prompt', { error: promptError.message });
+      }
+    }
     
-    for (const file of files) {
-      console.log(`Uploading file to OpenAI: ${file.name}, size: ${file.size} bytes`);
+    if (!systemPrompt) {
+      systemPrompt = 'You are an AI assistant specialized in analyzing architectural plans and city correction letters to extract compliance checklists.';
+      logWarning('USING_FALLBACK_PROMPT', 'No custom or default prompt available');
+    }
+
+    // Phase 4: File Upload to OpenAI
+    logStep('FILE_UPLOAD_START', { fileCount: files.length });
+    
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      logStep(`FILE_UPLOAD_${i + 1}`, { name: file.name, size: file.size, type: file.type });
       
       try {
         const uploadFormData = new FormData();
         uploadFormData.append('file', file);
         uploadFormData.append('purpose', 'assistants');
 
-        const uploadResponse = await fetch('https://api.openai.com/v1/files', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${openAIApiKey}`,
+        const uploadResponse = await apiCallWithRetry(
+          'https://api.openai.com/v1/files',
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${openAIApiKey}`,
+            },
+            body: uploadFormData,
           },
-          body: uploadFormData,
-        });
-
-        if (!uploadResponse.ok) {
-          const errorText = await uploadResponse.text();
-          console.error(`File upload error for ${file.name}:`, errorText);
-          console.error(`Response status: ${uploadResponse.status}, headers:`, Object.fromEntries(uploadResponse.headers.entries()));
-          throw new Error(`Failed to upload ${file.name}: ${uploadResponse.status} - ${errorText}`);
-        }
+          `File Upload: ${file.name}`,
+          2 // 2 retries for file uploads
+        );
 
         const uploadResult = await uploadResponse.json();
-        uploadedFiles.push(uploadResult.id);
         
-        console.log(`Successfully uploaded file: ${file.name} with ID: ${uploadResult.id}`);
+        if (!uploadResult.id) {
+          logError('FILE_UPLOAD_NO_ID', new Error('Upload response missing file ID'), { result: uploadResult });
+          throw new Error(`File upload failed for ${file.name}: No file ID returned`);
+        }
+        
+        uploadedFiles.push(uploadResult.id);
+        logSuccess(`FILE_UPLOAD_${i + 1}`, { fileId: uploadResult.id, name: file.name });
+        
       } catch (uploadError) {
-        console.error(`Critical error uploading file ${file.name}:`, uploadError);
-        throw uploadError;
+        logError(`FILE_UPLOAD_${i + 1}_FAILED`, uploadError, { fileName: file.name });
+        throw new Error(`Failed to upload ${file.name}: ${uploadError.message}`);
       }
     }
     
-    console.log(`All files uploaded successfully. File IDs:`, uploadedFiles);
+    logSuccess('ALL_FILES_UPLOADED', { fileIds: uploadedFiles });
 
-    // Create a vector store first
-    console.log('Creating vector store...');
+    // Phase 5: Vector Store Creation
+    logStep('VECTOR_STORE_CREATE_START');
     
-    const vectorStoreResponse = await fetch('https://api.openai.com/v1/vector_stores', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openAIApiKey}`,
-        'Content-Type': 'application/json',
-        'OpenAI-Beta': 'assistants=v2',
+    const vectorStoreResponse = await apiCallWithRetry(
+      'https://api.openai.com/v1/vector_stores',
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openAIApiKey}`,
+          'Content-Type': 'application/json',
+          'OpenAI-Beta': 'assistants=v2',
+        },
+        body: JSON.stringify({
+          name: `Architectural Documents Store - ${userId}`,
+          file_ids: uploadedFiles
+        }),
       },
-      body: JSON.stringify({
-        name: "Architectural Documents Store",
-        file_ids: uploadedFiles
-      }),
-    });
-
-    if (!vectorStoreResponse.ok) {
-      const errorText = await vectorStoreResponse.text();
-      console.error('Vector store creation error:', errorText);
-      throw new Error(`Failed to create vector store: ${vectorStoreResponse.status}`);
-    }
+      'Vector Store Creation'
+    );
 
     const vectorStore = await vectorStoreResponse.json();
-    console.log(`Created vector store: ${vectorStore.id}`);
+    vectorStoreId = vectorStore.id;
+    
+    if (!vectorStoreId) {
+      logError('VECTOR_STORE_NO_ID', new Error('Vector store response missing ID'), { result: vectorStore });
+      throw new Error('Failed to create vector store: No ID returned');
+    }
+    
+    logSuccess('VECTOR_STORE_CREATED', { vectorStoreId });
 
-    // Create OpenAI assistant with the vector store
-    console.log('Creating OpenAI assistant for document analysis...');
-    console.log('Using model: gpt-4o');
+    // Wait for vector store to be ready
+    logStep('VECTOR_STORE_STATUS_CHECK');
+    let vectorStoreReady = false;
+    let statusAttempts = 0;
+    const maxStatusAttempts = 20;
     
-    // Declare variables outside try-catch for proper scope
-    let assistantResponse;
-    let assistant;
+    while (!vectorStoreReady && statusAttempts < maxStatusAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      try {
+        const statusResponse = await apiCallWithRetry(
+          `https://api.openai.com/v1/vector_stores/${vectorStoreId}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${openAIApiKey}`,
+              'OpenAI-Beta': 'assistants=v2',
+            },
+          },
+          'Vector Store Status Check'
+        );
+        
+        const statusData = await statusResponse.json();
+        logStep('VECTOR_STORE_STATUS', { status: statusData.status, attempt: statusAttempts + 1 });
+        
+        if (statusData.status === 'completed') {
+          vectorStoreReady = true;
+        } else if (statusData.status === 'failed') {
+          throw new Error(`Vector store creation failed: ${statusData.last_error?.message || 'Unknown error'}`);
+        }
+        
+        statusAttempts++;
+      } catch (statusError) {
+        logError('VECTOR_STORE_STATUS_ERROR', statusError);
+        statusAttempts++;
+      }
+    }
     
-    try {
-      const assistantPayload = {
-        name: "Architectural Compliance Extractor",
-        instructions: systemPrompt + `
+    if (!vectorStoreReady) {
+      logWarning('VECTOR_STORE_STATUS_TIMEOUT', 'Proceeding without confirmation of readiness');
+    } else {
+      logSuccess('VECTOR_STORE_READY');
+    }
+
+    // Phase 6: Assistant Creation
+    logStep('ASSISTANT_CREATE_START');
+    
+    const assistantPayload = {
+      name: "Architectural Compliance Extractor",
+      instructions: systemPrompt + `
 
 CRITICAL RESPONSE FORMAT REQUIREMENTS:
 1. You MUST respond with ONLY valid JSON - no explanatory text, no markdown, no additional commentary
@@ -204,19 +395,24 @@ Example format:
     }
   ]
 }`,
-        model: "gpt-4.1-2025-04-14",
-        tools: [{ type: "file_search" }],
-        tool_resources: {
-          file_search: {
-            vector_store_ids: [vectorStore.id]
-          }
+      model: "gpt-4.1-2025-04-14",
+      tools: [{ type: "file_search" }],
+      tool_resources: {
+        file_search: {
+          vector_store_ids: [vectorStoreId]
         }
-      };
-      
-      console.log('Using model:', assistantPayload.model);
-      console.log('Assistant instructions length:', assistantPayload.instructions.length);
-      
-      assistantResponse = await fetch('https://api.openai.com/v1/assistants', {
+      }
+    };
+    
+    logStep('ASSISTANT_PAYLOAD', { 
+      model: assistantPayload.model, 
+      instructionsLength: assistantPayload.instructions.length,
+      vectorStoreId 
+    });
+    
+    const assistantResponse = await apiCallWithRetry(
+      'https://api.openai.com/v1/assistants',
+      {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${openAIApiKey}`,
@@ -224,368 +420,512 @@ Example format:
           'OpenAI-Beta': 'assistants=v2',
         },
         body: JSON.stringify(assistantPayload),
-      });
-
-      if (!assistantResponse.ok) {
-        const errorText = await assistantResponse.text();
-        console.error('Assistant creation error:', errorText);
-        console.error(`Response status: ${assistantResponse.status}, headers:`, Object.fromEntries(assistantResponse.headers.entries()));
-        throw new Error(`Failed to create assistant: ${assistantResponse.status} - ${errorText}`);
-      }
-      
-      assistant = await assistantResponse.json();
-      console.log(`Created assistant: ${assistant.id}`);
-    } catch (assistantError) {
-      console.error('Critical error creating assistant:', assistantError);
-      throw assistantError;
-    }
-
-    // Create a thread with the uploaded files
-    console.log('Creating thread with uploaded files...');
-    
-    const threadResponse = await fetch('https://api.openai.com/v1/threads', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openAIApiKey}`,
-        'Content-Type': 'application/json',
-        'OpenAI-Beta': 'assistants=v2',
       },
-      body: JSON.stringify({}),
-    });
-
-    if (!threadResponse.ok) {
-      const errorText = await threadResponse.text();
-      console.error('Thread creation error:', errorText);
-      throw new Error(`Failed to create thread: ${threadResponse.status}`);
+      'Assistant Creation'
+    );
+    
+    const assistant = await assistantResponse.json();
+    assistantId = assistant.id;
+    
+    if (!assistantId) {
+      logError('ASSISTANT_NO_ID', new Error('Assistant response missing ID'), { result: assistant });
+      throw new Error('Failed to create assistant: No ID returned');
     }
-
-    const thread = await threadResponse.json();
-    console.log(`Created thread: ${thread.id}`);
-
-    // Add a message to the thread
-    console.log('Adding message to thread...');
     
-    const messageResponse = await fetch(`https://api.openai.com/v1/threads/${thread.id}/messages`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openAIApiKey}`,
-        'Content-Type': 'application/json',
-        'OpenAI-Beta': 'assistants=v2',
-      },
-      body: JSON.stringify({
-        role: "user",
-        content: "Please analyze the uploaded architectural plans and correction documents to extract compliance checklist items according to your instructions. CRITICAL: First, count the total number of correction items mentioned in the city's correction letter. Then extract EVERY SINGLE correction item - do not skip any. Process documents page by page if needed to ensure completeness. Focus on identifying specific building code violations, accessibility issues, fire safety requirements, and any reviewer comments that need to be addressed. Ensure your response includes all correction items found, not just a subset."
-      }),
-    });
+    logSuccess('ASSISTANT_CREATED', { assistantId });
 
-    if (!messageResponse.ok) {
-      const errorText = await messageResponse.text();
-      console.error('Message creation error:', errorText);
-      throw new Error(`Failed to create message: ${messageResponse.status}`);
-    }
-
-    // Run the assistant
-    console.log('Running assistant analysis...');
+    // Phase 7: Thread Creation and Message Addition
+    logStep('THREAD_CREATE_START');
     
-    // Declare variables outside try-catch for proper scope
-    let runResponse;
-    let run;
-    
-    try {
-      const runPayload = {
-        assistant_id: assistant.id
-      };
-      
-      console.log('Starting run for assistant:', runPayload.assistant_id);
-      
-      runResponse = await fetch(`https://api.openai.com/v1/threads/${thread.id}/runs`, {
+    const threadResponse = await apiCallWithRetry(
+      'https://api.openai.com/v1/threads',
+      {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${openAIApiKey}`,
           'Content-Type': 'application/json',
           'OpenAI-Beta': 'assistants=v2',
         },
-        body: JSON.stringify(runPayload),
-      });
+        body: JSON.stringify({}),
+      },
+      'Thread Creation'
+    );
 
-      if (!runResponse.ok) {
-        const errorText = await runResponse.text();
-        console.error('Run creation error:', errorText);
-        console.error(`Response status: ${runResponse.status}, headers:`, Object.fromEntries(runResponse.headers.entries()));
-        throw new Error(`Failed to start run: ${runResponse.status} - ${errorText}`);
-      }
-      
-      run = await runResponse.json();
-      console.log(`Started run: ${run.id}`);
-    } catch (runError) {
-      console.error('Critical error starting run:', runError);
-      throw runError;
+    const thread = await threadResponse.json();
+    const threadId = thread.id;
+    
+    if (!threadId) {
+      logError('THREAD_NO_ID', new Error('Thread response missing ID'), { result: thread });
+      throw new Error('Failed to create thread: No ID returned');
     }
+    
+    logSuccess('THREAD_CREATED', { threadId });
 
-    // Poll for completion with increased timeout
+    // Add message to thread
+    logStep('MESSAGE_ADD_START');
+    
+    const messageResponse = await apiCallWithRetry(
+      `https://api.openai.com/v1/threads/${threadId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openAIApiKey}`,
+          'Content-Type': 'application/json',
+          'OpenAI-Beta': 'assistants=v2',
+        },
+        body: JSON.stringify({
+          role: "user",
+          content: "Please analyze the uploaded architectural plans and correction documents to extract compliance checklist items according to your instructions. CRITICAL: First, count the total number of correction items mentioned in the city's correction letter. Then extract EVERY SINGLE correction item - do not skip any. Process documents page by page if needed to ensure completeness. Focus on identifying specific building code violations, accessibility issues, fire safety requirements, and any reviewer comments that need to be addressed. Ensure your response includes all correction items found, not just a subset."
+        }),
+      },
+      'Message Addition'
+    );
+    
+    logSuccess('MESSAGE_ADDED');
+
+    // Phase 8: Run Creation and Monitoring
+    logStep('RUN_CREATE_START');
+    
+    const runResponse = await apiCallWithRetry(
+      `https://api.openai.com/v1/threads/${threadId}/runs`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openAIApiKey}`,
+          'Content-Type': 'application/json',
+          'OpenAI-Beta': 'assistants=v2',
+        },
+        body: JSON.stringify({
+          assistant_id: assistantId
+        }),
+      },
+      'Run Creation'
+    );
+    
+    const run = await runResponse.json();
+    const runId = run.id;
+    
+    if (!runId) {
+      logError('RUN_NO_ID', new Error('Run response missing ID'), { result: run });
+      throw new Error('Failed to start run: No ID returned');
+    }
+    
+    logSuccess('RUN_CREATED', { runId });
+
+    // Enhanced run monitoring with timeout
+    logStep('RUN_MONITORING_START');
+    
     let runStatus = run.status;
     let attempts = 0;
-    const maxAttempts = 120; // 10 minutes timeout for better processing
+    const maxAttempts = 200; // Increased timeout for complex analysis
+    const pollInterval = 3000; // 3 second intervals
+    const maxRunTime = 10 * 60 * 1000; // 10 minutes max
+    const runStartTime = Date.now();
     
     while (runStatus === 'queued' || runStatus === 'in_progress') {
-      if (attempts >= maxAttempts) {
-        console.error(`Analysis timeout after ${maxAttempts} attempts`);
+      if (attempts >= maxAttempts || (Date.now() - runStartTime) > maxRunTime) {
+        logError('RUN_TIMEOUT', new Error(`Analysis timeout after ${attempts} attempts or ${Date.now() - runStartTime}ms`));
         throw new Error('Analysis timeout - processing taking too long');
       }
       
-      await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
       
-      const statusResponse = await fetch(`https://api.openai.com/v1/threads/${thread.id}/runs/${run.id}`, {
-        headers: {
-          'Authorization': `Bearer ${openAIApiKey}`,
-          'OpenAI-Beta': 'assistants=v2',
-        },
-      });
-      
-      const statusData = await statusResponse.json();
-      runStatus = statusData.status;
-      attempts++;
-      
-      console.log(`Run status: ${runStatus} (attempt ${attempts}/${maxAttempts})`);
-      
-      // Log additional details if available
-      if (statusData.last_error) {
-        console.error('Run error details:', statusData.last_error);
+      try {
+        const statusResponse = await apiCallWithRetry(
+          `https://api.openai.com/v1/threads/${threadId}/runs/${runId}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${openAIApiKey}`,
+              'OpenAI-Beta': 'assistants=v2',
+            },
+          },
+          `Run Status Check (${attempts + 1})`
+        );
+        
+        const statusData = await statusResponse.json();
+        runStatus = statusData.status;
+        attempts++;
+        
+        logStep('RUN_STATUS', { 
+          status: runStatus, 
+          attempt: attempts, 
+          maxAttempts,
+          elapsedMs: Date.now() - runStartTime
+        });
+        
+        // Log additional details if available
+        if (statusData.last_error) {
+          logError('RUN_ERROR_DETAILS', new Error('Run has errors'), { lastError: statusData.last_error });
+        }
+        
+        if (statusData.required_action) {
+          logWarning('RUN_REQUIRES_ACTION', 'Run requires manual action', { requiredAction: statusData.required_action });
+        }
+        
+      } catch (statusError) {
+        logError('RUN_STATUS_CHECK_ERROR', statusError);
+        attempts++;
+        // Continue trying even if status check fails
       }
     }
 
     if (runStatus !== 'completed') {
+      logError('RUN_FAILED', new Error(`Analysis failed with status: ${runStatus}`));
       throw new Error(`Analysis failed with status: ${runStatus}`);
     }
-
-    // Get the assistant's response
-    console.log('Retrieving assistant response...');
     
-    const messagesResponse = await fetch(`https://api.openai.com/v1/threads/${thread.id}/messages`, {
-      headers: {
-        'Authorization': `Bearer ${openAIApiKey}`,
-        'OpenAI-Beta': 'assistants=v2',
+    logSuccess('RUN_COMPLETED', { totalAttempts: attempts, elapsedMs: Date.now() - runStartTime });
+
+    // Phase 9: Response Retrieval and Processing
+    logStep('RESPONSE_RETRIEVAL_START');
+    
+    const messagesResponse = await apiCallWithRetry(
+      `https://api.openai.com/v1/threads/${threadId}/messages`,
+      {
+        headers: {
+          'Authorization': `Bearer ${openAIApiKey}`,
+          'OpenAI-Beta': 'assistants=v2',
+        },
       },
-    });
+      'Messages Retrieval'
+    );
 
     const messagesData = await messagesResponse.json();
-    const responseContent = messagesData.data[0].content[0].text.value;
-
-    console.log('OpenAI assistant response received (length:', responseContent.length, ')');
-    console.log('Response preview:', responseContent.substring(0, 500) + '...');
     
-    // Check if response appears truncated
-    if (!responseContent.includes('}') && !responseContent.includes(']')) {
-      console.warn('Response may be truncated - no closing brackets found');
+    if (!messagesData.data || !messagesData.data.length) {
+      logError('NO_MESSAGES', new Error('No messages returned from thread'));
+      throw new Error('No response messages found');
+    }
+    
+    const responseMessage = messagesData.data[0];
+    if (!responseMessage.content || !responseMessage.content.length) {
+      logError('EMPTY_MESSAGE_CONTENT', new Error('Message has no content'));
+      throw new Error('Response message is empty');
+    }
+    
+    const responseContent = responseMessage.content[0].text?.value;
+    if (!responseContent) {
+      logError('NO_TEXT_CONTENT', new Error('Message content has no text value'));
+      throw new Error('Response content is not text');
     }
 
-    // Clean up resources
-    try {
-      // Delete assistant
-      await fetch(`https://api.openai.com/v1/assistants/${assistant.id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${openAIApiKey}`,
-          'OpenAI-Beta': 'assistants=v2',
-        },
-      });
-      
-      // Delete vector store
-      await fetch(`https://api.openai.com/v1/vector_stores/${vectorStore.id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${openAIApiKey}`,
-          'OpenAI-Beta': 'assistants=v2',
-        },
-      });
-      
-      // Clean up uploaded files
-      for (const fileId of uploadedFiles) {
-        await fetch(`https://api.openai.com/v1/files/${fileId}`, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${openAIApiKey}`,
-          },
-        });
-      }
-      
-      console.log('Cleaned up OpenAI resources');
-    } catch (cleanupError) {
-      console.warn('Failed to cleanup some OpenAI resources:', cleanupError);
-    }
+    logSuccess('RESPONSE_RETRIEVED', { 
+      messageCount: messagesData.data.length,
+      contentLength: responseContent.length,
+      contentPreview: responseContent.substring(0, 200)
+    });
 
-    // Parse the JSON response with enhanced error handling
+    // Phase 10: Enhanced JSON Processing
+    logStep('JSON_PROCESSING_START');
+    
     let extractedItems;
     
-    // Clean the response content first
+    // Enhanced JSON cleaning function
     function cleanJsonResponse(content: string): string {
-      // Remove markdown code blocks if present
+      logStep('JSON_CLEANING_START', { originalLength: content.length });
+      
+      // Remove markdown code blocks
       content = content.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+      
+      // Remove any leading/trailing whitespace
+      content = content.trim();
       
       // Fix common JSON issues
       content = content.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
       
-      // Fix truncated URLs and strings
+      // Fix truncated strings and URLs
       content = content.replace(/"https?:[^"]*$/gm, '"unspecified"');
       content = content.replace(/"[^"]*$/gm, '"unspecified"');
       
-      return content.trim();
+      // Fix missing quotes on property names
+      content = content.replace(/(\w+):/g, '"$1":');
+      
+      // Fix trailing commas
+      content = content.replace(/,(\s*[}\]])/g, '$1');
+      
+      logStep('JSON_CLEANING_COMPLETE', { cleanedLength: content.length });
+      return content;
+    }
+    
+    // Enhanced JSON extraction with multiple strategies
+    function extractJsonFromResponse(content: string): any {
+      logStep('JSON_EXTRACTION_START');
+      
+      const strategies = [
+        // Strategy 1: Direct parse
+        () => {
+          logStep('JSON_STRATEGY_1', 'Direct parse');
+          return JSON.parse(content);
+        },
+        
+        // Strategy 2: Extract JSON object with items
+        () => {
+          logStep('JSON_STRATEGY_2', 'Extract JSON object with items');
+          const match = content.match(/\{[\s\S]*?"items"\s*:\s*\[[\s\S]*?\][\s\S]*?\}/);
+          if (!match) throw new Error('No JSON object with items found');
+          return JSON.parse(match[0]);
+        },
+        
+        // Strategy 3: Extract items array only
+        () => {
+          logStep('JSON_STRATEGY_3', 'Extract items array only');
+          const match = content.match(/"items"\s*:\s*(\[[\s\S]*?\])/);
+          if (!match) throw new Error('No items array found');
+          return { items: JSON.parse(match[1]) };
+        },
+        
+        // Strategy 4: Find any JSON array
+        () => {
+          logStep('JSON_STRATEGY_4', 'Find any JSON array');
+          const match = content.match(/\[[\s\S]*?\]/);
+          if (!match) throw new Error('No JSON array found');
+          const array = JSON.parse(match[0]);
+          return { items: array };
+        }
+      ];
+      
+      for (let i = 0; i < strategies.length; i++) {
+        try {
+          const result = strategies[i]();
+          logSuccess(`JSON_STRATEGY_${i + 1}_SUCCESS`);
+          return result;
+        } catch (error) {
+          logWarning(`JSON_STRATEGY_${i + 1}_FAILED`, error.message);
+        }
+      }
+      
+      throw new Error('All JSON extraction strategies failed');
     }
     
     try {
-      console.log('Raw response content length:', responseContent.length);
-      console.log('Raw response starts with:', responseContent.substring(0, 100));
-      console.log('Raw response ends with:', responseContent.substring(responseContent.length - 100));
+      logStep('JSON_PARSE_START', {
+        contentLength: responseContent.length,
+        startsWithBrace: responseContent.trim().startsWith('{'),
+        endsWithBrace: responseContent.trim().endsWith('}'),
+        containsItems: responseContent.includes('"items"'),
+        containsArray: responseContent.includes('[')
+      });
       
       const cleanedContent = cleanJsonResponse(responseContent);
-      console.log('Cleaned response preview (first 300 chars):', cleanedContent.substring(0, 300));
-      console.log('Cleaned response preview (last 100 chars):', cleanedContent.substring(cleanedContent.length - 100));
+      logStep('JSON_CLEANED', {
+        originalLength: responseContent.length,
+        cleanedLength: cleanedContent.length
+      });
       
-      // First, try to parse the entire cleaned content as JSON
-      try {
-        const directParse = JSON.parse(cleanedContent);
-        if (directParse.items && Array.isArray(directParse.items)) {
-          extractedItems = directParse.items;
-          console.log(`✅ Direct JSON parse successful with ${extractedItems.length} items`);
-        } else if (Array.isArray(directParse)) {
-          extractedItems = directParse;
-          console.log(`✅ Direct array parse successful with ${extractedItems.length} items`);
-        } else {
-          throw new Error('Parsed JSON does not contain items array');
-        }
-      } catch (directError) {
-        console.log('❌ Direct JSON parse failed, trying pattern matching...');
-        
-        // Try to extract JSON object with items array
-        const jsonMatch = cleanedContent.match(/\{[\s\S]*?"items"\s*:\s*\[[\s\S]*?\][\s\S]*?\}/);
-        if (jsonMatch) {
-          try {
-            const parsed = JSON.parse(jsonMatch[0]);
-            extractedItems = parsed.items || [];
-            console.log(`✅ Pattern match JSON parse successful with ${extractedItems.length} items`);
-          } catch (matchError) {
-            console.error('❌ Pattern matched JSON parse failed:', matchError);
-            throw matchError;
-          }
-        } else {
-          // Try to find just the items array
-          const arrayMatch = cleanedContent.match(/\[[\s\S]*?\]/);
-          if (arrayMatch) {
-            try {
-              extractedItems = JSON.parse(arrayMatch[0]);
-              console.log(`✅ Array pattern match successful with ${extractedItems.length} items`);
-            } catch (arrayError) {
-              console.error('❌ Array pattern match failed:', arrayError);
-              throw arrayError;
-            }
-          } else {
-            console.error('❌ No JSON patterns found in response');
-            throw new Error('No valid JSON structure found in response');
-          }
-        }
+      const parsedResult = extractJsonFromResponse(cleanedContent);
+      
+      // Validate the parsed result
+      if (!parsedResult) {
+        throw new Error('Parsed result is null or undefined');
       }
-    } catch (parseError) {
-      console.error('🚨 ALL JSON parsing methods failed:', parseError);
-      console.error('Response content analysis:');
-      console.error('- Length:', responseContent.length);
-      console.error('- Starts with "{" or "[":', responseContent.trim().startsWith('{') || responseContent.trim().startsWith('['));
-      console.error('- Contains "items":', responseContent.includes('"items"'));
-      console.error('- Contains "issue_to_check":', responseContent.includes('"issue_to_check"'));
       
-      // Count potential items by looking for issue_to_check fields
-      const potentialItems = responseContent.match(/"issue_to_check":\s*"[^"]*"/g);
-      const itemCount = potentialItems ? potentialItems.length : 0;
-      
-      if (itemCount > 0) {
-        console.log(`Found ${itemCount} potential items, but response format is invalid`);
-        throw new Error(`Response contains ${itemCount} correction items but is not in valid JSON format. AI may have included explanatory text.`);
+      if (parsedResult.items && Array.isArray(parsedResult.items)) {
+        extractedItems = parsedResult.items;
+      } else if (Array.isArray(parsedResult)) {
+        extractedItems = parsedResult;
       } else {
-        throw new Error(`Invalid response format from OpenAI: ${parseError.message}`);
+        throw new Error('Parsed result does not contain valid items array');
       }
+      
+      logSuccess('JSON_PARSE_SUCCESS', { itemCount: extractedItems.length });
+      
+    } catch (parseError) {
+      logError('JSON_PARSE_FAILED', parseError, {
+        contentSample: responseContent.substring(0, 500),
+        contentEnd: responseContent.substring(responseContent.length - 200)
+      });
+      throw new Error(`Failed to parse AI response as JSON: ${parseError.message}`);
     }
 
-    if (!Array.isArray(extractedItems)) {
-      console.error('Extracted items is not an array:', typeof extractedItems, extractedItems);
-      throw new Error('OpenAI response does not contain a valid items array');
-    }
-
-    if (extractedItems.length === 0) {
-      console.warn('WARNING: No items extracted from OpenAI response');
-      console.log('This may indicate incomplete processing or document parsing issues');
-    }
-
-    console.log(`Successfully extracted ${extractedItems.length} items from OpenAI response`);
+    // Phase 11: Data Validation and Database Insertion
+    logStep('DATA_VALIDATION_START');
     
-    // Log first item structure for debugging
-    if (extractedItems.length > 0) {
-      console.log('First item structure:', JSON.stringify(extractedItems[0], null, 2));
+    if (!extractedItems || extractedItems.length === 0) {
+      logWarning('NO_ITEMS_EXTRACTED', 'No checklist items were extracted');
+      throw new Error('No checklist items were extracted from the documents');
     }
-
-    // Prepare data for database insertion
-    const checklistItems = extractedItems.map((item: any) => ({
-      user_id: user.id,
-      sheet_name: item.sheet_name || null,
-      issue_to_check: item.issue_to_check || 'Not specified',
-      location: item.location || null,
-      type_of_issue: item.type_of_issue || null,
-      code_source: item.code_source || null,
-      code_identifier: item.code_identifier || null,
-      short_code_requirement: item.short_code_requirement || null,
-      long_code_requirement: item.long_code_requirement || null,
-      source_link: item.source_link || null,
-      project_type: item.project_type || null,
-      city: item.city || null,
-      zip_code: item.zip_code || null,
-      reviewer_name: item.reviewer_name || null,
-      type_of_correction: item.type_of_correction || null,
-      zone_primary: item.zone_primary || null,
-      occupancy_group: item.occupancy_group || null,
-      natural_hazard_zone: item.natural_hazard_zone || null,
-    }));
-
-    console.log(`Inserting ${checklistItems.length} items into database...`);
-
-    // Insert into database
-    const { data: insertedData, error: insertError } = await supabase
-      .from('checklist_items')
-      .insert(checklistItems)
-      .select();
-
-    if (insertError) {
-      console.error('Database insertion error:', insertError);
-      throw new Error(`Database error: ${insertError.message}`);
-    }
-
-    console.log(`Successfully inserted ${insertedData.length} checklist items`);
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        message: `Successfully extracted and saved ${insertedData.length} checklist items`,
-        data: insertedData,
-        extractedCount: extractedItems.length
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    
+    // Validate and clean each item
+    const validatedItems = extractedItems.map((item: any, index: number) => {
+      logStep(`ITEM_VALIDATION_${index + 1}`, { item: JSON.stringify(item).substring(0, 100) });
+      
+      const validatedItem = {
+        user_id: userId,
+        sheet_name: item.sheet_name || 'unspecified',
+        issue_to_check: item.issue_to_check || item.issue || 'No issue specified',
+        location: item.location || 'unspecified',
+        type_of_issue: item.type_of_issue || 'unspecified',
+        code_source: item.code_source || 'unspecified',
+        code_identifier: item.code_identifier || 'unspecified',
+        short_code_requirement: item.short_code_requirement || 'unspecified',
+        long_code_requirement: item.long_code_requirement || 'unspecified',
+        source_link: item.source_link || 'unspecified',
+        project_type: item.project_type || 'unspecified',
+        city: item.city || 'unspecified',
+        zip_code: item.zip_code || 'unspecified',
+        reviewer_name: item.reviewer_name || 'unspecified',
+        type_of_correction: item.type_of_correction || 'unspecified',
+        zone_primary: item.zone_primary || 'unspecified',
+        occupancy_group: item.occupancy_group || 'unspecified',
+        natural_hazard_zone: item.natural_hazard_zone || 'unspecified',
+      };
+      
+      // Ensure required fields are not empty
+      if (!validatedItem.issue_to_check || validatedItem.issue_to_check === 'unspecified') {
+        logWarning(`ITEM_${index + 1}_MISSING_ISSUE`, 'Item missing required issue description');
+        validatedItem.issue_to_check = `Checklist item ${index + 1} - description not provided`;
       }
-    );
+      
+      return validatedItem;
+    });
+    
+    logSuccess('DATA_VALIDATION', { validatedCount: validatedItems.length });
+    
+    // Database insertion with transaction
+    logStep('DATABASE_INSERT_START');
+    
+    try {
+      const { data: insertedData, error: insertError } = await withTimeout(
+        supabase
+          .from('checklist_items')
+          .insert(validatedItems)
+          .select(),
+        30000,
+        'Database Insertion'
+      );
+      
+      if (insertError) {
+        logError('DATABASE_INSERT_ERROR', insertError);
+        throw new Error(`Database insertion failed: ${insertError.message}`);
+      }
+      
+      logSuccess('DATABASE_INSERT', { insertedCount: insertedData?.length || 0 });
+      
+      // Final success response
+      const executionTime = Date.now() - startTime;
+      logSuccess('FUNCTION_COMPLETE', {
+        executionTimeMs: executionTime,
+        itemsProcessed: extractedItems.length,
+        itemsInserted: insertedData?.length || 0,
+        filesProcessed: files.length
+      });
+      
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: `Successfully extracted ${extractedItems.length} checklist items from ${files.length} files`,
+          data: {
+            extractedItems: extractedItems.length,
+            insertedItems: insertedData?.length || 0,
+            executionTimeMs: executionTime,
+            items: insertedData
+          }
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+      
+    } catch (dbError) {
+      logError('DATABASE_OPERATION_FAILED', dbError);
+      throw dbError;
+    }
 
   } catch (error) {
-    console.error('Critical error in agent1-extract-checklist function:', error);
-    console.error('Error stack:', error.stack);
-    console.error('Error type:', error.constructor.name);
+    logError('FUNCTION_ERROR', error, { 
+      userId, 
+      uploadedFiles: uploadedFiles.length,
+      vectorStoreId,
+      assistantId,
+      executionTimeMs: Date.now() - startTime
+    });
     
     return new Response(
       JSON.stringify({
-        error: error.message,
         success: false,
-        stack: error.stack,
-        type: error.constructor.name
+        error: error.message,
+        details: {
+          userId,
+          filesUploaded: uploadedFiles.length,
+          vectorStoreCreated: !!vectorStoreId,
+          assistantCreated: !!assistantId,
+          executionTimeMs: Date.now() - startTime
+        }
       }),
       {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );
+  } finally {
+    // Enhanced cleanup with error handling
+    logStep('CLEANUP_START');
+    
+    const cleanupTasks = [];
+    
+    // Clean up assistant
+    if (assistantId) {
+      cleanupTasks.push(
+        apiCallWithRetry(
+          `https://api.openai.com/v1/assistants/${assistantId}`,
+          {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${openAIApiKey}`,
+              'OpenAI-Beta': 'assistants=v2',
+            },
+          },
+          'Assistant Cleanup',
+          1 // Only 1 retry for cleanup
+        ).catch(error => logWarning('ASSISTANT_CLEANUP_FAILED', error.message))
+      );
+    }
+    
+    // Clean up vector store
+    if (vectorStoreId) {
+      cleanupTasks.push(
+        apiCallWithRetry(
+          `https://api.openai.com/v1/vector_stores/${vectorStoreId}`,
+          {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${openAIApiKey}`,
+              'OpenAI-Beta': 'assistants=v2',
+            },
+          },
+          'Vector Store Cleanup',
+          1
+        ).catch(error => logWarning('VECTOR_STORE_CLEANUP_FAILED', error.message))
+      );
+    }
+    
+    // Clean up uploaded files
+    for (const fileId of uploadedFiles) {
+      cleanupTasks.push(
+        apiCallWithRetry(
+          `https://api.openai.com/v1/files/${fileId}`,
+          {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${openAIApiKey}`,
+            },
+          },
+          `File Cleanup: ${fileId}`,
+          1
+        ).catch(error => logWarning('FILE_CLEANUP_FAILED', error.message, { fileId }))
+      );
+    }
+    
+    // Execute all cleanup tasks in parallel with timeout
+    try {
+      await withTimeout(
+        Promise.allSettled(cleanupTasks),
+        30000,
+        'Resource Cleanup'
+      );
+      logSuccess('CLEANUP_COMPLETE');
+    } catch (cleanupError) {
+      logWarning('CLEANUP_TIMEOUT', 'Some cleanup tasks may not have completed', { error: cleanupError.message });
+    }
   }
 });
