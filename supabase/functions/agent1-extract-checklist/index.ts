@@ -168,8 +168,43 @@ serve(async (req) => {
     try {
       const assistantPayload = {
         name: "Architectural Compliance Extractor",
-        instructions: systemPrompt + "\n\nIMPORTANT: Process ALL correction items from the documents. Count the total number of corrections first, then ensure you extract every single one. Please respond with a JSON object containing an 'items' array. Each item should have these exact field names: sheet_name, issue_to_check, location, type_of_issue, code_source, code_identifier, short_code_requirement, long_code_requirement, source_link, project_type, city, zip_code, reviewer_name, type_of_correction, zone_primary, occupancy_group, natural_hazard_zone. Use 'unspecified' for any unknown values instead of leaving them blank. Return the result as: {\"items\": [...]}. DO NOT truncate the response - include all correction items found.",
-        model: "gpt-4o",
+        instructions: systemPrompt + `
+
+CRITICAL RESPONSE FORMAT REQUIREMENTS:
+1. You MUST respond with ONLY valid JSON - no explanatory text, no markdown, no additional commentary
+2. Start your response immediately with { and end with }
+3. Use this exact structure: {"items": [array of correction items]}
+4. Each item must have these exact field names: sheet_name, issue_to_check, location, type_of_issue, code_source, code_identifier, short_code_requirement, long_code_requirement, source_link, project_type, city, zip_code, reviewer_name, type_of_correction, zone_primary, occupancy_group, natural_hazard_zone
+5. Use 'unspecified' for any unknown values - never leave fields empty or null
+6. Process ALL correction items - count them first, then extract every single one
+7. DO NOT include any text before or after the JSON object
+8. Ensure the JSON is complete and not truncated
+
+Example format:
+{
+  "items": [
+    {
+      "sheet_name": "A-1.1",
+      "issue_to_check": "Clarify project scope",
+      "location": "Site plan",
+      "type_of_issue": "Planning",
+      "code_source": "City ordinance",
+      "code_identifier": "unspecified",
+      "short_code_requirement": "Clear project indication",
+      "long_code_requirement": "Plans must clearly show proposed changes",
+      "source_link": "https://sunnyvaleca.gov",
+      "project_type": "Addition",
+      "city": "Sunnyvale",
+      "zip_code": "unspecified",
+      "reviewer_name": "Cindy Hom",
+      "type_of_correction": "Clarification",
+      "zone_primary": "unspecified",
+      "occupancy_group": "unspecified",
+      "natural_hazard_zone": "unspecified"
+    }
+  ]
+}`,
+        model: "gpt-4.1-2025-04-14",
         tools: [{ type: "file_search" }],
         tool_resources: {
           file_search: {
@@ -178,7 +213,8 @@ serve(async (req) => {
         }
       };
       
-      console.log('Assistant payload model:', assistantPayload.model);
+      console.log('Using model:', assistantPayload.model);
+      console.log('Assistant instructions length:', assistantPayload.instructions.length);
       
       assistantResponse = await fetch('https://api.openai.com/v1/assistants', {
         method: 'POST',
@@ -397,45 +433,75 @@ serve(async (req) => {
     }
     
     try {
-      const cleanedContent = cleanJsonResponse(responseContent);
-      console.log('Cleaned response preview:', cleanedContent.substring(0, 500) + '...');
+      console.log('Raw response content length:', responseContent.length);
+      console.log('Raw response starts with:', responseContent.substring(0, 100));
+      console.log('Raw response ends with:', responseContent.substring(responseContent.length - 100));
       
-      // Try to extract JSON from the cleaned response
-      const jsonMatch = cleanedContent.match(/\{[\s\S]*"items"[\s\S]*\}/);
-      if (jsonMatch) {
-        try {
-          const parsed = JSON.parse(jsonMatch[0]);
-          extractedItems = parsed.items || [];
-          console.log(`Successfully parsed JSON with ${extractedItems.length} items`);
-        } catch (innerError) {
-          console.error('Failed to parse matched JSON:', innerError);
-          throw innerError;
-        }
-      } else {
-        // Fallback: try to parse as array directly
-        const arrayMatch = cleanedContent.match(/\[[\s\S]*\]/);
-        if (arrayMatch) {
-          extractedItems = JSON.parse(arrayMatch[0]);
-          console.log(`Successfully parsed array with ${extractedItems.length} items`);
+      const cleanedContent = cleanJsonResponse(responseContent);
+      console.log('Cleaned response preview (first 300 chars):', cleanedContent.substring(0, 300));
+      console.log('Cleaned response preview (last 100 chars):', cleanedContent.substring(cleanedContent.length - 100));
+      
+      // First, try to parse the entire cleaned content as JSON
+      try {
+        const directParse = JSON.parse(cleanedContent);
+        if (directParse.items && Array.isArray(directParse.items)) {
+          extractedItems = directParse.items;
+          console.log(`✅ Direct JSON parse successful with ${extractedItems.length} items`);
+        } else if (Array.isArray(directParse)) {
+          extractedItems = directParse;
+          console.log(`✅ Direct array parse successful with ${extractedItems.length} items`);
         } else {
-          // Last resort: try to parse the entire cleaned content
-          extractedItems = JSON.parse(cleanedContent);
-          console.log(`Successfully parsed entire content`);
+          throw new Error('Parsed JSON does not contain items array');
+        }
+      } catch (directError) {
+        console.log('❌ Direct JSON parse failed, trying pattern matching...');
+        
+        // Try to extract JSON object with items array
+        const jsonMatch = cleanedContent.match(/\{[\s\S]*?"items"\s*:\s*\[[\s\S]*?\][\s\S]*?\}/);
+        if (jsonMatch) {
+          try {
+            const parsed = JSON.parse(jsonMatch[0]);
+            extractedItems = parsed.items || [];
+            console.log(`✅ Pattern match JSON parse successful with ${extractedItems.length} items`);
+          } catch (matchError) {
+            console.error('❌ Pattern matched JSON parse failed:', matchError);
+            throw matchError;
+          }
+        } else {
+          // Try to find just the items array
+          const arrayMatch = cleanedContent.match(/\[[\s\S]*?\]/);
+          if (arrayMatch) {
+            try {
+              extractedItems = JSON.parse(arrayMatch[0]);
+              console.log(`✅ Array pattern match successful with ${extractedItems.length} items`);
+            } catch (arrayError) {
+              console.error('❌ Array pattern match failed:', arrayError);
+              throw arrayError;
+            }
+          } else {
+            console.error('❌ No JSON patterns found in response');
+            throw new Error('No valid JSON structure found in response');
+          }
         }
       }
     } catch (parseError) {
-      console.error('Failed to parse OpenAI response as JSON:', parseError);
-      console.error('Full response content:', responseContent);
-      console.error('Response length:', responseContent.length);
+      console.error('🚨 ALL JSON parsing methods failed:', parseError);
+      console.error('Response content analysis:');
+      console.error('- Length:', responseContent.length);
+      console.error('- Starts with "{" or "[":', responseContent.trim().startsWith('{') || responseContent.trim().startsWith('['));
+      console.error('- Contains "items":', responseContent.includes('"items"'));
+      console.error('- Contains "issue_to_check":', responseContent.includes('"issue_to_check"'));
       
-      // Try to extract partial data if possible
-      const partialMatch = responseContent.match(/"issue_to_check":\s*"[^"]*"/g);
-      if (partialMatch && partialMatch.length > 0) {
-        console.log(`Found ${partialMatch.length} partial items in response`);
-        throw new Error(`JSON parsing failed but found ${partialMatch.length} potential items. Response may be truncated.`);
+      // Count potential items by looking for issue_to_check fields
+      const potentialItems = responseContent.match(/"issue_to_check":\s*"[^"]*"/g);
+      const itemCount = potentialItems ? potentialItems.length : 0;
+      
+      if (itemCount > 0) {
+        console.log(`Found ${itemCount} potential items, but response format is invalid`);
+        throw new Error(`Response contains ${itemCount} correction items but is not in valid JSON format. AI may have included explanatory text.`);
+      } else {
+        throw new Error(`Invalid response format from OpenAI: ${parseError.message}`);
       }
-      
-      throw new Error(`Invalid JSON response from OpenAI: ${parseError.message}`);
     }
 
     if (!Array.isArray(extractedItems)) {
