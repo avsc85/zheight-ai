@@ -17,22 +17,39 @@ serve(async (req) => {
   }
 
   try {
+    console.log('Edge function starting...');
+    
+    // Validate environment variables
+    if (!supabaseUrl || !supabaseServiceKey || !openAIApiKey) {
+      console.error('Missing environment variables:', { 
+        hasSupabaseUrl: !!supabaseUrl, 
+        hasServiceKey: !!supabaseServiceKey, 
+        hasOpenAI: !!openAIApiKey 
+      });
+      throw new Error('Missing required environment variables');
+    }
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
     // Get authorization header
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
+      console.error('No authorization header provided');
       throw new Error('No authorization header');
     }
 
+    console.log('Verifying user authentication...');
     // Verify user authentication
     const { data: { user }, error: authError } = await supabase.auth.getUser(
       authHeader.replace('Bearer ', '')
     );
 
     if (authError || !user) {
+      console.error('Authentication failed:', authError);
       throw new Error('Unauthorized');
     }
+
+    console.log(`User authenticated: ${user.id}`);
 
     const formData = await req.formData();
     const files = formData.getAll('files') as File[];
@@ -78,32 +95,42 @@ serve(async (req) => {
     // Upload files to OpenAI using File Upload API
     const uploadedFiles = [];
     
+    console.log(`Starting file upload process for ${files.length} files`);
+    
     for (const file of files) {
       console.log(`Uploading file to OpenAI: ${file.name}, size: ${file.size} bytes`);
       
-      const uploadFormData = new FormData();
-      uploadFormData.append('file', file);
-      uploadFormData.append('purpose', 'assistants');
+      try {
+        const uploadFormData = new FormData();
+        uploadFormData.append('file', file);
+        uploadFormData.append('purpose', 'assistants');
 
-      const uploadResponse = await fetch('https://api.openai.com/v1/files', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${openAIApiKey}`,
-        },
-        body: uploadFormData,
-      });
+        const uploadResponse = await fetch('https://api.openai.com/v1/files', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${openAIApiKey}`,
+          },
+          body: uploadFormData,
+        });
 
-      if (!uploadResponse.ok) {
-        const errorText = await uploadResponse.text();
-        console.error(`File upload error for ${file.name}:`, errorText);
-        throw new Error(`Failed to upload ${file.name}: ${uploadResponse.status}`);
+        if (!uploadResponse.ok) {
+          const errorText = await uploadResponse.text();
+          console.error(`File upload error for ${file.name}:`, errorText);
+          console.error(`Response status: ${uploadResponse.status}, headers:`, Object.fromEntries(uploadResponse.headers.entries()));
+          throw new Error(`Failed to upload ${file.name}: ${uploadResponse.status} - ${errorText}`);
+        }
+
+        const uploadResult = await uploadResponse.json();
+        uploadedFiles.push(uploadResult.id);
+        
+        console.log(`Successfully uploaded file: ${file.name} with ID: ${uploadResult.id}`);
+      } catch (uploadError) {
+        console.error(`Critical error uploading file ${file.name}:`, uploadError);
+        throw uploadError;
       }
-
-      const uploadResult = await uploadResponse.json();
-      uploadedFiles.push(uploadResult.id);
-      
-      console.log(`Successfully uploaded file: ${file.name} with ID: ${uploadResult.id}`);
     }
+    
+    console.log(`All files uploaded successfully. File IDs:`, uploadedFiles);
 
     // Create a vector store first
     console.log('Creating vector store...');
@@ -132,15 +159,10 @@ serve(async (req) => {
 
     // Create OpenAI assistant with the vector store
     console.log('Creating OpenAI assistant for document analysis...');
+    console.log('Using model: gpt-4o');
     
-    const assistantResponse = await fetch('https://api.openai.com/v1/assistants', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openAIApiKey}`,
-        'Content-Type': 'application/json',
-        'OpenAI-Beta': 'assistants=v2',
-      },
-      body: JSON.stringify({
+    try {
+      const assistantPayload = {
         name: "Architectural Compliance Extractor",
         instructions: systemPrompt + "\n\nIMPORTANT: Process ALL correction items from the documents. Count the total number of corrections first, then ensure you extract every single one. Please respond with a JSON object containing an 'items' array. Each item should have these exact field names: sheet_name, issue_to_check, location, type_of_issue, code_source, code_identifier, short_code_requirement, long_code_requirement, source_link, project_type, city, zip_code, reviewer_name, type_of_correction, zone_primary, occupancy_group, natural_hazard_zone. Use 'unspecified' for any unknown values instead of leaving them blank. Return the result as: {\"items\": [...]}. DO NOT truncate the response - include all correction items found.",
         model: "gpt-4o",
@@ -150,13 +172,29 @@ serve(async (req) => {
             vector_store_ids: [vectorStore.id]
           }
         }
-      }),
-    });
+      };
+      
+      console.log('Assistant payload model:', assistantPayload.model);
+      
+      const assistantResponse = await fetch('https://api.openai.com/v1/assistants', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openAIApiKey}`,
+          'Content-Type': 'application/json',
+          'OpenAI-Beta': 'assistants=v2',
+        },
+        body: JSON.stringify(assistantPayload),
+      });
 
-    if (!assistantResponse.ok) {
-      const errorText = await assistantResponse.text();
-      console.error('Assistant creation error:', errorText);
-      throw new Error(`Failed to create assistant: ${assistantResponse.status}`);
+      if (!assistantResponse.ok) {
+        const errorText = await assistantResponse.text();
+        console.error('Assistant creation error:', errorText);
+        console.error(`Response status: ${assistantResponse.status}, headers:`, Object.fromEntries(assistantResponse.headers.entries()));
+        throw new Error(`Failed to create assistant: ${assistantResponse.status} - ${errorText}`);
+      }
+    } catch (assistantError) {
+      console.error('Critical error creating assistant:', assistantError);
+      throw assistantError;
     }
 
     const assistant = await assistantResponse.json();
@@ -209,23 +247,33 @@ serve(async (req) => {
     // Run the assistant
     console.log('Running assistant analysis...');
     
-    const runResponse = await fetch(`https://api.openai.com/v1/threads/${thread.id}/runs`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openAIApiKey}`,
-        'Content-Type': 'application/json',
-        'OpenAI-Beta': 'assistants=v2',
-      },
-      body: JSON.stringify({
+    try {
+      const runPayload = {
         assistant_id: assistant.id,
         max_tokens: 4000,
-      }),
-    });
+      };
+      
+      console.log('Run payload using max_tokens:', runPayload.max_tokens);
+      
+      const runResponse = await fetch(`https://api.openai.com/v1/threads/${thread.id}/runs`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openAIApiKey}`,
+          'Content-Type': 'application/json',
+          'OpenAI-Beta': 'assistants=v2',
+        },
+        body: JSON.stringify(runPayload),
+      });
 
-    if (!runResponse.ok) {
-      const errorText = await runResponse.text();
-      console.error('Run creation error:', errorText);
-      throw new Error(`Failed to start run: ${runResponse.status}`);
+      if (!runResponse.ok) {
+        const errorText = await runResponse.text();
+        console.error('Run creation error:', errorText);
+        console.error(`Response status: ${runResponse.status}, headers:`, Object.fromEntries(runResponse.headers.entries()));
+        throw new Error(`Failed to start run: ${runResponse.status} - ${errorText}`);
+      }
+    } catch (runError) {
+      console.error('Critical error starting run:', runError);
+      throw runError;
     }
 
     const run = await runResponse.json();
@@ -450,11 +498,16 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('Error in agent1-extract-checklist function:', error);
+    console.error('Critical error in agent1-extract-checklist function:', error);
+    console.error('Error stack:', error.stack);
+    console.error('Error type:', error.constructor.name);
+    
     return new Response(
       JSON.stringify({
         error: error.message,
-        success: false
+        success: false,
+        stack: error.stack,
+        type: error.constructor.name
       }),
       {
         status: 500,
