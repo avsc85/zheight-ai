@@ -142,8 +142,8 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         name: "Architectural Compliance Extractor",
-        instructions: systemPrompt + "\n\nPlease respond with a JSON object containing an 'items' array. Each item should have these exact field names: sheet_name, issue_to_check, location, type_of_issue, code_source, code_identifier, short_code_requirement, long_code_requirement, source_link, project_type, city, zip_code, reviewer_name, type_of_correction. Return the result as: {\"items\": [...]}.",
-        model: "gpt-4o",
+        instructions: systemPrompt + "\n\nIMPORTANT: Process ALL correction items from the documents. Count the total number of corrections first, then ensure you extract every single one. Please respond with a JSON object containing an 'items' array. Each item should have these exact field names: sheet_name, issue_to_check, location, type_of_issue, code_source, code_identifier, short_code_requirement, long_code_requirement, source_link, project_type, city, zip_code, reviewer_name, type_of_correction. Use 'unspecified' for any unknown values instead of leaving them blank. Return the result as: {\"items\": [...]}. DO NOT truncate the response - include all correction items found.",
+        model: "gpt-5-2025-08-07",
         tools: [{ type: "file_search" }],
         tool_resources: {
           file_search: {
@@ -196,7 +196,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         role: "user",
-        content: "Please analyze the uploaded architectural plans and correction documents to extract compliance checklist items according to your instructions. Focus on identifying specific building code violations, accessibility issues, fire safety requirements, and any reviewer comments that need to be addressed."
+        content: "Please analyze the uploaded architectural plans and correction documents to extract compliance checklist items according to your instructions. CRITICAL: First, count the total number of correction items mentioned in the city's correction letter. Then extract EVERY SINGLE correction item - do not skip any. Process documents page by page if needed to ensure completeness. Focus on identifying specific building code violations, accessibility issues, fire safety requirements, and any reviewer comments that need to be addressed. Ensure your response includes all correction items found, not just a subset."
       }),
     });
 
@@ -218,6 +218,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         assistant_id: assistant.id,
+        max_completion_tokens: 4000,
       }),
     });
 
@@ -230,14 +231,15 @@ serve(async (req) => {
     const run = await runResponse.json();
     console.log(`Started run: ${run.id}`);
 
-    // Poll for completion
+    // Poll for completion with increased timeout for GPT-5
     let runStatus = run.status;
     let attempts = 0;
-    const maxAttempts = 60; // 5 minutes timeout
+    const maxAttempts = 120; // 10 minutes timeout for better processing
     
     while (runStatus === 'queued' || runStatus === 'in_progress') {
       if (attempts >= maxAttempts) {
-        throw new Error('Analysis timeout - please try with smaller files');
+        console.error(`Analysis timeout after ${maxAttempts} attempts`);
+        throw new Error('Analysis timeout - processing taking too long');
       }
       
       await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
@@ -254,6 +256,11 @@ serve(async (req) => {
       attempts++;
       
       console.log(`Run status: ${runStatus} (attempt ${attempts}/${maxAttempts})`);
+      
+      // Log additional details if available
+      if (statusData.last_error) {
+        console.error('Run error details:', statusData.last_error);
+      }
     }
 
     if (runStatus !== 'completed') {
@@ -273,7 +280,13 @@ serve(async (req) => {
     const messagesData = await messagesResponse.json();
     const responseContent = messagesData.data[0].content[0].text.value;
 
-    console.log('OpenAI assistant response received:', responseContent);
+    console.log('OpenAI assistant response received (length:', responseContent.length, ')');
+    console.log('Response preview:', responseContent.substring(0, 500) + '...');
+    
+    // Check if response appears truncated
+    if (!responseContent.includes('}') && !responseContent.includes(']')) {
+      console.warn('Response may be truncated - no closing brackets found');
+    }
 
     // Clean up resources
     try {
@@ -310,34 +323,82 @@ serve(async (req) => {
       console.warn('Failed to cleanup some OpenAI resources:', cleanupError);
     }
 
-    // Parse the JSON response
+    // Parse the JSON response with enhanced error handling
     let extractedItems;
+    
+    // Clean the response content first
+    function cleanJsonResponse(content: string): string {
+      // Remove markdown code blocks if present
+      content = content.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+      
+      // Fix common JSON issues
+      content = content.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
+      
+      // Fix truncated URLs and strings
+      content = content.replace(/"https?:[^"]*$/gm, '"unspecified"');
+      content = content.replace(/"[^"]*$/gm, '"unspecified"');
+      
+      return content.trim();
+    }
+    
     try {
-      // Try to extract JSON from the response
-      const jsonMatch = responseContent.match(/\{[\s\S]*"items"[\s\S]*\}/);
+      const cleanedContent = cleanJsonResponse(responseContent);
+      console.log('Cleaned response preview:', cleanedContent.substring(0, 500) + '...');
+      
+      // Try to extract JSON from the cleaned response
+      const jsonMatch = cleanedContent.match(/\{[\s\S]*"items"[\s\S]*\}/);
       if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        extractedItems = parsed.items || [];
+        try {
+          const parsed = JSON.parse(jsonMatch[0]);
+          extractedItems = parsed.items || [];
+          console.log(`Successfully parsed JSON with ${extractedItems.length} items`);
+        } catch (innerError) {
+          console.error('Failed to parse matched JSON:', innerError);
+          throw innerError;
+        }
       } else {
         // Fallback: try to parse as array directly
-        const arrayMatch = responseContent.match(/\[[\s\S]*\]/);
+        const arrayMatch = cleanedContent.match(/\[[\s\S]*\]/);
         if (arrayMatch) {
           extractedItems = JSON.parse(arrayMatch[0]);
+          console.log(`Successfully parsed array with ${extractedItems.length} items`);
         } else {
-          extractedItems = JSON.parse(responseContent);
+          // Last resort: try to parse the entire cleaned content
+          extractedItems = JSON.parse(cleanedContent);
+          console.log(`Successfully parsed entire content`);
         }
       }
     } catch (parseError) {
       console.error('Failed to parse OpenAI response as JSON:', parseError);
-      console.error('Response content:', responseContent);
-      throw new Error('Invalid JSON response from OpenAI');
+      console.error('Full response content:', responseContent);
+      console.error('Response length:', responseContent.length);
+      
+      // Try to extract partial data if possible
+      const partialMatch = responseContent.match(/"issue_to_check":\s*"[^"]*"/g);
+      if (partialMatch && partialMatch.length > 0) {
+        console.log(`Found ${partialMatch.length} partial items in response`);
+        throw new Error(`JSON parsing failed but found ${partialMatch.length} potential items. Response may be truncated.`);
+      }
+      
+      throw new Error(`Invalid JSON response from OpenAI: ${parseError.message}`);
     }
 
     if (!Array.isArray(extractedItems)) {
+      console.error('Extracted items is not an array:', typeof extractedItems, extractedItems);
       throw new Error('OpenAI response does not contain a valid items array');
     }
 
-    console.log(`Extracted ${extractedItems.length} items from OpenAI response`);
+    if (extractedItems.length === 0) {
+      console.warn('WARNING: No items extracted from OpenAI response');
+      console.log('This may indicate incomplete processing or document parsing issues');
+    }
+
+    console.log(`Successfully extracted ${extractedItems.length} items from OpenAI response`);
+    
+    // Log first item structure for debugging
+    if (extractedItems.length > 0) {
+      console.log('First item structure:', JSON.stringify(extractedItems[0], null, 2));
+    }
 
     // Prepare data for database insertion
     const checklistItems = extractedItems.map((item: any) => ({
