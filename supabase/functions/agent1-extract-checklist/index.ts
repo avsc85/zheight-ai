@@ -142,8 +142,8 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         name: "Architectural Compliance Extractor",
-        instructions: systemPrompt + "\n\nIMPORTANT: Process ALL correction items from the documents. Count the total number of corrections first, then ensure you extract every single one. Please respond with a JSON object containing an 'items' array. Each item should have these exact field names: sheet_name, issue_to_check, location, type_of_issue, code_source, code_identifier, short_code_requirement, long_code_requirement, source_link, project_type, city, zip_code, reviewer_name, type_of_correction. Use 'unspecified' for any unknown values instead of leaving them blank. Return the result as: {\"items\": [...]}. DO NOT truncate the response - include all correction items found.",
-        model: "gpt-5-2025-08-07",
+        instructions: systemPrompt + "\n\nIMPORTANT: Process ALL correction items from the documents. Count the total number of corrections first, then ensure you extract every single one. Please respond with a JSON object containing an 'items' array. Each item should have these exact field names: sheet_name, issue_to_check, location, type_of_issue, code_source, code_identifier, short_code_requirement, long_code_requirement, source_link, project_type, city, zip_code, reviewer_name, type_of_correction, zone_primary, occupancy_group, natural_hazard_zone. Use 'unspecified' for any unknown values instead of leaving them blank. Return the result as: {\"items\": [...]}. DO NOT truncate the response - include all correction items found.",
+        model: "gpt-4o",
         tools: [{ type: "file_search" }],
         tool_resources: {
           file_search: {
@@ -218,7 +218,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         assistant_id: assistant.id,
-        max_completion_tokens: 4000,
+        max_tokens: 4000,
       }),
     });
 
@@ -400,24 +400,34 @@ serve(async (req) => {
       console.log('First item structure:', JSON.stringify(extractedItems[0], null, 2));
     }
 
-    // Prepare data for database insertion
-    const checklistItems = extractedItems.map((item: any) => ({
-      user_id: user.id,
-      sheet_name: item.sheet_name || null,
-      issue_to_check: item.issue_to_check || 'Not specified',
-      location: item.location || null,
-      type_of_issue: item.type_of_issue || null,
-      code_source: item.code_source || null,
-      code_identifier: item.code_identifier || null,
-      short_code_requirement: item.short_code_requirement || null,
-      long_code_requirement: item.long_code_requirement || null,
-      source_link: item.source_link || null,
-      project_type: item.project_type || null,
-      city: item.city || null,
-      zip_code: item.zip_code || null,
-      reviewer_name: item.reviewer_name || null,
-      type_of_correction: item.type_of_correction || null,
-    }));
+    // Validate and prepare data for database insertion
+    const checklistItems = extractedItems.map((item: any, index: number) => {
+      // Log any items missing required fields
+      if (!item.issue_to_check) {
+        console.warn(`Item ${index} missing required field 'issue_to_check':`, item);
+      }
+      
+      return {
+        user_id: user.id,
+        sheet_name: item.sheet_name || null,
+        issue_to_check: item.issue_to_check || 'Not specified',
+        location: item.location || null,
+        type_of_issue: item.type_of_issue || null,
+        code_source: item.code_source || null,
+        code_identifier: item.code_identifier || null,
+        short_code_requirement: item.short_code_requirement || null,
+        long_code_requirement: item.long_code_requirement || null,
+        source_link: item.source_link || null,
+        project_type: item.project_type || null,
+        city: item.city || null,
+        zip_code: item.zip_code || null,
+        reviewer_name: item.reviewer_name || null,
+        type_of_correction: item.type_of_correction || null,
+        zone_primary: item.zone_primary || null,
+        occupancy_group: item.occupancy_group || null,
+        natural_hazard_zone: item.natural_hazard_zone || null,
+      };
+    });
 
     console.log(`Inserting ${checklistItems.length} items into database...`);
 
