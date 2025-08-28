@@ -310,65 +310,226 @@ serve(async (req) => {
       console.warn('Failed to cleanup some OpenAI resources:', cleanupError);
     }
 
-    // Function to clean JSON by removing JavaScript-style comments
-    function cleanJsonResponse(text: string): string {
+    // Enhanced JSON validation and sanitization functions
+    function sanitizeUrl(url: string): string {
+      try {
+        // Handle incomplete URLs
+        if (!url || url === 'unspecified') return 'unspecified';
+        
+        // If URL is cut off mid-way, handle gracefully
+        if (url.includes('https:') && !url.includes('://')) {
+          // Incomplete URL like "https:" - return unspecified
+          return 'unspecified';
+        }
+        
+        // Basic URL validation
+        if (url.startsWith('http://') || url.startsWith('https://')) {
+          return url;
+        }
+        
+        // If it looks like a partial URL path, mark as unspecified
+        if (url.startsWith('/') || url.includes('DocumentCenter') || url.includes('.org') || url.includes('.com')) {
+          return 'unspecified';
+        }
+        
+        return url;
+      } catch (error) {
+        console.warn('URL sanitization error:', error);
+        return 'unspecified';
+      }
+    }
+
+    function sanitizeJsonString(text: string): string {
+      // Remove control characters that cause JSON parsing errors
+      let cleaned = text.replace(/[\x00-\x1F\x7F-\x9F]/g, '');
+      
+      // Handle escaped quotes and backslashes
+      cleaned = cleaned.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+      
       // Remove single-line comments (// comment)
-      let cleaned = text.replace(/\/\/.*$/gm, '');
+      cleaned = cleaned.replace(/\/\/.*$/gm, '');
       
       // Remove multi-line comments (/* comment */)
       cleaned = cleaned.replace(/\/\*[\s\S]*?\*\//g, '');
       
       // Remove markdown code blocks if present
       cleaned = cleaned.replace(/```json\s*/g, '').replace(/```\s*$/g, '');
+      cleaned = cleaned.replace(/```\s*/g, '');
       
-      // Clean extra whitespace and newlines
-      cleaned = cleaned.trim();
+      // Fix common JSON formatting issues
+      cleaned = cleaned.replace(/,\s*}/g, '}'); // Remove trailing commas
+      cleaned = cleaned.replace(/,\s*]/g, ']'); // Remove trailing commas in arrays
       
-      return cleaned;
+      // Handle incomplete string values (especially URLs)
+      cleaned = cleaned.replace(/"source_link":\s*"https:[^"]*(?="[^}]*})/g, '"source_link": "unspecified"');
+      cleaned = cleaned.replace(/"source_link":\s*"[^"]*$/g, '"source_link": "unspecified"');
+      
+      // Fix incomplete JSON objects at the end
+      if (cleaned.includes('{') && !cleaned.trim().endsWith('}')) {
+        // Find the last complete object
+        const lastCompleteObj = cleaned.lastIndexOf('},');
+        if (lastCompleteObj !== -1) {
+          cleaned = cleaned.substring(0, lastCompleteObj + 1) + '\n    ]\n}';
+        }
+      }
+      
+      return cleaned.trim();
     }
 
-    // Parse the JSON response with improved error handling
-    let extractedItems;
-    let cleanedResponse = cleanJsonResponse(responseContent);
-    
-    console.log('Cleaned response for parsing:', cleanedResponse);
-    
-    try {
-      // First, try to parse the cleaned response directly
-      const directParse = JSON.parse(cleanedResponse);
-      if (directParse.items && Array.isArray(directParse.items)) {
-        extractedItems = directParse.items;
-      } else if (Array.isArray(directParse)) {
-        extractedItems = directParse;
-      } else {
-        throw new Error('No items array found in direct parse');
-      }
-    } catch (firstError) {
-      console.log('Direct parse failed, trying pattern matching:', firstError.message);
-      
+    function validateJsonStructure(text: string): boolean {
       try {
-        // Try to extract JSON object with items array
-        const jsonMatch = cleanedResponse.match(/\{[\s\S]*?"items"[\s\S]*?\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          extractedItems = parsed.items || [];
-        } else {
-          // Try to extract just an array
-          const arrayMatch = cleanedResponse.match(/\[[\s\S]*?\]/);
-          if (arrayMatch) {
-            extractedItems = JSON.parse(arrayMatch[0]);
-          } else {
-            throw new Error('No valid JSON structure found');
+        // Basic structure validation before parsing
+        const trimmed = text.trim();
+        
+        // Must start with { or [
+        if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+          return false;
+        }
+        
+        // Must end with } or ]
+        if (!trimmed.endsWith('}') && !trimmed.endsWith(']')) {
+          return false;
+        }
+        
+        // Check for balanced braces and brackets
+        let braceCount = 0;
+        let bracketCount = 0;
+        let inString = false;
+        let escaped = false;
+        
+        for (let i = 0; i < trimmed.length; i++) {
+          const char = trimmed[i];
+          
+          if (escaped) {
+            escaped = false;
+            continue;
+          }
+          
+          if (char === '\\') {
+            escaped = true;
+            continue;
+          }
+          
+          if (char === '"' && !escaped) {
+            inString = !inString;
+            continue;
+          }
+          
+          if (!inString) {
+            if (char === '{') braceCount++;
+            if (char === '}') braceCount--;
+            if (char === '[') bracketCount++;
+            if (char === ']') bracketCount--;
           }
         }
-      } catch (secondError) {
-        console.error('All JSON parsing attempts failed');
-        console.error('Original response:', responseContent);
-        console.error('Cleaned response:', cleanedResponse);
-        console.error('First error:', firstError.message);
-        console.error('Second error:', secondError.message);
-        throw new Error(`Failed to parse OpenAI response: ${secondError.message}. The AI may have returned malformed JSON.`);
+        
+        return braceCount === 0 && bracketCount === 0;
+      } catch (error) {
+        return false;
       }
+    }
+
+    function robustJsonParse(text: string): any {
+      console.log('Starting robust JSON parsing...');
+      
+      // Step 1: Sanitize the input
+      let cleaned = sanitizeJsonString(text);
+      console.log('Sanitized response length:', cleaned.length);
+      
+      // Step 2: Validate structure
+      if (!validateJsonStructure(cleaned)) {
+        console.warn('JSON structure validation failed, attempting repair...');
+        // Try to find and extract valid JSON portion
+        const match = cleaned.match(/\{[\s\S]*"items"[\s\S]*?\}(?=\s*$)/);
+        if (match) {
+          cleaned = match[0];
+        } else {
+          throw new Error('Invalid JSON structure detected');
+        }
+      }
+      
+      // Step 3: Multiple parsing strategies
+      const parseStrategies = [
+        // Strategy 1: Direct parse
+        () => JSON.parse(cleaned),
+        
+        // Strategy 2: Extract JSON object with items
+        () => {
+          const jsonMatch = cleaned.match(/\{[\s\S]*?"items"[\s\S]*?\}/);
+          if (!jsonMatch) throw new Error('No items object found');
+          return JSON.parse(jsonMatch[0]);
+        },
+        
+        // Strategy 3: Extract just the items array
+        () => {
+          const arrayMatch = cleaned.match(/"items":\s*(\[[\s\S]*?\])/);
+          if (!arrayMatch) throw new Error('No items array found');
+          return { items: JSON.parse(arrayMatch[1]) };
+        },
+        
+        // Strategy 4: Manual object reconstruction
+        () => {
+          console.log('Attempting manual JSON reconstruction...');
+          // Try to reconstruct from individual item objects
+          const itemMatches = cleaned.match(/\{[^{}]*"issue_to_check"[^{}]*\}/g);
+          if (!itemMatches) throw new Error('No item objects found');
+          
+          const items = itemMatches.map(item => JSON.parse(item));
+          return { items };
+        }
+      ];
+      
+      for (let i = 0; i < parseStrategies.length; i++) {
+        try {
+          console.log(`Trying parsing strategy ${i + 1}...`);
+          const result = parseStrategies[i]();
+          
+          // Validate and sanitize URLs in the result
+          if (result.items && Array.isArray(result.items)) {
+            result.items = result.items.map((item: any) => ({
+              ...item,
+              source_link: sanitizeUrl(item.source_link || 'unspecified')
+            }));
+          }
+          
+          console.log(`Strategy ${i + 1} succeeded, found ${result.items?.length || 0} items`);
+          return result;
+        } catch (error) {
+          console.log(`Strategy ${i + 1} failed:`, error.message);
+          if (i === parseStrategies.length - 1) {
+            throw error;
+          }
+        }
+      }
+      
+      throw new Error('All parsing strategies failed');
+    }
+
+    // Parse the JSON response with robust error handling
+    let extractedItems;
+    
+    console.log('Original response:', responseContent);
+    
+    try {
+      const parseResult = robustJsonParse(responseContent);
+      
+      if (parseResult.items && Array.isArray(parseResult.items)) {
+        extractedItems = parseResult.items;
+      } else if (Array.isArray(parseResult)) {
+        extractedItems = parseResult;
+      } else {
+        throw new Error('No valid items array found in parsed result');
+      }
+      
+      console.log(`Successfully parsed ${extractedItems.length} items`);
+      
+    } catch (parseError) {
+      console.error('Robust JSON parsing failed');
+      console.error('Parse error:', parseError.message);
+      console.error('Original response length:', responseContent.length);
+      console.error('Response preview:', responseContent.substring(0, 500));
+      
+      throw new Error(`Failed to parse OpenAI response: ${parseError.message}. The AI returned malformed JSON that could not be recovered.`);
     }
 
     if (!Array.isArray(extractedItems)) {
