@@ -142,7 +142,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         name: "Architectural Compliance Extractor",
-        instructions: systemPrompt + "\n\nIMPORTANT: Respond ONLY with valid JSON without any comments, markdown formatting, or additional text. Each item should have these exact field names: sheet_name, issue_to_check, location, type_of_issue, code_source, code_identifier, short_code_requirement, long_code_requirement, source_link, project_type, city, zip_code, reviewer_name, type_of_correction, zone_primary, occupancy_group, natural_hazard_zone. Return the result as: {\"items\": [...]}. Do not include any JavaScript-style comments (//) or any text outside the JSON object.",
+        instructions: systemPrompt + "\n\nPlease respond with a JSON object containing an 'items' array. Each item should have these exact field names: sheet_name, issue_to_check, location, type_of_issue, code_source, code_identifier, short_code_requirement, long_code_requirement, source_link, project_type, city, zip_code, reviewer_name, type_of_correction. Return the result as: {\"items\": [...]}.",
         model: "gpt-4o",
         tools: [{ type: "file_search" }],
         tool_resources: {
@@ -310,65 +310,27 @@ serve(async (req) => {
       console.warn('Failed to cleanup some OpenAI resources:', cleanupError);
     }
 
-    // Function to clean JSON by removing JavaScript-style comments
-    function cleanJsonResponse(text: string): string {
-      // Remove single-line comments (// comment)
-      let cleaned = text.replace(/\/\/.*$/gm, '');
-      
-      // Remove multi-line comments (/* comment */)
-      cleaned = cleaned.replace(/\/\*[\s\S]*?\*\//g, '');
-      
-      // Remove markdown code blocks if present
-      cleaned = cleaned.replace(/```json\s*/g, '').replace(/```\s*$/g, '');
-      
-      // Clean extra whitespace and newlines
-      cleaned = cleaned.trim();
-      
-      return cleaned;
-    }
-
-    // Parse the JSON response with improved error handling
+    // Parse the JSON response
     let extractedItems;
-    let cleanedResponse = cleanJsonResponse(responseContent);
-    
-    console.log('Cleaned response for parsing:', cleanedResponse);
-    
     try {
-      // First, try to parse the cleaned response directly
-      const directParse = JSON.parse(cleanedResponse);
-      if (directParse.items && Array.isArray(directParse.items)) {
-        extractedItems = directParse.items;
-      } else if (Array.isArray(directParse)) {
-        extractedItems = directParse;
+      // Try to extract JSON from the response
+      const jsonMatch = responseContent.match(/\{[\s\S]*"items"[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        extractedItems = parsed.items || [];
       } else {
-        throw new Error('No items array found in direct parse');
-      }
-    } catch (firstError) {
-      console.log('Direct parse failed, trying pattern matching:', firstError.message);
-      
-      try {
-        // Try to extract JSON object with items array
-        const jsonMatch = cleanedResponse.match(/\{[\s\S]*?"items"[\s\S]*?\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          extractedItems = parsed.items || [];
+        // Fallback: try to parse as array directly
+        const arrayMatch = responseContent.match(/\[[\s\S]*\]/);
+        if (arrayMatch) {
+          extractedItems = JSON.parse(arrayMatch[0]);
         } else {
-          // Try to extract just an array
-          const arrayMatch = cleanedResponse.match(/\[[\s\S]*?\]/);
-          if (arrayMatch) {
-            extractedItems = JSON.parse(arrayMatch[0]);
-          } else {
-            throw new Error('No valid JSON structure found');
-          }
+          extractedItems = JSON.parse(responseContent);
         }
-      } catch (secondError) {
-        console.error('All JSON parsing attempts failed');
-        console.error('Original response:', responseContent);
-        console.error('Cleaned response:', cleanedResponse);
-        console.error('First error:', firstError.message);
-        console.error('Second error:', secondError.message);
-        throw new Error(`Failed to parse OpenAI response: ${secondError.message}. The AI may have returned malformed JSON.`);
       }
+    } catch (parseError) {
+      console.error('Failed to parse OpenAI response as JSON:', parseError);
+      console.error('Response content:', responseContent);
+      throw new Error('Invalid JSON response from OpenAI');
     }
 
     if (!Array.isArray(extractedItems)) {
@@ -394,9 +356,6 @@ serve(async (req) => {
       zip_code: item.zip_code || null,
       reviewer_name: item.reviewer_name || null,
       type_of_correction: item.type_of_correction || null,
-      zone_primary: item.zone_primary || null,
-      occupancy_group: item.occupancy_group || null,
-      natural_hazard_zone: item.natural_hazard_zone || null,
     }));
 
     console.log(`Inserting ${checklistItems.length} items into database...`);
