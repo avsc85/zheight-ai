@@ -7,76 +7,32 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Environment variable validation with detailed logging
-const supabaseUrl = Deno.env.get('SUPABASE_URL');
-const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
-
-console.log('Environment validation:');
-console.log('- SUPABASE_URL:', supabaseUrl ? '✓ Set' : '✗ Missing');
-console.log('- SUPABASE_SERVICE_ROLE_KEY:', supabaseServiceKey ? '✓ Set' : '✗ Missing');
-console.log('- OPENAI_API_KEY:', openAIApiKey ? '✓ Set' : '✗ Missing');
-
-if (!supabaseUrl || !supabaseServiceKey || !openAIApiKey) {
-  console.error('Missing required environment variables');
-  throw new Error('Server configuration error: Missing required environment variables');
-}
-
-// Helper function for cleanup - defined at module level
-async function cleanupOpenAIResources(assistantId: string, vectorStoreId: string, fileIds: string[], apiKey: string) {
-  try {
-    // Delete assistant
-    await fetch(`https://api.openai.com/v1/assistants/${assistantId}`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'OpenAI-Beta': 'assistants=v2',
-      },
-    });
-    
-    // Delete vector store
-    await fetch(`https://api.openai.com/v1/vector_stores/${vectorStoreId}`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'OpenAI-Beta': 'assistants=v2',
-      },
-    });
-    
-    // Clean up uploaded files
-    for (const fileId of fileIds) {
-      await fetch(`https://api.openai.com/v1/files/${fileId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-        },
-      });
-    }
-    
-    console.log('Cleaned up OpenAI resources');
-  } catch (cleanupError) {
-    console.warn('Failed to cleanup some OpenAI resources:', cleanupError);
-  }
-}
+const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const openAIApiKey = Deno.env.get('OPENAI_API_KEY')!;
 
 serve(async (req) => {
-  console.log(`Incoming ${req.method} request to agent1-extract-checklist`);
-  
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Initialize Supabase client (function is public, no auth required)
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
-    // Log request details for debugging
-    console.log('Request headers:', Object.fromEntries(req.headers.entries()));
-    console.log('Content-Type:', req.headers.get('content-type'));
-    
-    // Since function is public (verify_jwt = false), we don't require authentication
-    // but we'll use a default user context for database operations
-    const defaultUserId = '00000000-0000-0000-0000-000000000000';
+    // Get authorization header
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      throw new Error('No authorization header');
+    }
+
+    // Verify user authentication
+    const { data: { user }, error: authError } = await supabase.auth.getUser(
+      authHeader.replace('Bearer ', '')
+    );
+
+    if (authError || !user) {
+      throw new Error('Unauthorized');
+    }
 
     const formData = await req.formData();
     const files = formData.getAll('files') as File[];
@@ -86,7 +42,7 @@ serve(async (req) => {
       throw new Error('No files provided');
     }
 
-    console.log(`Processing ${files.length} files (public function mode)`);
+    console.log(`Processing ${files.length} files for user ${user.id}`);
 
     // Get the agent prompt (use custom if provided, otherwise get default)
     let systemPrompt = customPrompt;
@@ -186,8 +142,8 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         name: "Architectural Compliance Extractor",
-        instructions: systemPrompt + "\n\nIMPORTANT: Respond ONLY with valid JSON without any comments, markdown formatting, or additional text. Each item should have these exact field names: sheet_name, issue_to_check, location, type_of_issue, code_source, code_identifier, short_code_requirement, long_code_requirement, source_link, project_type, city, zip_code, reviewer_name, type_of_correction, zone_primary, occupancy_group, natural_hazard_zone. Return the result as: {\"items\": [...]}. Do not include any JavaScript-style comments (//) or any text outside the JSON object.",
-        model: "gpt-4.1-2025-04-14",
+        instructions: systemPrompt + "\n\nPlease respond with a JSON object containing an 'items' array. Each item should have these exact field names: sheet_name, issue_to_check, location, type_of_issue, code_source, code_identifier, short_code_requirement, long_code_requirement, source_link, project_type, city, zip_code, reviewer_name, type_of_correction. Return the result as: {\"items\": [...]}.",
+        model: "gpt-4o",
         tools: [{ type: "file_search" }],
         tool_resources: {
           file_search: {
@@ -318,225 +274,74 @@ serve(async (req) => {
     const responseContent = messagesData.data[0].content[0].text.value;
 
     console.log('OpenAI assistant response received:', responseContent);
-    console.log('Response preview:', responseContent.substring(0, 500) + '...');
-    console.log('Original response length:', responseContent.length);
 
-    // CRITICAL: Parse JSON BEFORE cleanup to avoid losing response data
+    // Clean up resources
+    try {
+      // Delete assistant
+      await fetch(`https://api.openai.com/v1/assistants/${assistant.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${openAIApiKey}`,
+          'OpenAI-Beta': 'assistants=v2',
+        },
+      });
+      
+      // Delete vector store
+      await fetch(`https://api.openai.com/v1/vector_stores/${vectorStore.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${openAIApiKey}`,
+          'OpenAI-Beta': 'assistants=v2',
+        },
+      });
+      
+      // Clean up uploaded files
+      for (const fileId of uploadedFiles) {
+        await fetch(`https://api.openai.com/v1/files/${fileId}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${openAIApiKey}`,
+          },
+        });
+      }
+      
+      console.log('Cleaned up OpenAI resources');
+    } catch (cleanupError) {
+      console.warn('Failed to cleanup some OpenAI resources:', cleanupError);
+    }
+
+    // Parse the JSON response
     let extractedItems;
     try {
-      extractedItems = robustJsonParse(responseContent);
-      console.log('Successfully parsed response, found items:', extractedItems.items?.length || 0);
-    } catch (parseError) {
-      console.error('Parse error:', parseError.message);
-      console.error('Original response:', responseContent);
-      console.error('Response preview:', responseContent.substring(0, 1000));
-      
-      // Clean up resources before throwing error
-      await cleanupOpenAIResources(assistant.id, vectorStore.id, uploadedFiles, openAIApiKey);
-      throw new Error(`Failed to parse OpenAI response: ${parseError.message}`);
-    }
-
-    // Clean up resources after successful parsing
-    await cleanupOpenAIResources(assistant.id, vectorStore.id, uploadedFiles, openAIApiKey);
-
-    // Enhanced JSON validation and sanitization functions
-    function sanitizeUrl(url: string): string {
-      try {
-        // Handle incomplete URLs
-        if (!url || url === 'unspecified') return 'unspecified';
-        
-        // If URL is cut off mid-way, handle gracefully
-        if (url.includes('https:') && !url.includes('://')) {
-          // Incomplete URL like "https:" - return unspecified
-          return 'unspecified';
-        }
-        
-        // Basic URL validation
-        if (url.startsWith('http://') || url.startsWith('https://')) {
-          return url;
-        }
-        
-        // If it looks like a partial URL path, mark as unspecified
-        if (url.startsWith('/') || url.includes('DocumentCenter') || url.includes('.org') || url.includes('.com')) {
-          return 'unspecified';
-        }
-        
-        return url;
-      } catch (error) {
-        console.warn('URL sanitization error:', error);
-        return 'unspecified';
-      }
-    }
-
-    function sanitizeJsonString(text: string): string {
-      // Remove control characters that cause JSON parsing errors
-      let cleaned = text.replace(/[\x00-\x1F\x7F-\x9F]/g, '');
-      
-      // Handle escaped quotes and backslashes
-      cleaned = cleaned.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-      
-      // Remove single-line comments (// comment)
-      cleaned = cleaned.replace(/\/\/.*$/gm, '');
-      
-      // Remove multi-line comments (/* comment */)
-      cleaned = cleaned.replace(/\/\*[\s\S]*?\*\//g, '');
-      
-      // Remove markdown code blocks if present
-      cleaned = cleaned.replace(/```json\s*/g, '').replace(/```\s*$/g, '');
-      cleaned = cleaned.replace(/```\s*/g, '');
-      
-      // Fix common JSON formatting issues
-      cleaned = cleaned.replace(/,\s*}/g, '}'); // Remove trailing commas
-      cleaned = cleaned.replace(/,\s*]/g, ']'); // Remove trailing commas in arrays
-      
-      // Handle incomplete string values (especially URLs)
-      cleaned = cleaned.replace(/"source_link":\s*"https:[^"]*(?="[^}]*})/g, '"source_link": "unspecified"');
-      cleaned = cleaned.replace(/"source_link":\s*"[^"]*$/g, '"source_link": "unspecified"');
-      
-      // Fix incomplete JSON objects at the end
-      if (cleaned.includes('{') && !cleaned.trim().endsWith('}')) {
-        // Find the last complete object
-        const lastCompleteObj = cleaned.lastIndexOf('},');
-        if (lastCompleteObj !== -1) {
-          cleaned = cleaned.substring(0, lastCompleteObj + 1) + '\n    ]\n}';
-        }
-      }
-      
-      return cleaned.trim();
-    }
-
-    function validateJsonStructure(text: string): boolean {
-      try {
-        // Basic structure validation before parsing
-        const trimmed = text.trim();
-        
-        // Must start with { or [
-        if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
-          return false;
-        }
-        
-        // Must end with } or ]
-        if (!trimmed.endsWith('}') && !trimmed.endsWith(']')) {
-          return false;
-        }
-        
-        // Check for balanced braces and brackets
-        let braceCount = 0;
-        let bracketCount = 0;
-        let inString = false;
-        let escaped = false;
-        
-        for (let i = 0; i < trimmed.length; i++) {
-          const char = trimmed[i];
-          
-          if (escaped) {
-            escaped = false;
-            continue;
-          }
-          
-          if (char === '\\') {
-            escaped = true;
-            continue;
-          }
-          
-          if (char === '"' && !escaped) {
-            inString = !inString;
-            continue;
-          }
-          
-          if (!inString) {
-            if (char === '{') braceCount++;
-            if (char === '}') braceCount--;
-            if (char === '[') bracketCount++;
-            if (char === ']') bracketCount--;
-          }
-        }
-        
-        return braceCount === 0 && bracketCount === 0;
-      } catch (error) {
-        return false;
-      }
-    }
-
-    function robustJsonParse(text: string): any {
-      console.log('Starting robust JSON parsing...');
-      
-      // Step 1: Sanitize the input
-      let cleaned = sanitizeJsonString(text);
-      console.log('Sanitized response length:', cleaned.length);
-      
-      // Step 2: Validate structure
-      if (!validateJsonStructure(cleaned)) {
-        console.warn('JSON structure validation failed, attempting repair...');
-        // Try to find and extract valid JSON portion
-        const match = cleaned.match(/\{[\s\S]*"items"[\s\S]*?\}(?=\s*$)/);
-        if (match) {
-          cleaned = match[0];
+      // Try to extract JSON from the response
+      const jsonMatch = responseContent.match(/\{[\s\S]*"items"[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        extractedItems = parsed.items || [];
+      } else {
+        // Fallback: try to parse as array directly
+        const arrayMatch = responseContent.match(/\[[\s\S]*\]/);
+        if (arrayMatch) {
+          extractedItems = JSON.parse(arrayMatch[0]);
         } else {
-          throw new Error('Invalid JSON structure detected');
+          extractedItems = JSON.parse(responseContent);
         }
       }
-      
-      // Step 3: Multiple parsing strategies
-      const parseStrategies = [
-        // Strategy 1: Direct parse
-        () => JSON.parse(cleaned),
-        
-        // Strategy 2: Extract JSON object with items
-        () => {
-          const jsonMatch = cleaned.match(/\{[\s\S]*?"items"[\s\S]*?\}/);
-          if (!jsonMatch) throw new Error('No items object found');
-          return JSON.parse(jsonMatch[0]);
-        },
-        
-        // Strategy 3: Extract just the items array
-        () => {
-          const arrayMatch = cleaned.match(/"items":\s*(\[[\s\S]*?\])/);
-          if (!arrayMatch) throw new Error('No items array found');
-          return { items: JSON.parse(arrayMatch[1]) };
-        },
-        
-        // Strategy 4: Manual object reconstruction
-        () => {
-          console.log('Attempting manual JSON reconstruction...');
-          // Try to reconstruct from individual item objects
-          const itemMatches = cleaned.match(/\{[^{}]*"issue_to_check"[^{}]*\}/g);
-          if (!itemMatches) throw new Error('No item objects found');
-          
-          const items = itemMatches.map(item => JSON.parse(item));
-          return { items };
-        }
-      ];
-      
-      for (let i = 0; i < parseStrategies.length; i++) {
-        try {
-          console.log(`Trying parsing strategy ${i + 1}...`);
-          const result = parseStrategies[i]();
-          
-          // Validate and sanitize URLs in the result
-          if (result.items && Array.isArray(result.items)) {
-            result.items = result.items.map((item: any) => ({
-              ...item,
-              source_link: sanitizeUrl(item.source_link || 'unspecified')
-            }));
-          }
-          
-          console.log(`Strategy ${i + 1} succeeded, found ${result.items?.length || 0} items`);
-          return result;
-        } catch (error) {
-          console.log(`Strategy ${i + 1} failed:`, error.message);
-          if (i === parseStrategies.length - 1) {
-            throw error;
-          }
-        }
-      }
-      
-      throw new Error('All parsing strategies failed');
+    } catch (parseError) {
+      console.error('Failed to parse OpenAI response as JSON:', parseError);
+      console.error('Response content:', responseContent);
+      throw new Error('Invalid JSON response from OpenAI');
     }
 
-    // Prepare data for database insertion using already parsed items
-    const checklistItems = extractedItems.items.map((item: any) => ({
-      user_id: defaultUserId,
+    if (!Array.isArray(extractedItems)) {
+      throw new Error('OpenAI response does not contain a valid items array');
+    }
+
+    console.log(`Extracted ${extractedItems.length} items from OpenAI response`);
+
+    // Prepare data for database insertion
+    const checklistItems = extractedItems.map((item: any) => ({
+      user_id: user.id,
       sheet_name: item.sheet_name || null,
       issue_to_check: item.issue_to_check || 'Not specified',
       location: item.location || null,
@@ -551,9 +356,6 @@ serve(async (req) => {
       zip_code: item.zip_code || null,
       reviewer_name: item.reviewer_name || null,
       type_of_correction: item.type_of_correction || null,
-      zone_primary: item.zone_primary || null,
-      occupancy_group: item.occupancy_group || null,
-      natural_hazard_zone: item.natural_hazard_zone || null,
     }));
 
     console.log(`Inserting ${checklistItems.length} items into database...`);
@@ -576,7 +378,7 @@ serve(async (req) => {
         success: true,
         message: `Successfully extracted and saved ${insertedData.length} checklist items`,
         data: insertedData,
-        extractedCount: extractedItems.items.length
+        extractedCount: extractedItems.length
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
