@@ -48,6 +48,8 @@ export type Database = {
           issue_to_check: string
           location: string | null
           long_code_requirement: string | null
+          natural_hazard_zone: string | null
+          occupancy_group: string | null
           project_type: string | null
           reviewer_name: string | null
           sheet_name: string | null
@@ -58,6 +60,7 @@ export type Database = {
           updated_at: string
           user_id: string
           zip_code: string | null
+          zone_primary: string | null
         }
         Insert: {
           city?: string | null
@@ -68,6 +71,8 @@ export type Database = {
           issue_to_check: string
           location?: string | null
           long_code_requirement?: string | null
+          natural_hazard_zone?: string | null
+          occupancy_group?: string | null
           project_type?: string | null
           reviewer_name?: string | null
           sheet_name?: string | null
@@ -78,6 +83,7 @@ export type Database = {
           updated_at?: string
           user_id: string
           zip_code?: string | null
+          zone_primary?: string | null
         }
         Update: {
           city?: string | null
@@ -88,6 +94,8 @@ export type Database = {
           issue_to_check?: string
           location?: string | null
           long_code_requirement?: string | null
+          natural_hazard_zone?: string | null
+          occupancy_group?: string | null
           project_type?: string | null
           reviewer_name?: string | null
           sheet_name?: string | null
@@ -98,6 +106,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
           zip_code?: string | null
+          zone_primary?: string | null
         }
         Relationships: []
       }
