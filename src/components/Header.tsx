@@ -1,4 +1,4 @@
-import { Building2, Bot, User, LogOut, Users } from "lucide-react";
+import { Building2, Bot, User, LogOut, Users, FolderKanban } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { 
@@ -9,24 +9,60 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel
 } from "@/components/ui/dropdown-menu";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 export const Header = () => {
   const { user, profile, signOut, isAuthenticated, isAdmin } = useAuth();
+  const location = useLocation();
+
+  const isActive = (path: string) => {
+    if (path === '/' && location.pathname === '/') return true;
+    if (path === '/project-mgmt' && location.pathname.startsWith('/project-mgmt')) return true;
+    return false;
+  };
 
   return (
     <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
       <div className="container mx-auto px-6 py-4">
         <div className="flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-            <div className="w-10 h-10 bg-gradient-primary rounded-lg flex items-center justify-center shadow-primary">
-              <Building2 className="w-6 h-6 text-primary-foreground" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-foreground">CodeCheck AI</h1>
-              <p className="text-sm text-muted-foreground">Building Code Compliance Automation</p>
-            </div>
-          </Link>
+          <div className="flex items-center gap-8">
+            <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+              <div className="w-10 h-10 bg-gradient-primary rounded-lg flex items-center justify-center shadow-primary">
+                <Building2 className="w-6 h-6 text-primary-foreground" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-foreground">zHeight Internal AI Applications</h1>
+                <p className="text-sm text-muted-foreground">Building Code Compliance & Project Management</p>
+              </div>
+            </Link>
+            
+            {/* Navigation Tabs */}
+            {isAuthenticated && (
+              <nav className="hidden md:flex items-center gap-2">
+                <Link to="/">
+                  <Button 
+                    variant={isActive('/') ? "default" : "ghost"} 
+                    size="sm"
+                    className="font-medium"
+                  >
+                    Home
+                  </Button>
+                </Link>
+                <Link to="/project-mgmt">
+                  <Button 
+                    variant={isActive('/project-mgmt') ? "default" : "ghost"} 
+                    size="sm"
+                    className="font-medium"
+                  >
+                    Project Mgmt
+                  </Button>
+                </Link>
+                <Button variant="ghost" size="sm" className="font-medium" disabled>
+                  AI Plan checker
+                </Button>
+              </nav>
+            )}
+          </div>
           
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
