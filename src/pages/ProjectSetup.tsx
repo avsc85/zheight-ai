@@ -12,15 +12,15 @@ import { Badge } from "@/components/ui/badge";
 
 // Mock data for milestones based on wireframe
 const defaultMilestones = [
-  { id: 1, taskName: "Floor Plan + Site Map", arAssigned: "Sahad", assignedSkip: "Y", dueDate: "Sept 7th", priorityException: "Prioritize over everything", hours: "=32*18%", notes: "" },
-  { id: 2, taskName: "Proposed Floor Plan", arAssigned: "", assignedSkip: "N", dueDate: "", priorityException: "", hours: "=32*6%", notes: "" },
-  { id: 3, taskName: "Elevations", arAssigned: "", assignedSkip: "N", dueDate: "", priorityException: "", hours: "=32*14%", notes: "" },
-  { id: 4, taskName: "Finalization PF w/t Customer", arAssigned: "Sha", assignedSkip: "N", dueDate: "", priorityException: "", hours: "=32*18%", notes: "" },
-  { id: 5, taskName: "Full Set Completion Planning", arAssigned: "", assignedSkip: "N", dueDate: "", priorityException: "", hours: "=32*18%", notes: "" },
-  { id: 6, taskName: "MEP / T-24 / Struc/Finalization", arAssigned: "", assignedSkip: "Skip", dueDate: "", priorityException: "", hours: "=32*4%", notes: "" },
-  { id: 7, taskName: "Final Submission Set", arAssigned: "", assignedSkip: "N", dueDate: "", priorityException: "", hours: "=32*6%", notes: "" },
-  { id: 8, taskName: "Revision 1", arAssigned: "", assignedSkip: "N", dueDate: "", priorityException: "", hours: "=32*8%", notes: "" },
-  { id: 9, taskName: "Revision 2", arAssigned: "", assignedSkip: "N", dueDate: "", priorityException: "", hours: "=32*8%", notes: "" }
+  { id: 1, taskName: "Floor Plan + Site Map", arAssigned: "Sahad", assignedSkip: "Y", dueDate: "Sept 7th", priorityException: "Prioritize over everything", hours: "=32*18%", timePercentage: "18", notes: "" },
+  { id: 2, taskName: "Proposed Floor Plan", arAssigned: "", assignedSkip: "N", dueDate: "", priorityException: "", hours: "=32*6%", timePercentage: "6", notes: "" },
+  { id: 3, taskName: "Elevations", arAssigned: "", assignedSkip: "N", dueDate: "", priorityException: "", hours: "=32*14%", timePercentage: "14", notes: "" },
+  { id: 4, taskName: "Finalization PF w/t Customer", arAssigned: "Sha", assignedSkip: "N", dueDate: "", priorityException: "", hours: "=32*18%", timePercentage: "18", notes: "" },
+  { id: 5, taskName: "Full Set Completion Planning", arAssigned: "", assignedSkip: "N", dueDate: "", priorityException: "", hours: "=32*18%", timePercentage: "18", notes: "" },
+  { id: 6, taskName: "MEP / T-24 / Struc/Finalization", arAssigned: "", assignedSkip: "Skip", dueDate: "", priorityException: "", hours: "=32*4%", timePercentage: "4", notes: "" },
+  { id: 7, taskName: "Final Submission Set", arAssigned: "", assignedSkip: "N", dueDate: "", priorityException: "", hours: "=32*6%", timePercentage: "6", notes: "" },
+  { id: 8, taskName: "Revision 1", arAssigned: "", assignedSkip: "N", dueDate: "", priorityException: "", hours: "=32*8%", timePercentage: "8", notes: "" },
+  { id: 9, taskName: "Revision 2", arAssigned: "", assignedSkip: "N", dueDate: "", priorityException: "", hours: "=32*8%", timePercentage: "8", notes: "" }
 ];
 
 const ProjectSetup = () => {
@@ -47,6 +47,34 @@ const ProjectSetup = () => {
         milestone.id === id ? { ...milestone, [field]: value } : milestone
       )
     );
+  };
+
+  const addMilestone = (afterId: number) => {
+    const newId = Math.max(...milestones.map(m => m.id)) + 1;
+    const insertIndex = milestones.findIndex(m => m.id === afterId) + 1;
+    const newMilestone = {
+      id: newId,
+      taskName: "New Task",
+      arAssigned: "",
+      assignedSkip: "N",
+      dueDate: "",
+      priorityException: "",
+      hours: "=32*0%",
+      timePercentage: "0",
+      notes: ""
+    };
+    
+    setMilestones(prev => [
+      ...prev.slice(0, insertIndex),
+      newMilestone,
+      ...prev.slice(insertIndex)
+    ]);
+  };
+
+  const deleteMilestone = (id: number) => {
+    if (milestones.length > 1) {
+      setMilestones(prev => prev.filter(milestone => milestone.id !== id));
+    }
   };
 
   const arOptions = ["Sahad", "Sha", "Skip", "N"];
@@ -181,75 +209,135 @@ const ProjectSetup = () => {
                           <TableHead className="w-32">Assigned/Skip</TableHead>
                           <TableHead className="w-32">Due Date</TableHead>
                           <TableHead className="min-w-48">Priority Exception</TableHead>
+                          <TableHead className="w-24">% Time</TableHead>
                           <TableHead className="w-24">Hours</TableHead>
                           <TableHead className="min-w-32">Notes</TableHead>
+                          <TableHead className="w-16">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {milestones.map((milestone) => (
-                          <TableRow key={milestone.id}>
-                            <TableCell className="font-medium">{milestone.id}</TableCell>
-                            <TableCell>{milestone.taskName}</TableCell>
-                            <TableCell>
-                              <Select
-                                value={milestone.arAssigned}
-                                onValueChange={(value) => handleMilestoneChange(milestone.id, "arAssigned", value)}
-                              >
-                                <SelectTrigger className="h-8">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="sahad">Sahad</SelectItem>
-                                  <SelectItem value="sha">Sha</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </TableCell>
-                            <TableCell>
-                              <Select
-                                value={milestone.assignedSkip}
-                                onValueChange={(value) => handleMilestoneChange(milestone.id, "assignedSkip", value)}
-                              >
-                                <SelectTrigger className="h-8">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="Y">Y</SelectItem>
-                                  <SelectItem value="N">N</SelectItem>
-                                  <SelectItem value="Skip">Skip</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </TableCell>
-                            <TableCell>
-                              <Input
-                                value={milestone.dueDate}
-                                onChange={(e) => handleMilestoneChange(milestone.id, "dueDate", e.target.value)}
-                                className="h-8"
-                                placeholder="Sept 7th"
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Input
-                                value={milestone.priorityException}
-                                onChange={(e) => handleMilestoneChange(milestone.id, "priorityException", e.target.value)}
-                                className="h-8"
-                                placeholder="Priority notes..."
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="secondary" className="text-xs">
-                                {milestone.hours}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              <Input
-                                value={milestone.notes}
-                                onChange={(e) => handleMilestoneChange(milestone.id, "notes", e.target.value)}
-                                className="h-8"
-                                placeholder="Notes..."
-                              />
-                            </TableCell>
-                          </TableRow>
+                        {milestones.map((milestone, index) => (
+                          <>
+                            <TableRow key={milestone.id}>
+                              <TableCell className="font-medium">{milestone.id}</TableCell>
+                              <TableCell>
+                                <Input
+                                  value={milestone.taskName}
+                                  onChange={(e) => handleMilestoneChange(milestone.id, "taskName", e.target.value)}
+                                  className="h-8 border-0 p-0 text-sm"
+                                  placeholder="Task name..."
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Select
+                                  value={milestone.arAssigned}
+                                  onValueChange={(value) => handleMilestoneChange(milestone.id, "arAssigned", value)}
+                                >
+                                  <SelectTrigger className="h-8">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="sahad">Sahad</SelectItem>
+                                    <SelectItem value="sha">Sha</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </TableCell>
+                              <TableCell>
+                                <Select
+                                  value={milestone.assignedSkip}
+                                  onValueChange={(value) => handleMilestoneChange(milestone.id, "assignedSkip", value)}
+                                >
+                                  <SelectTrigger className="h-8">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="Y">Y</SelectItem>
+                                    <SelectItem value="N">N</SelectItem>
+                                    <SelectItem value="Skip">Skip</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </TableCell>
+                              <TableCell>
+                                <Input
+                                  value={milestone.dueDate}
+                                  onChange={(e) => handleMilestoneChange(milestone.id, "dueDate", e.target.value)}
+                                  className="h-8"
+                                  placeholder="Sept 7th"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Input
+                                  value={milestone.priorityException}
+                                  onChange={(e) => handleMilestoneChange(milestone.id, "priorityException", e.target.value)}
+                                  className="h-8"
+                                  placeholder="Priority notes..."
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Input
+                                  value={milestone.timePercentage}
+                                  onChange={(e) => handleMilestoneChange(milestone.id, "timePercentage", e.target.value)}
+                                  className="h-8 w-16"
+                                  placeholder="0"
+                                  type="number"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="secondary" className="text-xs">
+                                  {milestone.hours}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <Input
+                                  value={milestone.notes}
+                                  onChange={(e) => handleMilestoneChange(milestone.id, "notes", e.target.value)}
+                                  className="h-8"
+                                  placeholder="Notes..."
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => deleteMilestone(milestone.id)}
+                                  className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
+                                >
+                                  ×
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                            {index < milestones.length - 1 && (
+                              <TableRow className="hover:bg-transparent">
+                                <TableCell colSpan={10} className="p-0 h-4">
+                                  <div className="flex justify-center">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => addMilestone(milestone.id)}
+                                      className="h-6 w-6 p-0 rounded-full bg-primary/10 hover:bg-primary/20 text-primary"
+                                    >
+                                      +
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </>
                         ))}
+                        <TableRow className="hover:bg-transparent">
+                          <TableCell colSpan={10} className="p-2">
+                            <div className="flex justify-center">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => addMilestone(milestones[milestones.length - 1]?.id || 0)}
+                                className="h-8 px-4 text-primary border border-dashed border-primary/30 hover:border-primary/60"
+                              >
+                                + Add Task
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
                       </TableBody>
                     </Table>
                   </div>

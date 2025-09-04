@@ -133,12 +133,6 @@ const TaskCard = ({ task }: { task: any }) => {
             <p className="text-xs text-muted-foreground">{task.deadline}</p>
           </div>
           
-          {task.progress > 0 && (
-            <div className="space-y-1">
-              <Progress value={task.progress} className="h-2" />
-              <p className="text-xs text-muted-foreground">Progress: {task.progress}%</p>
-            </div>
-          )}
           
           {task.timeAllocated > 0 && (
             <p className="text-xs text-primary font-medium">
