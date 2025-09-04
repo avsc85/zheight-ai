@@ -9,6 +9,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { GripVertical } from "lucide-react";
 
 // Mock data for milestones based on wireframe
 const defaultMilestones = [
@@ -23,6 +28,121 @@ const defaultMilestones = [
   { id: 9, taskName: "Revision 2", arAssigned: "", assignedSkip: "N", dueDate: "", priorityException: "", hours: "=32*8%", timePercentage: "8", notes: "" }
 ];
 
+const SortableRow = ({ milestone, index, handleMilestoneChange, deleteMilestone }: any) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+  } = useSortable({ id: milestone.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <TableRow ref={setNodeRef} style={style} className="group">
+      <TableCell className="font-medium">{index + 1}</TableCell>
+      <TableCell>
+        <div className="flex items-center gap-2">
+          <div
+            {...attributes}
+            {...listeners}
+            className="cursor-grab active:cursor-grabbing p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            <GripVertical className="h-4 w-4 text-muted-foreground" />
+          </div>
+          <Input
+            value={milestone.taskName}
+            onChange={(e) => handleMilestoneChange(milestone.id, "taskName", e.target.value)}
+            className="h-8 border-0 p-0 text-sm flex-1"
+            placeholder="Task name..."
+          />
+        </div>
+      </TableCell>
+      <TableCell>
+        <Select
+          value={milestone.arAssigned}
+          onValueChange={(value) => handleMilestoneChange(milestone.id, "arAssigned", value)}
+        >
+          <SelectTrigger className="h-8">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="sahad">Sahad</SelectItem>
+            <SelectItem value="sha">Sha</SelectItem>
+          </SelectContent>
+        </Select>
+      </TableCell>
+      <TableCell>
+        <Select
+          value={milestone.assignedSkip}
+          onValueChange={(value) => handleMilestoneChange(milestone.id, "assignedSkip", value)}
+        >
+          <SelectTrigger className="h-8">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="Y">Y</SelectItem>
+            <SelectItem value="N">N</SelectItem>
+            <SelectItem value="Skip">Skip</SelectItem>
+          </SelectContent>
+        </Select>
+      </TableCell>
+      <TableCell>
+        <Input
+          value={milestone.dueDate}
+          onChange={(e) => handleMilestoneChange(milestone.id, "dueDate", e.target.value)}
+          className="h-8"
+          placeholder="Sept 7th"
+        />
+      </TableCell>
+      <TableCell>
+        <Input
+          value={milestone.priorityException}
+          onChange={(e) => handleMilestoneChange(milestone.id, "priorityException", e.target.value)}
+          className="h-8"
+          placeholder="Priority notes..."
+        />
+      </TableCell>
+      <TableCell>
+        <Input
+          value={milestone.timePercentage}
+          onChange={(e) => handleMilestoneChange(milestone.id, "timePercentage", e.target.value)}
+          className="h-8 w-16"
+          placeholder="0"
+          type="number"
+        />
+      </TableCell>
+      <TableCell>
+        <Badge variant="secondary" className="text-xs">
+          {milestone.hours}
+        </Badge>
+      </TableCell>
+      <TableCell>
+        <Input
+          value={milestone.notes}
+          onChange={(e) => handleMilestoneChange(milestone.id, "notes", e.target.value)}
+          className="h-8"
+          placeholder="Notes..."
+        />
+      </TableCell>
+      <TableCell>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => deleteMilestone(milestone.id)}
+          className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
+        >
+          ×
+        </Button>
+      </TableCell>
+    </TableRow>
+  );
+};
+
 const ProjectSetup = () => {
   const [activeTab, setActiveTab] = useState("setup");
   const [projectData, setProjectData] = useState({
@@ -36,6 +156,13 @@ const ProjectSetup = () => {
     ar2Field: ""
   });
   const [milestones, setMilestones] = useState(defaultMilestones);
+  
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   const handleProjectDataChange = (field: string, value: string) => {
     setProjectData(prev => ({ ...prev, [field]: value }));
@@ -49,9 +176,8 @@ const ProjectSetup = () => {
     );
   };
 
-  const addMilestone = (afterId: number) => {
+  const addMilestone = () => {
     const newId = Math.max(...milestones.map(m => m.id)) + 1;
-    const insertIndex = milestones.findIndex(m => m.id === afterId) + 1;
     const newMilestone = {
       id: newId,
       taskName: "New Task",
@@ -64,16 +190,25 @@ const ProjectSetup = () => {
       notes: ""
     };
     
-    setMilestones(prev => [
-      ...prev.slice(0, insertIndex),
-      newMilestone,
-      ...prev.slice(insertIndex)
-    ]);
+    setMilestones(prev => [...prev, newMilestone]);
   };
 
   const deleteMilestone = (id: number) => {
     if (milestones.length > 1) {
       setMilestones(prev => prev.filter(milestone => milestone.id !== id));
+    }
+  };
+
+  const handleDragEnd = (event: any) => {
+    const { active, over } = event;
+
+    if (active.id !== over.id) {
+      setMilestones((items) => {
+        const oldIndex = items.findIndex(item => item.id === active.id);
+        const newIndex = items.findIndex(item => item.id === over.id);
+        
+        return arrayMove(items, oldIndex, newIndex);
+      });
     }
   };
 
@@ -200,160 +335,58 @@ const ProjectSetup = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-16">Milestone #</TableHead>
-                          <TableHead className="min-w-48">Task Name</TableHead>
-                          <TableHead className="w-32">AR Assigned</TableHead>
-                          <TableHead className="w-32">Assigned/Skip</TableHead>
-                          <TableHead className="w-32">Due Date</TableHead>
-                          <TableHead className="min-w-48">Priority Exception</TableHead>
-                          <TableHead className="w-24">% Time</TableHead>
-                          <TableHead className="w-24">Hours</TableHead>
-                          <TableHead className="min-w-32">Notes</TableHead>
-                          <TableHead className="w-16">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {milestones.map((milestone, index) => (
-                          <>
-                            <TableRow key={milestone.id}>
-                              <TableCell className="font-medium">{milestone.id}</TableCell>
-                              <TableCell>
-                                <Input
-                                  value={milestone.taskName}
-                                  onChange={(e) => handleMilestoneChange(milestone.id, "taskName", e.target.value)}
-                                  className="h-8 border-0 p-0 text-sm"
-                                  placeholder="Task name..."
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <Select
-                                  value={milestone.arAssigned}
-                                  onValueChange={(value) => handleMilestoneChange(milestone.id, "arAssigned", value)}
-                                >
-                                  <SelectTrigger className="h-8">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="sahad">Sahad</SelectItem>
-                                    <SelectItem value="sha">Sha</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </TableCell>
-                              <TableCell>
-                                <Select
-                                  value={milestone.assignedSkip}
-                                  onValueChange={(value) => handleMilestoneChange(milestone.id, "assignedSkip", value)}
-                                >
-                                  <SelectTrigger className="h-8">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="Y">Y</SelectItem>
-                                    <SelectItem value="N">N</SelectItem>
-                                    <SelectItem value="Skip">Skip</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </TableCell>
-                              <TableCell>
-                                <Input
-                                  value={milestone.dueDate}
-                                  onChange={(e) => handleMilestoneChange(milestone.id, "dueDate", e.target.value)}
-                                  className="h-8"
-                                  placeholder="Sept 7th"
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <Input
-                                  value={milestone.priorityException}
-                                  onChange={(e) => handleMilestoneChange(milestone.id, "priorityException", e.target.value)}
-                                  className="h-8"
-                                  placeholder="Priority notes..."
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <Input
-                                  value={milestone.timePercentage}
-                                  onChange={(e) => handleMilestoneChange(milestone.id, "timePercentage", e.target.value)}
-                                  className="h-8 w-16"
-                                  placeholder="0"
-                                  type="number"
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="secondary" className="text-xs">
-                                  {milestone.hours}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                <Input
-                                  value={milestone.notes}
-                                  onChange={(e) => handleMilestoneChange(milestone.id, "notes", e.target.value)}
-                                  className="h-8"
-                                  placeholder="Notes..."
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => deleteMilestone(milestone.id)}
-                                  className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
-                                >
-                                  ×
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                            {index < milestones.length - 1 && (
-                              <TableRow className="hover:bg-transparent">
-                                <TableCell colSpan={10} className="p-0 h-4">
-                                  <div className="flex justify-center gap-2">
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => addMilestone(milestone.id)}
-                                      className="h-6 w-6 p-0 rounded-full bg-primary/10 hover:bg-primary/20 text-primary"
-                                    >
-                                      +
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => deleteMilestone(milestones[index + 1]?.id)}
-                                      className="h-6 w-6 p-0 rounded-full bg-red-100 hover:bg-red-200 text-red-600"
-                                      disabled={milestones.length <= 1}
-                                    >
-                                      -
-                                    </Button>
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-                            )}
-                          </>
-                        ))}
-                        <TableRow className="hover:bg-transparent">
-                          <TableCell colSpan={10} className="p-2">
-                            <div className="flex justify-center">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => addMilestone(milestones[milestones.length - 1]?.id || 0)}
-                                className="h-8 px-4 text-primary border border-dashed border-primary/30 hover:border-primary/60"
-                              >
-                                + Add Task
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      </TableBody>
-                    </Table>
+                    <DndContext 
+                      sensors={sensors}
+                      collisionDetection={closestCenter}
+                      onDragEnd={handleDragEnd}
+                    >
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-16">Milestone #</TableHead>
+                            <TableHead className="min-w-48">Task Name</TableHead>
+                            <TableHead className="w-32">AR Assigned</TableHead>
+                            <TableHead className="w-32">Assigned/Skip</TableHead>
+                            <TableHead className="w-32">Due Date</TableHead>
+                            <TableHead className="min-w-48">Priority Exception</TableHead>
+                            <TableHead className="w-24">% Time</TableHead>
+                            <TableHead className="w-24">Hours</TableHead>
+                            <TableHead className="min-w-32">Notes</TableHead>
+                            <TableHead className="w-16">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <SortableContext 
+                          items={milestones.map(m => m.id)} 
+                          strategy={verticalListSortingStrategy}
+                        >
+                          <TableBody>
+                            {milestones.map((milestone, index) => (
+                              <SortableRow
+                                key={milestone.id}
+                                milestone={milestone}
+                                index={index}
+                                handleMilestoneChange={handleMilestoneChange}
+                                deleteMilestone={deleteMilestone}
+                              />
+                            ))}
+                          </TableBody>
+                        </SortableContext>
+                      </Table>
+                    </DndContext>
                   </div>
                   
-                  <div className="flex justify-end gap-4 mt-6">
-                    <Button variant="outline">Save Draft</Button>
-                    <Button>Create Project</Button>
+                  <div className="flex justify-between items-center mt-6">
+                    <Button
+                      variant="ghost"
+                      onClick={addMilestone}
+                      className="text-primary border border-dashed border-primary/30 hover:border-primary/60"
+                    >
+                      + Add Task
+                    </Button>
+                    <div className="flex gap-4">
+                      <Button variant="outline">Save Draft</Button>
+                      <Button>Create Project</Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
