@@ -309,7 +309,7 @@ const ProjectSetup = () => {
                             {index < milestones.length - 1 && (
                               <TableRow className="hover:bg-transparent">
                                 <TableCell colSpan={10} className="p-0 h-4">
-                                  <div className="flex justify-center">
+                                  <div className="flex justify-center gap-2">
                                     <Button
                                       variant="ghost"
                                       size="sm"
@@ -317,6 +317,15 @@ const ProjectSetup = () => {
                                       className="h-6 w-6 p-0 rounded-full bg-primary/10 hover:bg-primary/20 text-primary"
                                     >
                                       +
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => deleteMilestone(milestones[index + 1]?.id)}
+                                      className="h-6 w-6 p-0 rounded-full bg-red-100 hover:bg-red-200 text-red-600"
+                                      disabled={milestones.length <= 1}
+                                    >
+                                      -
                                     </Button>
                                   </div>
                                 </TableCell>
