@@ -13,7 +13,13 @@ import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, us
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical } from "lucide-react";
+import { GripVertical, Trash2 } from "lucide-react";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 
 // Mock data for milestones based on wireframe
 const defaultMilestones = [
@@ -43,103 +49,116 @@ const SortableRow = ({ milestone, index, handleMilestoneChange, deleteMilestone 
   };
 
   return (
-    <TableRow ref={setNodeRef} style={style} className="group">
-      <TableCell className="font-medium">{index + 1}</TableCell>
-      <TableCell>
-        <div className="flex items-center gap-2">
-          <div
-            {...attributes}
-            {...listeners}
-            className="cursor-grab active:cursor-grabbing p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-          >
-            <GripVertical className="h-4 w-4 text-muted-foreground" />
-          </div>
-          <Input
-            value={milestone.taskName}
-            onChange={(e) => handleMilestoneChange(milestone.id, "taskName", e.target.value)}
-            className="h-8 border-0 p-0 text-sm flex-1"
-            placeholder="Task name..."
-          />
-        </div>
-      </TableCell>
-      <TableCell>
-        <Select
-          value={milestone.arAssigned}
-          onValueChange={(value) => handleMilestoneChange(milestone.id, "arAssigned", value)}
-        >
-          <SelectTrigger className="h-8">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="sahad">Sahad</SelectItem>
-            <SelectItem value="sha">Sha</SelectItem>
-          </SelectContent>
-        </Select>
-      </TableCell>
-      <TableCell>
-        <Select
-          value={milestone.assignedSkip}
-          onValueChange={(value) => handleMilestoneChange(milestone.id, "assignedSkip", value)}
-        >
-          <SelectTrigger className="h-8">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="Y">Y</SelectItem>
-            <SelectItem value="N">N</SelectItem>
-            <SelectItem value="Skip">Skip</SelectItem>
-          </SelectContent>
-        </Select>
-      </TableCell>
-      <TableCell>
-        <Input
-          value={milestone.dueDate}
-          onChange={(e) => handleMilestoneChange(milestone.id, "dueDate", e.target.value)}
-          className="h-8"
-          placeholder="Sept 7th"
-        />
-      </TableCell>
-      <TableCell>
-        <Input
-          value={milestone.priorityException}
-          onChange={(e) => handleMilestoneChange(milestone.id, "priorityException", e.target.value)}
-          className="h-8"
-          placeholder="Priority notes..."
-        />
-      </TableCell>
-      <TableCell>
-        <Input
-          value={milestone.timePercentage}
-          onChange={(e) => handleMilestoneChange(milestone.id, "timePercentage", e.target.value)}
-          className="h-8 w-16"
-          placeholder="0"
-          type="number"
-        />
-      </TableCell>
-      <TableCell>
-        <Badge variant="secondary" className="text-xs">
-          {milestone.hours}
-        </Badge>
-      </TableCell>
-      <TableCell>
-        <Input
-          value={milestone.notes}
-          onChange={(e) => handleMilestoneChange(milestone.id, "notes", e.target.value)}
-          className="h-8"
-          placeholder="Notes..."
-        />
-      </TableCell>
-      <TableCell>
-        <Button
-          variant="ghost"
-          size="sm"
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <TableRow ref={setNodeRef} style={style} className="group">
+          <TableCell className="font-medium">{index + 1}</TableCell>
+          <TableCell>
+            <div className="flex items-center gap-2">
+              <div
+                {...attributes}
+                {...listeners}
+                className="cursor-grab active:cursor-grabbing p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <GripVertical className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <Input
+                value={milestone.taskName}
+                onChange={(e) => handleMilestoneChange(milestone.id, "taskName", e.target.value)}
+                className="h-8 border-0 p-0 text-sm flex-1"
+                placeholder="Task name..."
+              />
+            </div>
+          </TableCell>
+          <TableCell>
+            <Select
+              value={milestone.arAssigned}
+              onValueChange={(value) => handleMilestoneChange(milestone.id, "arAssigned", value)}
+            >
+              <SelectTrigger className="h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="sahad">Sahad</SelectItem>
+                <SelectItem value="sha">Sha</SelectItem>
+              </SelectContent>
+            </Select>
+          </TableCell>
+          <TableCell>
+            <Select
+              value={milestone.assignedSkip}
+              onValueChange={(value) => handleMilestoneChange(milestone.id, "assignedSkip", value)}
+            >
+              <SelectTrigger className="h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Y">Y</SelectItem>
+                <SelectItem value="N">N</SelectItem>
+                <SelectItem value="Skip">Skip</SelectItem>
+              </SelectContent>
+            </Select>
+          </TableCell>
+          <TableCell>
+            <Input
+              value={milestone.dueDate}
+              onChange={(e) => handleMilestoneChange(milestone.id, "dueDate", e.target.value)}
+              className="h-8"
+              placeholder="Sept 7th"
+            />
+          </TableCell>
+          <TableCell>
+            <Input
+              value={milestone.priorityException}
+              onChange={(e) => handleMilestoneChange(milestone.id, "priorityException", e.target.value)}
+              className="h-8"
+              placeholder="Priority notes..."
+            />
+          </TableCell>
+          <TableCell>
+            <Input
+              value={milestone.timePercentage}
+              onChange={(e) => handleMilestoneChange(milestone.id, "timePercentage", e.target.value)}
+              className="h-8 w-16"
+              placeholder="0"
+              type="number"
+            />
+          </TableCell>
+          <TableCell>
+            <Badge variant="secondary" className="text-xs">
+              {milestone.hours}
+            </Badge>
+          </TableCell>
+          <TableCell>
+            <Input
+              value={milestone.notes}
+              onChange={(e) => handleMilestoneChange(milestone.id, "notes", e.target.value)}
+              className="h-8"
+              placeholder="Notes..."
+            />
+          </TableCell>
+          <TableCell>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => deleteMilestone(milestone.id)}
+              className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
+            >
+              ×
+            </Button>
+          </TableCell>
+        </TableRow>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem 
           onClick={() => deleteMilestone(milestone.id)}
-          className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
+          className="text-red-600 focus:text-red-600 focus:bg-red-50"
         >
-          ×
-        </Button>
-      </TableCell>
-    </TableRow>
+          <Trash2 className="mr-2 h-4 w-4" />
+          Delete Task
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 };
 
