@@ -143,6 +143,110 @@ export type Database = {
         }
         Relationships: []
       }
+      project_milestones: {
+        Row: {
+          ar_assigned: string | null
+          assigned_skip: string | null
+          created_at: string
+          due_date: string | null
+          hours: string | null
+          id: string
+          milestone_number: number
+          notes: string | null
+          priority_exception: string | null
+          project_id: string
+          status: string | null
+          task_name: string
+          time_percentage: number | null
+          updated_at: string
+        }
+        Insert: {
+          ar_assigned?: string | null
+          assigned_skip?: string | null
+          created_at?: string
+          due_date?: string | null
+          hours?: string | null
+          id?: string
+          milestone_number: number
+          notes?: string | null
+          priority_exception?: string | null
+          project_id: string
+          status?: string | null
+          task_name: string
+          time_percentage?: number | null
+          updated_at?: string
+        }
+        Update: {
+          ar_assigned?: string | null
+          assigned_skip?: string | null
+          created_at?: string
+          due_date?: string | null
+          hours?: string | null
+          id?: string
+          milestone_number?: number
+          notes?: string | null
+          priority_exception?: string | null
+          project_id?: string
+          status?: string | null
+          task_name?: string
+          time_percentage?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_milestones_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      projects: {
+        Row: {
+          ar1_planning: string | null
+          ar2_field: string | null
+          created_at: string
+          difficulty_level: string | null
+          end_date: string | null
+          hours_allocated: number | null
+          id: string
+          notes: string | null
+          project_name: string
+          start_date: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ar1_planning?: string | null
+          ar2_field?: string | null
+          created_at?: string
+          difficulty_level?: string | null
+          end_date?: string | null
+          hours_allocated?: number | null
+          id?: string
+          notes?: string | null
+          project_name: string
+          start_date?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ar1_planning?: string | null
+          ar2_field?: string | null
+          created_at?: string
+          difficulty_level?: string | null
+          end_date?: string | null
+          hours_allocated?: number | null
+          id?: string
+          notes?: string | null
+          project_name?: string
+          start_date?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
