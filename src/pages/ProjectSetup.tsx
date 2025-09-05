@@ -183,7 +183,7 @@ const ProjectSetup = () => {
     project_name: "",
     start_date: "",
     expected_end_date: "",
-    difficulty_level: "",
+    difficulty_level: null as string | null,
     project_notes: "",
     hours_allocated: 32,
     ar_planning_id: "",
@@ -317,7 +317,7 @@ const ProjectSetup = () => {
   const createProject = async () => {
     console.log('Creating project - User roles:', { isPM, isAR2, isAdmin, userRole: role });
     
-    if (!user || (!isPM && !isAR2)) {
+    if (!user || (!isPM && !isAR2 && !isAdmin)) {
       console.error('Access denied - User roles:', { isPM, isAR2, isAdmin, role });
       toast({
         title: "Access Denied",
@@ -327,10 +327,20 @@ const ProjectSetup = () => {
       return;
     }
 
+    // Form validation
     if (!projectData.project_name.trim()) {
       toast({
         title: "Validation Error",
         description: "Project name is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!projectData.difficulty_level) {
+      toast({
+        title: "Validation Error",
+        description: "Please select a difficulty level.",
         variant: "destructive",
       });
       return;
@@ -386,7 +396,7 @@ const ProjectSetup = () => {
         project_name: "",
         start_date: "",
         expected_end_date: "",
-        difficulty_level: "",
+        difficulty_level: null,
         project_notes: "",
         hours_allocated: 32,
         ar_planning_id: "",
@@ -459,7 +469,7 @@ const ProjectSetup = () => {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="difficultyLevel">Difficulty Level</Label>
-                      <Select value={projectData.difficulty_level} onValueChange={(value) => handleProjectDataChange("difficulty_level", value)}>
+                      <Select value={projectData.difficulty_level || ""} onValueChange={(value) => handleProjectDataChange("difficulty_level", value)}>
                         <SelectTrigger>
                           <SelectValue placeholder="High / Medium / Low" />
                         </SelectTrigger>
