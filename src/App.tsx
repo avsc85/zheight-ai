@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
+import AIPlanChecker from "./pages/AIPlanChecker";
 import UserManagement from "./pages/UserManagement";
 import ProjectManagement from "./pages/ProjectManagement";
 import ProjectBoard from "./pages/ProjectBoard";
@@ -42,6 +43,14 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<Auth />} />
+          <Route 
+            path="/ai-plan-checker" 
+            element={
+              <ProtectedRoute>
+                <AIPlanChecker />
+              </ProtectedRoute>
+            } 
+          />
           <Route 
             path="/admin/users" 
             element={

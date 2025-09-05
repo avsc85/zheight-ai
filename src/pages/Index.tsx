@@ -2,9 +2,6 @@ import { Link } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ChecklistExtractor } from "@/components/ChecklistExtractor";
-import { PlanChecker } from "@/components/PlanChecker";
-import { PromptEditor } from "@/components/PromptEditor";
 import { useAuth } from "@/hooks/useAuth";
 import { Bot, FileCheck, Folder } from "lucide-react";
 
@@ -100,27 +97,6 @@ const Index = () => {
           </Card>
         </div>
 
-        {user && (
-          <>
-            {/* Agent 1 Interface */}
-            <div className="mb-12">
-              <h2 className="text-2xl font-bold text-foreground mb-6">Agent 1: Checklist Extractor</h2>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <ChecklistExtractor />
-                <PromptEditor onPromptChange={handlePromptChange} />
-              </div>
-            </div>
-
-            {/* Agent 2 Interface */}
-            <div>
-              <h2 className="text-2xl font-bold text-foreground mb-6">Agent 2: Plan Checker</h2>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <PlanChecker />
-                <PromptEditor onPromptChange={handlePromptChange} />
-              </div>
-            </div>
-          </>
-        )}
       </main>
     </div>
   );

@@ -18,6 +18,7 @@ export const Header = () => {
   const isActive = (path: string) => {
     if (path === '/' && location.pathname === '/') return true;
     if (path === '/project-mgmt' && location.pathname.startsWith('/project-mgmt')) return true;
+    if (path === '/ai-plan-checker' && location.pathname === '/ai-plan-checker') return true;
     return false;
   };
 
@@ -57,9 +58,15 @@ export const Header = () => {
                     Project Mgmt
                   </Button>
                 </Link>
-                <Button variant="ghost" size="sm" className="font-medium" disabled>
-                  AI Plan checker
-                </Button>
+                <Link to="/ai-plan-checker">
+                  <Button 
+                    variant={isActive('/ai-plan-checker') ? "default" : "ghost"} 
+                    size="sm"
+                    className="font-medium"
+                  >
+                    AI Plan Checker
+                  </Button>
+                </Link>
               </nav>
             )}
           </div>
