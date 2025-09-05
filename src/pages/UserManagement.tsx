@@ -30,7 +30,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Users, Trash2, Shield, User as UserIcon, Crown } from "lucide-react";
+import { Users, Trash2, Shield, User as UserIcon, Crown, Building, Clipboard } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -40,7 +40,7 @@ interface UserWithRole {
   email: string;
   full_name: string | null;
   company: string | null;
-  role: 'user' | 'admin';
+  role: 'user' | 'admin' | 'pm' | 'ar1_planning' | 'ar2_field';
   created_at: string;
   last_sign_in_at: string | null;
 }
@@ -115,7 +115,7 @@ const UserManagement = () => {
           email: authUser?.email || 'Unknown',
           full_name: profile.full_name,
           company: profile.company,
-          role: (userRole?.role as 'user' | 'admin') || 'user',
+          role: (userRole?.role as 'user' | 'admin' | 'pm' | 'ar1_planning' | 'ar2_field') || 'user',
           created_at: profile.created_at,
           last_sign_in_at: authUser?.last_sign_in_at || null
         };
@@ -140,7 +140,7 @@ const UserManagement = () => {
     }
   }, [isAuthenticated, isAdmin]);
 
-  const updateUserRole = async (userId: string, newRole: 'user' | 'admin') => {
+  const updateUserRole = async (userId: string, newRole: 'user' | 'admin' | 'pm' | 'ar1_planning' | 'ar2_field') => {
     try {
       setUpdatingUsers(prev => new Set([...prev, userId]));
 
@@ -201,6 +201,27 @@ const UserManagement = () => {
         description: error.message || "Please try again.",
         variant: "destructive",
       });
+    }
+  };
+
+  const getRoleIcon = (role: string) => {
+    switch (role) {
+      case 'admin': return <Crown className="w-4 h-4 text-amber-500" />;
+      case 'pm': return <Building className="w-4 h-4 text-blue-500" />;
+      case 'ar1_planning': return <Clipboard className="w-4 h-4 text-green-500" />;
+      case 'ar2_field': return <Clipboard className="w-4 h-4 text-purple-500" />;
+      default: return <UserIcon className="w-4 h-4 text-muted-foreground" />;
+    }
+  };
+
+  const getRoleDisplayName = (role: string) => {
+    switch (role) {
+      case 'admin': return 'Admin';
+      case 'pm': return 'Project Manager';
+      case 'ar1_planning': return 'AR1 - Planning';
+      case 'ar2_field': return 'AR2 - Field';
+      case 'user': return 'User';
+      default: return role;
     }
   };
 
@@ -299,10 +320,10 @@ const UserManagement = () => {
                       <TableCell>
                         <Select
                           value={user.role}
-                          onValueChange={(value: 'user' | 'admin') => updateUserRole(user.id, value)}
+                          onValueChange={(value: 'user' | 'admin' | 'pm' | 'ar1_planning' | 'ar2_field') => updateUserRole(user.id, value)}
                           disabled={updatingUsers.has(user.id)}
                         >
-                          <SelectTrigger className="w-32">
+                          <SelectTrigger className="w-40">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -310,6 +331,24 @@ const UserManagement = () => {
                               <div className="flex items-center gap-2">
                                 <UserIcon className="w-4 h-4" />
                                 User
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="pm">
+                              <div className="flex items-center gap-2">
+                                <Building className="w-4 h-4 text-blue-500" />
+                                Project Manager
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="ar1_planning">
+                              <div className="flex items-center gap-2">
+                                <Clipboard className="w-4 h-4 text-green-500" />
+                                AR1 - Planning
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="ar2_field">
+                              <div className="flex items-center gap-2">
+                                <Clipboard className="w-4 h-4 text-purple-500" />
+                                AR2 - Field
                               </div>
                             </SelectItem>
                             <SelectItem value="admin">

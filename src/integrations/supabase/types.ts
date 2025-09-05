@@ -143,6 +143,41 @@ export type Database = {
         }
         Relationships: []
       }
+      project_assignments: {
+        Row: {
+          ar2_user_id: string
+          assigned_by: string
+          created_at: string
+          id: string
+          project_id: string
+          updated_at: string
+        }
+        Insert: {
+          ar2_user_id: string
+          assigned_by: string
+          created_at?: string
+          id?: string
+          project_id: string
+          updated_at?: string
+        }
+        Update: {
+          ar2_user_id?: string
+          assigned_by?: string
+          created_at?: string
+          id?: string
+          project_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_assignments_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_milestones: {
         Row: {
           ar_assigned: string | null

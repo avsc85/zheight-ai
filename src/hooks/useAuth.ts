@@ -17,7 +17,7 @@ interface Profile {
 interface UserRole {
   id: string;
   user_id: string;
-  role: 'user' | 'admin';
+  role: 'user' | 'admin' | 'pm' | 'ar1_planning' | 'ar2_field' | 'moderator';
   created_at: string;
   updated_at: string;
 }
@@ -143,5 +143,8 @@ export const useAuth = () => {
     signOut,
     isAuthenticated: !!session?.user,
     isAdmin: userRole?.role === 'admin',
+    isPM: userRole?.role === 'pm',
+    isAR1: userRole?.role === 'ar1_planning',
+    isAR2: userRole?.role === 'ar2_field',
   };
 };

@@ -1,72 +1,126 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { Header } from "@/components/Header";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { ChecklistExtractor } from "@/components/ChecklistExtractor";
 import { PlanChecker } from "@/components/PlanChecker";
+import { PromptEditor } from "@/components/PromptEditor";
 import { useAuth } from "@/hooks/useAuth";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Bot, FileCheck, Folder } from "lucide-react";
 
 const Index = () => {
-  const { isAuthenticated, loading } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
 
-  useEffect(() => {
-    if (!loading && !isAuthenticated) {
-      navigate('/auth');
-    }
-  }, [isAuthenticated, loading, navigate]);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-subtle flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return null; // Will redirect to auth page
-  }
+  const handlePromptChange = (prompt: string) => {
+    console.log("Prompt updated:", prompt);
+  };
 
   return (
     <div className="min-h-screen bg-gradient-subtle">
       <Header />
       
       <main className="container mx-auto px-6 py-8">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold text-foreground mb-4">
-              AI-Powered Building Code Compliance
-            </h2>
-            <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
-              Automate your building code compliance and QA review process with two specialized AI agents 
-              that extract requirements from historical data and analyze new plans for compliance gaps.
-            </p>
-          </div>
-
-          <Tabs defaultValue="extractor" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-8">
-              <TabsTrigger value="extractor" className="text-sm font-medium">
-                Agent-1: Checklist Extractor
-              </TabsTrigger>
-              <TabsTrigger value="checker" className="text-sm font-medium">
-                Agent-2: Plan Checker
-              </TabsTrigger>
-            </TabsList>
-            
-            <TabsContent value="extractor" className="space-y-6">
-              <ChecklistExtractor />
-            </TabsContent>
-            
-            <TabsContent value="checker" className="space-y-6">
-              <PlanChecker />
-            </TabsContent>
-          </Tabs>
+        <div className="text-center mb-12">
+          <h1 className="text-4xl font-bold text-foreground mb-4">
+            zHeight Internal AI Applications
+          </h1>
+          <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+            Streamline your architectural workflow with AI-powered code compliance tools and project management
+          </p>
+          
+          {!user && (
+            <div className="mt-8">
+              <Link to="/auth">
+                <Button size="lg" className="mr-4">
+                  Sign In to Get Started
+                </Button>
+              </Link>
+            </div>
+          )}
         </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
+          {/* Project Management Tool */}
+          <Card className="hover:shadow-lg transition-shadow border-primary/20">
+            <CardHeader>
+              <CardTitle className="text-primary flex items-center gap-2">
+                <Folder className="h-5 w-5" />
+                Project Management Tool
+              </CardTitle>
+              <CardDescription>
+                Comprehensive project setup, milestone tracking, and AR assignment system
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Manage projects, assign tasks to ARs, and track progress through Kanban boards and detailed reporting.
+              </p>
+              <Link to="/project-mgmt">
+                <Button className="w-full">
+                  Access Project Management
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+
+          {/* AI Agent 1 */}
+          <Card className="hover:shadow-lg transition-shadow border-primary/20">
+            <CardHeader>
+              <CardTitle className="text-primary flex items-center gap-2">
+                <Bot className="h-5 w-5" />
+                AI Agent 1: Checklist Extractor
+              </CardTitle>
+              <CardDescription>
+                Extract compliance checklists from plan check documents
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                AI-powered analysis of architectural documents to extract compliance requirements.
+              </p>
+            </CardContent>
+          </Card>
+          
+          {/* AI Agent 2 */}
+          <Card className="hover:shadow-lg transition-shadow border-primary/20">
+            <CardHeader>
+              <CardTitle className="text-primary flex items-center gap-2">
+                <FileCheck className="h-5 w-5" />
+                AI Agent 2: Plan Checker
+              </CardTitle>
+              <CardDescription>
+                Verify architectural plans against extracted requirements
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Compare your architectural plans against compliance requirements for quality assurance.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {user && (
+          <>
+            {/* Agent 1 Interface */}
+            <div className="mb-12">
+              <h2 className="text-2xl font-bold text-foreground mb-6">Agent 1: Checklist Extractor</h2>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <ChecklistExtractor />
+                <PromptEditor onPromptChange={handlePromptChange} />
+              </div>
+            </div>
+
+            {/* Agent 2 Interface */}
+            <div>
+              <h2 className="text-2xl font-bold text-foreground mb-6">Agent 2: Plan Checker</h2>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <PlanChecker />
+                <PromptEditor onPromptChange={handlePromptChange} />
+              </div>
+            </div>
+          </>
+        )}
       </main>
     </div>
   );
