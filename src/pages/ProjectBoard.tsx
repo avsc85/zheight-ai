@@ -20,6 +20,7 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
+  useDroppable,
 } from '@dnd-kit/core';
 import {
   arrayMove,
@@ -46,6 +47,16 @@ interface Task {
   projectId: string;
   completionDate?: string;
 }
+
+const DroppableColumn = ({ children, id, className }: { children: React.ReactNode; id: string; className?: string }) => {
+  const { setNodeRef } = useDroppable({ id });
+  
+  return (
+    <div ref={setNodeRef} className={className}>
+      {children}
+    </div>
+  );
+};
 
 const SortableTaskCard = ({ task, onUpdateNotes, onUpdateStatus, currentUserId, userRole }: { 
   task: Task; 
@@ -568,7 +579,7 @@ const ProjectBoard = () => {
                     : userTasks.filter(task => task.status === status);
                   
                   return (
-                    <div key={status} className="space-y-4">
+                    <DroppableColumn key={status} id={status} className="space-y-4">
                       <Card className={`${color} border-t-4 border-t-primary`}>
                         <CardHeader className="pb-3">
                           <CardTitle className="text-sm font-medium flex items-center justify-between">
@@ -597,7 +608,7 @@ const ProjectBoard = () => {
                           ))}
                         </div>
                       </SortableContext>
-                    </div>
+                    </DroppableColumn>
                   );
                 })}
               </div>
