@@ -110,33 +110,74 @@ export type Database = {
         }
         Relationships: []
       }
+      notes: {
+        Row: {
+          comment_id: string
+          created_at: string | null
+          notes_tasks: string
+          task_id: string | null
+          timestamp: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          comment_id?: string
+          created_at?: string | null
+          notes_tasks: string
+          task_id?: string | null
+          timestamp?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          comment_id?: string
+          created_at?: string | null
+          notes_tasks?: string
+          task_id?: string | null
+          timestamp?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notes_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "project_tasks"
+            referencedColumns: ["task_id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
+          active_status: boolean | null
           avatar_url: string | null
           company: string | null
           created_at: string
-          full_name: string | null
-          id: string
+          location: string | null
+          name: string | null
           role: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          active_status?: boolean | null
           avatar_url?: string | null
           company?: string | null
           created_at?: string
-          full_name?: string | null
-          id?: string
+          location?: string | null
+          name?: string | null
           role?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          active_status?: boolean | null
           avatar_url?: string | null
           company?: string | null
           created_at?: string
-          full_name?: string | null
-          id?: string
+          location?: string | null
+          name?: string | null
           role?: string | null
           updated_at?: string
           user_id?: string
