@@ -143,87 +143,61 @@ export type Database = {
         }
         Relationships: []
       }
-      project_assignments: {
+      project_tasks: {
         Row: {
-          ar2_user_id: string
-          assigned_by: string
-          created_at: string
-          id: string
-          project_id: string
-          updated_at: string
-        }
-        Insert: {
-          ar2_user_id: string
-          assigned_by: string
-          created_at?: string
-          id?: string
-          project_id: string
-          updated_at?: string
-        }
-        Update: {
-          ar2_user_id?: string
-          assigned_by?: string
-          created_at?: string
-          id?: string
-          project_id?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "project_assignments_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      project_milestones: {
-        Row: {
-          ar_assigned: string | null
-          assigned_skip: string | null
+          allocated_due_date: string | null
+          assigned_ar_id: string | null
+          assigned_skip_flag: string | null
+          completion_date: string | null
           created_at: string
           due_date: string | null
           hours: string | null
-          id: string
+          last_step_timestamp: string | null
           milestone_number: number
-          notes: string | null
+          notes_tasks: string | null
           priority_exception: string | null
           project_id: string
-          status: string | null
+          task_id: string
           task_name: string
+          task_status: string | null
           time_percentage: number | null
           updated_at: string
         }
         Insert: {
-          ar_assigned?: string | null
-          assigned_skip?: string | null
+          allocated_due_date?: string | null
+          assigned_ar_id?: string | null
+          assigned_skip_flag?: string | null
+          completion_date?: string | null
           created_at?: string
           due_date?: string | null
           hours?: string | null
-          id?: string
+          last_step_timestamp?: string | null
           milestone_number: number
-          notes?: string | null
+          notes_tasks?: string | null
           priority_exception?: string | null
           project_id: string
-          status?: string | null
+          task_id?: string
           task_name: string
+          task_status?: string | null
           time_percentage?: number | null
           updated_at?: string
         }
         Update: {
-          ar_assigned?: string | null
-          assigned_skip?: string | null
+          allocated_due_date?: string | null
+          assigned_ar_id?: string | null
+          assigned_skip_flag?: string | null
+          completion_date?: string | null
           created_at?: string
           due_date?: string | null
           hours?: string | null
-          id?: string
+          last_step_timestamp?: string | null
           milestone_number?: number
-          notes?: string | null
+          notes_tasks?: string | null
           priority_exception?: string | null
           project_id?: string
-          status?: string | null
+          task_id?: string
           task_name?: string
+          task_status?: string | null
           time_percentage?: number | null
           updated_at?: string
         }
@@ -239,44 +213,59 @@ export type Database = {
       }
       projects: {
         Row: {
-          ar1_planning: string | null
-          ar2_field: string | null
+          ar_field_id: string | null
+          ar_planning_id: string | null
           created_at: string
           difficulty_level: string | null
           end_date: string | null
+          expected_end_date: string | null
           hours_allocated: number | null
           id: string
+          last_edit_by: string | null
+          last_edit_timestamp: string | null
           notes: string | null
           project_name: string
+          project_notes: string | null
           start_date: string | null
+          status: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
-          ar1_planning?: string | null
-          ar2_field?: string | null
+          ar_field_id?: string | null
+          ar_planning_id?: string | null
           created_at?: string
           difficulty_level?: string | null
           end_date?: string | null
+          expected_end_date?: string | null
           hours_allocated?: number | null
           id?: string
+          last_edit_by?: string | null
+          last_edit_timestamp?: string | null
           notes?: string | null
           project_name: string
+          project_notes?: string | null
           start_date?: string | null
+          status?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
-          ar1_planning?: string | null
-          ar2_field?: string | null
+          ar_field_id?: string | null
+          ar_planning_id?: string | null
           created_at?: string
           difficulty_level?: string | null
           end_date?: string | null
+          expected_end_date?: string | null
           hours_allocated?: number | null
           id?: string
+          last_edit_by?: string | null
+          last_edit_timestamp?: string | null
           notes?: string | null
           project_name?: string
+          project_notes?: string | null
           start_date?: string | null
+          status?: string | null
           updated_at?: string
           user_id?: string
         }
