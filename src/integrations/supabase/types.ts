@@ -196,6 +196,8 @@ export type Database = {
           last_step_timestamp: string | null
           milestone_number: number
           notes_tasks: string | null
+          notes_tasks_ar: string | null
+          notes_tasks_pm: string | null
           priority_exception: string | null
           project_id: string
           task_id: string
@@ -215,6 +217,8 @@ export type Database = {
           last_step_timestamp?: string | null
           milestone_number: number
           notes_tasks?: string | null
+          notes_tasks_ar?: string | null
+          notes_tasks_pm?: string | null
           priority_exception?: string | null
           project_id: string
           task_id?: string
@@ -234,6 +238,8 @@ export type Database = {
           last_step_timestamp?: string | null
           milestone_number?: number
           notes_tasks?: string | null
+          notes_tasks_ar?: string | null
+          notes_tasks_pm?: string | null
           priority_exception?: string | null
           project_id?: string
           task_id?: string

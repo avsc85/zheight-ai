@@ -5,10 +5,32 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { MapPin, Clock, Edit, Save, X } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { MapPin, Clock, Edit, Save, X, GripVertical } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import {
+  DndContext,
+  DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import {
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface Task {
   id: string;
@@ -16,20 +38,63 @@ interface Task {
   task: string;
   deadline: string;
   priority: string;
-  notes: string;
+  notesAR: string;
+  notesPM: string;
   status: 'in_queue' | 'started' | 'completed' | 'blocked';
   timeAllocated: number;
   arAssigned: string;
   projectId: string;
+  completionDate?: string;
 }
 
-const TaskCard = ({ task, onUpdateNotes, currentUser }: { 
+const SortableTaskCard = ({ task, onUpdateNotes, onUpdateStatus, currentUserId, userRole }: { 
   task: Task; 
-  onUpdateNotes: (taskId: string, notes: string) => void;
-  currentUser: string;
+  onUpdateNotes: (taskId: string, notes: string, type: 'ar' | 'pm') => void;
+  onUpdateStatus: (taskId: string, status: Task['status']) => void;
+  currentUserId: string;
+  userRole: string | null;
 }) => {
-  const [isEditingNotes, setIsEditingNotes] = useState(false);
-  const [editedNotes, setEditedNotes] = useState(task.notes || "");
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: task.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes}>
+      <TaskCard 
+        task={task} 
+        onUpdateNotes={onUpdateNotes}
+        onUpdateStatus={onUpdateStatus}
+        currentUserId={currentUserId}
+        userRole={userRole}
+        dragHandleProps={listeners}
+      />
+    </div>
+  );
+};
+
+const TaskCard = ({ task, onUpdateNotes, onUpdateStatus, currentUserId, userRole, dragHandleProps }: { 
+  task: Task; 
+  onUpdateNotes: (taskId: string, notes: string, type: 'ar' | 'pm') => void;
+  onUpdateStatus: (taskId: string, status: Task['status']) => void;
+  currentUserId: string;
+  userRole: string | null;
+  dragHandleProps?: any;
+}) => {
+  const [isEditingARNotes, setIsEditingARNotes] = useState(false);
+  const [isEditingPMNotes, setIsEditingPMNotes] = useState(false);
+  const [editedARNotes, setEditedARNotes] = useState(task.notesAR || "");
+  const [editedPMNotes, setEditedPMNotes] = useState(task.notesPM || "");
 
   const getPriorityBadge = () => {
     if (task.priority) {
@@ -47,22 +112,62 @@ const TaskCard = ({ task, onUpdateNotes, currentUser }: {
     }
   };
 
-  const handleSaveNotes = () => {
-    onUpdateNotes(task.id, editedNotes);
-    setIsEditingNotes(false);
+  const handleSaveARNotes = () => {
+    onUpdateNotes(task.id, editedARNotes, 'ar');
+    setIsEditingARNotes(false);
   };
 
-  const handleCancelEdit = () => {
-    setEditedNotes(task.notes || "");
-    setIsEditingNotes(false);
+  const handleSavePMNotes = () => {
+    onUpdateNotes(task.id, editedPMNotes, 'pm');
+    setIsEditingPMNotes(false);
   };
 
-  const canEditTask = task.arAssigned === currentUser;
+  const handleCancelAREdit = () => {
+    setEditedARNotes(task.notesAR || "");
+    setIsEditingARNotes(false);
+  };
+
+  const handleCancelPMEdit = () => {
+    setEditedPMNotes(task.notesPM || "");
+    setIsEditingPMNotes(false);
+  };
+
+  const canEditARNotes = task.arAssigned === currentUserId && (userRole === 'ar1_planning' || userRole === 'admin');
+  const canEditPMNotes = userRole === 'pm' || userRole === 'admin';
+  const canEditStatus = canEditARNotes;
 
   return (
     <Card className={`mb-4 border-l-4 ${getStatusColor()} hover:shadow-md transition-shadow`}>
       <CardContent className="p-4">
-        {getPriorityBadge()}
+        <div className="flex items-start justify-between mb-2">
+          {getPriorityBadge()}
+          <div className="flex items-center gap-2">
+            {canEditStatus && (
+              <Select value={task.status} onValueChange={(value) => onUpdateStatus(task.id, value as Task['status'])}>
+                <SelectTrigger className="h-6 w-24 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="in_queue">In Queue</SelectItem>
+                  <SelectItem value="started">Started</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="blocked">Blocked</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+            {dragHandleProps && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0 cursor-grab active:cursor-grabbing"
+                {...dragHandleProps}
+              >
+                <GripVertical className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
+        </div>
+        
         <div className="space-y-2">
           <div className="flex items-start gap-2">
             <MapPin className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
@@ -83,14 +188,15 @@ const TaskCard = ({ task, onUpdateNotes, currentUser }: {
             </p>
           )}
           
+          {/* AR Notes Section */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-medium text-muted-foreground">Notes:</label>
-              {canEditTask && !isEditingNotes && (
+              <label className="text-xs font-medium text-muted-foreground">AR Notes:</label>
+              {canEditARNotes && !isEditingARNotes && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setIsEditingNotes(true)}
+                  onClick={() => setIsEditingARNotes(true)}
                   className="h-6 w-6 p-0"
                 >
                   <Edit className="h-3 w-3" />
@@ -98,19 +204,19 @@ const TaskCard = ({ task, onUpdateNotes, currentUser }: {
               )}
             </div>
             
-            {isEditingNotes && canEditTask ? (
+            {isEditingARNotes && canEditARNotes ? (
               <div className="space-y-2">
                 <Textarea
-                  value={editedNotes}
-                  onChange={(e) => setEditedNotes(e.target.value)}
+                  value={editedARNotes}
+                  onChange={(e) => setEditedARNotes(e.target.value)}
                   className="text-xs min-h-16 resize-none"
-                  placeholder="Add notes..."
+                  placeholder="Add AR notes..."
                 />
                 <div className="flex gap-2">
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={handleSaveNotes}
+                    onClick={handleSaveARNotes}
                     className="h-6 text-xs text-green-600 hover:text-green-700"
                   >
                     <Save className="h-3 w-3 mr-1" />
@@ -119,7 +225,7 @@ const TaskCard = ({ task, onUpdateNotes, currentUser }: {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={handleCancelEdit}
+                    onClick={handleCancelAREdit}
                     className="h-6 text-xs text-red-600 hover:text-red-700"
                   >
                     <X className="h-3 w-3 mr-1" />
@@ -128,14 +234,74 @@ const TaskCard = ({ task, onUpdateNotes, currentUser }: {
                 </div>
               </div>
             ) : (
-              <div className="min-h-8">
-                {task.notes ? (
-                  <p className="text-xs text-muted-foreground italic bg-gray-50 p-2 rounded">
-                    {task.notes}
+              <div className="min-h-6">
+                {task.notesAR ? (
+                  <p className="text-xs text-muted-foreground italic bg-blue-50 p-2 rounded">
+                    {task.notesAR}
                   </p>
                 ) : (
                   <p className="text-xs text-muted-foreground/60 italic">
-                    {canEditTask ? "Click edit to add notes..." : "No notes"}
+                    {canEditARNotes ? "Click edit to add AR notes..." : "No AR notes"}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+          
+          {/* PM Notes Section */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-muted-foreground">PM Notes:</label>
+              {canEditPMNotes && !isEditingPMNotes && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsEditingPMNotes(true)}
+                  className="h-6 w-6 p-0"
+                >
+                  <Edit className="h-3 w-3" />
+                </Button>
+              )}
+            </div>
+            
+            {isEditingPMNotes && canEditPMNotes ? (
+              <div className="space-y-2">
+                <Textarea
+                  value={editedPMNotes}
+                  onChange={(e) => setEditedPMNotes(e.target.value)}
+                  className="text-xs min-h-16 resize-none"
+                  placeholder="Add PM notes..."
+                />
+                <div className="flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleSavePMNotes}
+                    className="h-6 text-xs text-green-600 hover:text-green-700"
+                  >
+                    <Save className="h-3 w-3 mr-1" />
+                    Save
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleCancelPMEdit}
+                    className="h-6 text-xs text-red-600 hover:text-red-700"
+                  >
+                    <X className="h-3 w-3 mr-1" />
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="min-h-6">
+                {task.notesPM ? (
+                  <p className="text-xs text-muted-foreground italic bg-green-50 p-2 rounded">
+                    {task.notesPM}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground/60 italic">
+                    No PM notes
                   </p>
                 )}
               </div>
@@ -152,8 +318,16 @@ const ProjectBoard = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, userRole } = useAuth();
+  
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
   
   useEffect(() => {
     if (user) {
@@ -200,11 +374,13 @@ const ProjectBoard = () => {
         task: task.task_name,
         deadline: task.due_date || 'No deadline',
         priority: task.priority_exception || '',
-        notes: task.notes_tasks || '',
+        notesAR: task.notes_tasks_ar || '',
+        notesPM: task.notes_tasks_pm || '',
         status: task.task_status as Task['status'],
         timeAllocated: 0, // This would come from time tracking
         arAssigned: task.assigned_ar_id,
-        projectId: task.project_id
+        projectId: task.project_id,
+        completionDate: task.completion_date
       }));
 
       setTasks(formattedTasks);
@@ -220,11 +396,12 @@ const ProjectBoard = () => {
     }
   };
 
-  const handleUpdateNotes = async (taskId: string, notes: string) => {
+  const handleUpdateNotes = async (taskId: string, notes: string, type: 'ar' | 'pm') => {
     try {
+      const updateField = type === 'ar' ? 'notes_tasks_ar' : 'notes_tasks_pm';
       const { error } = await supabase
         .from('project_tasks')
-        .update({ notes_tasks: notes })
+        .update({ [updateField]: notes })
         .eq('task_id', taskId);
 
       if (error) throw error;
@@ -232,13 +409,16 @@ const ProjectBoard = () => {
       // Update local state
       setTasks(prevTasks => 
         prevTasks.map(task => 
-          task.id === taskId ? { ...task, notes } : task
+          task.id === taskId ? { 
+            ...task, 
+            [type === 'ar' ? 'notesAR' : 'notesPM']: notes 
+          } : task
         )
       );
 
       toast({
         title: "Success",
-        description: "Notes updated successfully.",
+        description: `${type.toUpperCase()} notes updated successfully.`,
       });
     } catch (error) {
       console.error('Error updating notes:', error);
@@ -250,6 +430,54 @@ const ProjectBoard = () => {
     }
   };
 
+  const handleUpdateStatus = async (taskId: string, status: Task['status']) => {
+    try {
+      const { error } = await supabase
+        .from('project_tasks')
+        .update({ task_status: status })
+        .eq('task_id', taskId);
+
+      if (error) throw error;
+
+      // Update local state
+      setTasks(prevTasks => 
+        prevTasks.map(task => 
+          task.id === taskId ? { ...task, status } : task
+        )
+      );
+
+      toast({
+        title: "Success",
+        description: "Task status updated successfully.",
+      });
+    } catch (error) {
+      console.error('Error updating status:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update status. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveId(null);
+
+    if (!over) return;
+
+    const activeTask = tasks.find(task => task.id === active.id);
+    const overColumn = over.id as Task['status'];
+
+    if (activeTask && activeTask.status !== overColumn) {
+      handleUpdateStatus(activeTask.id, overColumn);
+    }
+  };
+
   // Filter tasks for current AR user
   const currentUserName = currentUserProfile?.name || '';
   const userTasks = tasks.filter(task => 
@@ -258,6 +486,19 @@ const ProjectBoard = () => {
      task.project.toLowerCase().includes(searchTerm.toLowerCase()) ||
      task.task.toLowerCase().includes(searchTerm.toLowerCase()))
   );
+
+  // Helper function to check if task was completed this week
+  const isCompletedThisWeek = (task: Task) => {
+    if (task.status !== 'completed' || !task.completionDate) return false;
+    
+    const completionDate = new Date(task.completionDate);
+    const now = new Date();
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - now.getDay()); // Start of current week (Sunday)
+    weekStart.setHours(0, 0, 0, 0);
+    
+    return completionDate >= weekStart;
+  };
 
   const columns = {
     in_queue: { title: "In Queue", color: "bg-gray-50" },
@@ -314,37 +555,65 @@ const ProjectBoard = () => {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-              {Object.entries(columns).map(([status, { title, color }]) => {
-                const columnTasks = userTasks.filter(task => task.status === status);
-                
-                return (
-                  <div key={status} className="space-y-4">
-                    <Card className={`${color} border-t-4 border-t-primary`}>
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-sm font-medium flex items-center justify-between">
-                          {title}
-                          <Badge variant="secondary" className="text-xs">
-                            {columnTasks.length}
-                          </Badge>
-                        </CardTitle>
-                      </CardHeader>
-                    </Card>
-                    
-                    <div className="space-y-3">
-                      {columnTasks.map(task => (
-                        <TaskCard 
-                          key={task.id} 
-                          task={task} 
-                          onUpdateNotes={handleUpdateNotes}
-                          currentUser={currentUserName}
-                        />
-                      ))}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+            >
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                {Object.entries(columns).map(([status, { title, color }]) => {
+                  const columnTasks = status === 'completed' 
+                    ? userTasks.filter(task => isCompletedThisWeek(task))
+                    : userTasks.filter(task => task.status === status);
+                  
+                  return (
+                    <div key={status} className="space-y-4">
+                      <Card className={`${color} border-t-4 border-t-primary`}>
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-sm font-medium flex items-center justify-between">
+                            {title}
+                            <Badge variant="secondary" className="text-xs">
+                              {columnTasks.length}
+                            </Badge>
+                          </CardTitle>
+                        </CardHeader>
+                      </Card>
+                      
+                      <SortableContext
+                        items={columnTasks.map(task => task.id)}
+                        strategy={verticalListSortingStrategy}
+                      >
+                        <div className="space-y-3 min-h-32" data-column={status}>
+                          {columnTasks.map(task => (
+                            <SortableTaskCard 
+                              key={task.id} 
+                              task={task} 
+                              onUpdateNotes={handleUpdateNotes}
+                              onUpdateStatus={handleUpdateStatus}
+                              currentUserId={user?.id || ''}
+                              userRole={userRole?.role || null}
+                            />
+                          ))}
+                        </div>
+                      </SortableContext>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+              
+              <DragOverlay>
+                {activeId ? (
+                  <TaskCard 
+                    task={tasks.find(task => task.id === activeId)!} 
+                    onUpdateNotes={handleUpdateNotes}
+                    onUpdateStatus={handleUpdateStatus}
+                    currentUserId={user?.id || ''}
+                    userRole={userRole?.role || null}
+                  />
+                ) : null}
+              </DragOverlay>
+            </DndContext>
           )}
         </div>
       </main>
