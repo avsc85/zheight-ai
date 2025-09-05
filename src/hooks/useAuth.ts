@@ -4,12 +4,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
 interface Profile {
-  id: string;
   user_id: string;
-  full_name: string | null;
+  name: string | null;
   company: string | null;
   role: string;
   avatar_url: string | null;
+  location: string | null;
+  active_status: boolean;
   created_at: string;
   updated_at: string;
 }

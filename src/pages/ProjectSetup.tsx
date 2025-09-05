@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Header } from "@/components/Header";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,32 +20,46 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { useUserRole } from "@/hooks/useUserRole";
 
-// Mock data for milestones based on wireframe
-const defaultMilestones = [
-  { id: 1, taskName: "Floor Plan + Site Map", arAssigned: "Sahad", assignedSkip: "Y", dueDate: "Sept 7th", priorityException: "Prioritize over everything", hours: "=32*18%", timePercentage: "18", notes: "" },
-  { id: 2, taskName: "Proposed Floor Plan", arAssigned: "", assignedSkip: "N", dueDate: "", priorityException: "", hours: "=32*6%", timePercentage: "6", notes: "" },
-  { id: 3, taskName: "Elevations", arAssigned: "", assignedSkip: "N", dueDate: "", priorityException: "", hours: "=32*14%", timePercentage: "14", notes: "" },
-  { id: 4, taskName: "Finalization PF w/t Customer", arAssigned: "Sha", assignedSkip: "N", dueDate: "", priorityException: "", hours: "=32*18%", timePercentage: "18", notes: "" },
-  { id: 5, taskName: "Full Set Completion Planning", arAssigned: "", assignedSkip: "N", dueDate: "", priorityException: "", hours: "=32*18%", timePercentage: "18", notes: "" },
-  { id: 6, taskName: "MEP / T-24 / Struc/Finalization", arAssigned: "", assignedSkip: "Skip", dueDate: "", priorityException: "", hours: "=32*4%", timePercentage: "4", notes: "" },
-  { id: 7, taskName: "Final Submission Set", arAssigned: "", assignedSkip: "N", dueDate: "", priorityException: "", hours: "=32*6%", timePercentage: "6", notes: "" },
-  { id: 8, taskName: "Revision 1", arAssigned: "", assignedSkip: "N", dueDate: "", priorityException: "", hours: "=32*8%", timePercentage: "8", notes: "" },
-  { id: 9, taskName: "Revision 2", arAssigned: "", assignedSkip: "N", dueDate: "", priorityException: "", hours: "=32*8%", timePercentage: "8", notes: "" }
+// Default task template
+const defaultTasks = [
+  { id: 1, task_name: "Floor Plan + Site Map", assigned_ar_id: null, assigned_skip_flag: "Y", due_date: "", priority_exception: "Prioritize over everything", time_percentage: 18, notes_tasks: "" },
+  { id: 2, task_name: "Proposed Floor Plan", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", priority_exception: "", time_percentage: 6, notes_tasks: "" },
+  { id: 3, task_name: "Elevations", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", priority_exception: "", time_percentage: 14, notes_tasks: "" },
+  { id: 4, task_name: "Finalization PF w/t Customer", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", priority_exception: "", time_percentage: 18, notes_tasks: "" },
+  { id: 5, task_name: "Full Set Completion Planning", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", priority_exception: "", time_percentage: 18, notes_tasks: "" },
+  { id: 6, task_name: "MEP / T-24 / Struc/Finalization", assigned_ar_id: null, assigned_skip_flag: "Skip", due_date: "", priority_exception: "", time_percentage: 4, notes_tasks: "" },
+  { id: 7, task_name: "Final Submission Set", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", priority_exception: "", time_percentage: 6, notes_tasks: "" },
+  { id: 8, task_name: "Revision 1", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", priority_exception: "", time_percentage: 8, notes_tasks: "" },
+  { id: 9, task_name: "Revision 2", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", priority_exception: "", time_percentage: 8, notes_tasks: "" }
 ];
 
-const SortableRow = ({ milestone, index, handleMilestoneChange, deleteMilestone }: any) => {
+interface AR {
+  id: string;
+  name: string;
+  role: string;
+}
+
+const SortableRow = ({ task, index, handleTaskChange, deleteTask, arUsers, hoursAllocated }: any) => {
   const {
     attributes,
     listeners,
     setNodeRef,
     transform,
     transition,
-  } = useSortable({ id: milestone.id });
+  } = useSortable({ id: task.id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
+  };
+
+  const calculateHours = (percentage: number) => {
+    return Math.round((hoursAllocated * percentage) / 100);
   };
 
   return (
@@ -63,8 +77,8 @@ const SortableRow = ({ milestone, index, handleMilestoneChange, deleteMilestone 
                 <GripVertical className="h-4 w-4 text-muted-foreground" />
               </div>
               <Input
-                value={milestone.taskName}
-                onChange={(e) => handleMilestoneChange(milestone.id, "taskName", e.target.value)}
+                value={task.task_name}
+                onChange={(e) => handleTaskChange(task.id, "task_name", e.target.value)}
                 className="h-8 border-0 p-0 text-sm flex-1"
                 placeholder="Task name..."
               />
@@ -72,22 +86,23 @@ const SortableRow = ({ milestone, index, handleMilestoneChange, deleteMilestone 
           </TableCell>
           <TableCell>
             <Select
-              value={milestone.arAssigned}
-              onValueChange={(value) => handleMilestoneChange(milestone.id, "arAssigned", value)}
+              value={task.assigned_ar_id || ""}
+              onValueChange={(value) => handleTaskChange(task.id, "assigned_ar_id", value || null)}
             >
               <SelectTrigger className="h-8">
-                <SelectValue />
+                <SelectValue placeholder="Select AR" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="sahad">Sahad</SelectItem>
-                <SelectItem value="sha">Sha</SelectItem>
+                {arUsers.map((ar: AR) => (
+                  <SelectItem key={ar.id} value={ar.id}>{ar.name}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </TableCell>
           <TableCell>
             <Select
-              value={milestone.assignedSkip}
-              onValueChange={(value) => handleMilestoneChange(milestone.id, "assignedSkip", value)}
+              value={task.assigned_skip_flag}
+              onValueChange={(value) => handleTaskChange(task.id, "assigned_skip_flag", value)}
             >
               <SelectTrigger className="h-8">
                 <SelectValue />
@@ -101,24 +116,24 @@ const SortableRow = ({ milestone, index, handleMilestoneChange, deleteMilestone 
           </TableCell>
           <TableCell>
             <Input
-              value={milestone.dueDate}
-              onChange={(e) => handleMilestoneChange(milestone.id, "dueDate", e.target.value)}
+              value={task.due_date}
+              onChange={(e) => handleTaskChange(task.id, "due_date", e.target.value)}
               className="h-8"
-              placeholder="Sept 7th"
+              type="date"
             />
           </TableCell>
           <TableCell>
             <Input
-              value={milestone.priorityException}
-              onChange={(e) => handleMilestoneChange(milestone.id, "priorityException", e.target.value)}
+              value={task.priority_exception}
+              onChange={(e) => handleTaskChange(task.id, "priority_exception", e.target.value)}
               className="h-8"
               placeholder="Priority notes..."
             />
           </TableCell>
           <TableCell>
             <Input
-              value={milestone.timePercentage}
-              onChange={(e) => handleMilestoneChange(milestone.id, "timePercentage", e.target.value)}
+              value={task.time_percentage}
+              onChange={(e) => handleTaskChange(task.id, "time_percentage", parseInt(e.target.value) || 0)}
               className="h-8 w-16"
               placeholder="0"
               type="number"
@@ -126,13 +141,13 @@ const SortableRow = ({ milestone, index, handleMilestoneChange, deleteMilestone 
           </TableCell>
           <TableCell>
             <Badge variant="secondary" className="text-xs">
-              {milestone.hours}
+              {calculateHours(task.time_percentage)}h
             </Badge>
           </TableCell>
           <TableCell>
             <Input
-              value={milestone.notes}
-              onChange={(e) => handleMilestoneChange(milestone.id, "notes", e.target.value)}
+              value={task.notes_tasks}
+              onChange={(e) => handleTaskChange(task.id, "notes_tasks", e.target.value)}
               className="h-8"
               placeholder="Notes..."
             />
@@ -141,7 +156,7 @@ const SortableRow = ({ milestone, index, handleMilestoneChange, deleteMilestone 
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => deleteMilestone(milestone.id)}
+              onClick={() => deleteTask(task.id)}
               className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
             >
               ×
@@ -151,7 +166,7 @@ const SortableRow = ({ milestone, index, handleMilestoneChange, deleteMilestone 
       </ContextMenuTrigger>
       <ContextMenuContent>
         <ContextMenuItem 
-          onClick={() => deleteMilestone(milestone.id)}
+          onClick={() => deleteTask(task.id)}
           className="text-red-600 focus:text-red-600 focus:bg-red-50"
         >
           <Trash2 className="mr-2 h-4 w-4" />
@@ -165,16 +180,22 @@ const SortableRow = ({ milestone, index, handleMilestoneChange, deleteMilestone 
 const ProjectSetup = () => {
   const [activeTab, setActiveTab] = useState("setup");
   const [projectData, setProjectData] = useState({
-    projectName: "",
-    startDate: "",
-    endDate: "",
-    difficultyLevel: "",
-    notes: "",
-    hoursAllocated: "32",
-    ar1Planning: "",
-    ar2Field: ""
+    project_name: "",
+    start_date: "",
+    expected_end_date: "",
+    difficulty_level: "",
+    project_notes: "",
+    hours_allocated: 32,
+    ar_planning_id: "",
+    ar_field_id: ""
   });
-  const [milestones, setMilestones] = useState(defaultMilestones);
+  const [tasks, setTasks] = useState(defaultTasks);
+  const [arUsers, setArUsers] = useState<AR[]>([]);
+  const [loading, setLoading] = useState(false);
+  
+  const { toast } = useToast();
+  const { user } = useAuth();
+  const { isPM, isAR2 } = useUserRole();
   
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -183,38 +204,81 @@ const ProjectSetup = () => {
     })
   );
 
-  const handleProjectDataChange = (field: string, value: string) => {
+  useEffect(() => {
+    fetchARUsers();
+  }, []);
+
+  const fetchARUsers = async () => {
+    try {
+      // First get user roles
+      const { data: userRoles, error: rolesError } = await supabase
+        .from('user_roles')
+        .select('user_id, role')
+        .in('role', ['ar1_planning', 'ar2_field']);
+
+      if (rolesError) throw rolesError;
+
+      if (!userRoles || userRoles.length === 0) {
+        setArUsers([]);
+        return;
+      }
+
+      // Then get profiles for those users
+      const userIds = userRoles.map(role => role.user_id);
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('user_id, name')
+        .in('user_id', userIds);
+
+      if (profilesError) throw profilesError;
+
+      // Combine the data
+      const formattedUsers: AR[] = userRoles.map(userRole => {
+        const profile = profiles?.find(p => p.user_id === userRole.user_id);
+        return {
+          id: userRole.user_id,
+          name: profile?.name || 'Unknown',
+          role: userRole.role
+        };
+      });
+
+      setArUsers(formattedUsers);
+    } catch (error) {
+      console.error('Error fetching AR users:', error);
+    }
+  };
+
+  const handleProjectDataChange = (field: string, value: string | number) => {
     setProjectData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleMilestoneChange = (id: number, field: string, value: string) => {
-    setMilestones(prev => 
-      prev.map(milestone => 
-        milestone.id === id ? { ...milestone, [field]: value } : milestone
+  const handleTaskChange = (id: number, field: string, value: any) => {
+    setTasks(prev => 
+      prev.map(task => 
+        task.id === id ? { ...task, [field]: value } : task
       )
     );
   };
 
-  const addMilestone = () => {
-    const newId = Math.max(...milestones.map(m => m.id)) + 1;
-    const newMilestone = {
+  const addTask = () => {
+    const newId = Math.max(...tasks.map(t => t.id)) + 1;
+    const newTask = {
       id: newId,
-      taskName: "New Task",
-      arAssigned: "",
-      assignedSkip: "N",
-      dueDate: "",
-      priorityException: "",
-      hours: "=32*0%",
-      timePercentage: "0",
-      notes: ""
+      task_name: "New Task",
+      assigned_ar_id: null,
+      assigned_skip_flag: "N",
+      due_date: "",
+      priority_exception: "",
+      time_percentage: 0,
+      notes_tasks: ""
     };
     
-    setMilestones(prev => [...prev, newMilestone]);
+    setTasks(prev => [...prev, newTask]);
   };
 
-  const deleteMilestone = (id: number) => {
-    if (milestones.length > 1) {
-      setMilestones(prev => prev.filter(milestone => milestone.id !== id));
+  const deleteTask = (id: number) => {
+    if (tasks.length > 1) {
+      setTasks(prev => prev.filter(task => task.id !== id));
     }
   };
 
@@ -222,7 +286,7 @@ const ProjectSetup = () => {
     const { active, over } = event;
 
     if (active.id !== over.id) {
-      setMilestones((items) => {
+      setTasks((items) => {
         const oldIndex = items.findIndex(item => item.id === active.id);
         const newIndex = items.findIndex(item => item.id === over.id);
         
@@ -231,7 +295,87 @@ const ProjectSetup = () => {
     }
   };
 
-  const arOptions = ["Sahad", "Sha", "Skip", "N"];
+  const createProject = async () => {
+    if (!user || (!isPM && !isAR2)) {
+      toast({
+        title: "Access Denied",
+        description: "Only Project Managers and AR2 Field users can create projects.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!projectData.project_name.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Project name is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { data: project, error: projectError } = await supabase
+        .from('projects')
+        .insert({
+          ...projectData,
+          user_id: user.id
+        })
+        .select()
+        .single();
+
+      if (projectError) throw projectError;
+
+      // Insert tasks
+      const tasksToInsert = tasks.map((task, index) => ({
+        project_id: project.id,
+        milestone_number: index + 1,
+        task_name: task.task_name,
+        assigned_ar_id: task.assigned_ar_id,
+        assigned_skip_flag: task.assigned_skip_flag,
+        due_date: task.due_date || null,
+        priority_exception: task.priority_exception,
+        time_percentage: task.time_percentage,
+        notes_tasks: task.notes_tasks,
+        task_status: 'in_queue'
+      }));
+
+      const { error: tasksError } = await supabase
+        .from('project_tasks')
+        .insert(tasksToInsert);
+
+      if (tasksError) throw tasksError;
+
+      toast({
+        title: "Success",
+        description: "Project created successfully!",
+      });
+
+      // Reset form
+      setProjectData({
+        project_name: "",
+        start_date: "",
+        expected_end_date: "",
+        difficulty_level: "",
+        project_notes: "",
+        hours_allocated: 32,
+        ar_planning_id: "",
+        ar_field_id: ""
+      });
+      setTasks(defaultTasks);
+
+    } catch (error) {
+      console.error('Error creating project:', error);
+      toast({
+        title: "Error",
+        description: "Failed to create project. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-subtle">
@@ -261,8 +405,8 @@ const ProjectSetup = () => {
                       <Label htmlFor="projectName">Project Name</Label>
                       <Input
                         id="projectName"
-                        value={projectData.projectName}
-                        onChange={(e) => handleProjectDataChange("projectName", e.target.value)}
+                        value={projectData.project_name}
+                        onChange={(e) => handleProjectDataChange("project_name", e.target.value)}
                         placeholder="Enter project name"
                       />
                     </div>
@@ -271,22 +415,22 @@ const ProjectSetup = () => {
                       <Input
                         id="startDate"
                         type="date"
-                        value={projectData.startDate}
-                        onChange={(e) => handleProjectDataChange("startDate", e.target.value)}
+                        value={projectData.start_date}
+                        onChange={(e) => handleProjectDataChange("start_date", e.target.value)}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="endDate">Exp. End date</Label>
+                      <Label htmlFor="endDate">Expected End date</Label>
                       <Input
                         id="endDate"
                         type="date"
-                        value={projectData.endDate}
-                        onChange={(e) => handleProjectDataChange("endDate", e.target.value)}
+                        value={projectData.expected_end_date}
+                        onChange={(e) => handleProjectDataChange("expected_end_date", e.target.value)}
                       />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="difficultyLevel">Difficulty Level</Label>
-                      <Select value={projectData.difficultyLevel} onValueChange={(value) => handleProjectDataChange("difficultyLevel", value)}>
+                      <Select value={projectData.difficulty_level} onValueChange={(value) => handleProjectDataChange("difficulty_level", value)}>
                         <SelectTrigger>
                           <SelectValue placeholder="High / Medium / Low" />
                         </SelectTrigger>
@@ -301,17 +445,18 @@ const ProjectSetup = () => {
                       <Label htmlFor="hoursAllocated">Hours Allocated</Label>
                       <Input
                         id="hoursAllocated"
-                        value={projectData.hoursAllocated}
-                        onChange={(e) => handleProjectDataChange("hoursAllocated", e.target.value)}
+                        type="number"
+                        value={projectData.hours_allocated}
+                        onChange={(e) => handleProjectDataChange("hours_allocated", parseInt(e.target.value) || 32)}
                         placeholder="32"
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="notes">Notes</Label>
+                      <Label htmlFor="notes">Project Notes</Label>
                       <Textarea
                         id="notes"
-                        value={projectData.notes}
-                        onChange={(e) => handleProjectDataChange("notes", e.target.value)}
+                        value={projectData.project_notes}
+                        onChange={(e) => handleProjectDataChange("project_notes", e.target.value)}
                         placeholder="Project notes..."
                         className="min-h-20"
                       />
@@ -321,25 +466,27 @@ const ProjectSetup = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
                     <div className="space-y-2">
                       <Label htmlFor="ar1Planning">AR1 Planning</Label>
-                      <Select value={projectData.ar1Planning} onValueChange={(value) => handleProjectDataChange("ar1Planning", value)}>
+                      <Select value={projectData.ar_planning_id} onValueChange={(value) => handleProjectDataChange("ar_planning_id", value)}>
                         <SelectTrigger>
-                          <SelectValue placeholder="Drop down of Planning AR names" />
+                          <SelectValue placeholder="Select AR1 Planning" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="sahad">Sahad</SelectItem>
-                          <SelectItem value="sha">Sha</SelectItem>
+                          {arUsers.filter(ar => ar.role === 'ar1_planning').map(ar => (
+                            <SelectItem key={ar.id} value={ar.id}>{ar.name}</SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="ar2Field">AR2 Field</Label>
-                      <Select value={projectData.ar2Field} onValueChange={(value) => handleProjectDataChange("ar2Field", value)}>
+                      <Select value={projectData.ar_field_id} onValueChange={(value) => handleProjectDataChange("ar_field_id", value)}>
                         <SelectTrigger>
-                          <SelectValue placeholder="Drop down of Field AR names" />
+                          <SelectValue placeholder="Select AR2 Field" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="sahad">Sahad</SelectItem>
-                          <SelectItem value="sha">Sha</SelectItem>
+                          {arUsers.filter(ar => ar.role === 'ar2_field').map(ar => (
+                            <SelectItem key={ar.id} value={ar.id}>{ar.name}</SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -375,17 +522,19 @@ const ProjectSetup = () => {
                           </TableRow>
                         </TableHeader>
                         <SortableContext 
-                          items={milestones.map(m => m.id)} 
+                          items={tasks.map(t => t.id)} 
                           strategy={verticalListSortingStrategy}
                         >
                           <TableBody>
-                            {milestones.map((milestone, index) => (
+                            {tasks.map((task, index) => (
                               <SortableRow
-                                key={milestone.id}
-                                milestone={milestone}
+                                key={task.id}
+                                task={task}
                                 index={index}
-                                handleMilestoneChange={handleMilestoneChange}
-                                deleteMilestone={deleteMilestone}
+                                handleTaskChange={handleTaskChange}
+                                deleteTask={deleteTask}
+                                arUsers={arUsers}
+                                hoursAllocated={projectData.hours_allocated}
                               />
                             ))}
                           </TableBody>
@@ -397,14 +546,16 @@ const ProjectSetup = () => {
                   <div className="flex justify-between items-center mt-6">
                     <Button
                       variant="ghost"
-                      onClick={addMilestone}
+                      onClick={addTask}
                       className="text-primary border border-dashed border-primary/30 hover:border-primary/60"
                     >
                       + Add Task
                     </Button>
                     <div className="flex gap-4">
-                      <Button variant="outline">Save Draft</Button>
-                      <Button>Create Project</Button>
+                      <Button variant="outline" disabled={loading}>Save Draft</Button>
+                      <Button onClick={createProject} disabled={loading}>
+                        {loading ? "Creating..." : "Create Project"}
+                      </Button>
                     </div>
                   </div>
                 </CardContent>

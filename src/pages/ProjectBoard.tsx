@@ -166,7 +166,7 @@ const ProjectBoard = () => {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('full_name')
+        .select('name')
         .eq('user_id', user?.id)
         .single();
 
@@ -180,8 +180,8 @@ const ProjectBoard = () => {
   const fetchTasks = async () => {
     try {
       setLoading(true);
-      const { data: milestones, error } = await supabase
-        .from('project_milestones')
+      const { data: tasks, error } = await supabase
+        .from('project_tasks')
         .select(`
           *,
           projects (
@@ -189,22 +189,22 @@ const ProjectBoard = () => {
             user_id
           )
         `)
-        .not('ar_assigned', 'is', null)
-        .neq('assigned_skip', 'Skip');
+        .not('assigned_ar_id', 'is', null)
+        .neq('assigned_skip_flag', 'Skip');
 
       if (error) throw error;
 
-      const formattedTasks: Task[] = (milestones || []).map(milestone => ({
-        id: milestone.id,
-        project: milestone.projects?.project_name || 'Unknown Project',
-        task: milestone.task_name,
-        deadline: milestone.due_date || 'No deadline',
-        priority: milestone.priority_exception || '',
-        notes: milestone.notes || '',
-        status: milestone.status as Task['status'],
+      const formattedTasks: Task[] = (tasks || []).map(task => ({
+        id: task.task_id,
+        project: task.projects?.project_name || 'Unknown Project',
+        task: task.task_name,
+        deadline: task.due_date || 'No deadline',
+        priority: task.priority_exception || '',
+        notes: task.notes_tasks || '',
+        status: task.task_status as Task['status'],
         timeAllocated: 0, // This would come from time tracking
-        arAssigned: milestone.ar_assigned,
-        projectId: milestone.project_id
+        arAssigned: task.assigned_ar_id,
+        projectId: task.project_id
       }));
 
       setTasks(formattedTasks);
@@ -223,9 +223,9 @@ const ProjectBoard = () => {
   const handleUpdateNotes = async (taskId: string, notes: string) => {
     try {
       const { error } = await supabase
-        .from('project_milestones')
-        .update({ notes })
-        .eq('id', taskId);
+        .from('project_tasks')
+        .update({ notes_tasks: notes })
+        .eq('task_id', taskId);
 
       if (error) throw error;
 
@@ -251,9 +251,9 @@ const ProjectBoard = () => {
   };
 
   // Filter tasks for current AR user
-  const currentUserName = currentUserProfile?.full_name || '';
+  const currentUserName = currentUserProfile?.name || '';
   const userTasks = tasks.filter(task => 
-    task.arAssigned === currentUserName &&
+    task.arAssigned === user?.id &&
     (searchTerm === '' || 
      task.project.toLowerCase().includes(searchTerm.toLowerCase()) ||
      task.task.toLowerCase().includes(searchTerm.toLowerCase()))

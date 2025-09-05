@@ -83,7 +83,7 @@ export const Header = () => {
                   <Button variant="ghost" className="flex items-center gap-2">
                     <User className="h-4 w-4" />
                     <span className="hidden sm:inline">
-                      {profile?.full_name || user?.email}
+                      {profile?.name || user?.email}
                     </span>
                   </Button>
                 </DropdownMenuTrigger>
@@ -91,7 +91,7 @@ export const Header = () => {
                   <DropdownMenuLabel>
                     <div className="flex flex-col space-y-1">
                       <p className="text-sm font-medium">
-                        {profile?.full_name || 'User'}
+                        {profile?.name || 'User'}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {user?.email}

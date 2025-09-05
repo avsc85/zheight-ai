@@ -43,6 +43,7 @@ interface UserWithRole {
   role: 'user' | 'admin' | 'pm' | 'ar1_planning' | 'ar2_field';
   created_at: string;
   last_sign_in_at: string | null;
+  active_status?: boolean;
 }
 
 const UserManagement = () => {
@@ -77,11 +78,11 @@ const UserManagement = () => {
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select(`
-          id,
           user_id,
-          full_name,
+          name,
           company,
-          created_at
+          created_at,
+          active_status
         `);
 
       if (profilesError) throw profilesError;
@@ -113,11 +114,12 @@ const UserManagement = () => {
         return {
           id: profile.user_id,
           email: authUser?.email || 'Unknown',
-          full_name: profile.full_name,
+          full_name: profile.name,
           company: profile.company,
           role: (userRole?.role as 'user' | 'admin' | 'pm' | 'ar1_planning' | 'ar2_field') || 'user',
           created_at: profile.created_at,
-          last_sign_in_at: authUser?.last_sign_in_at || null
+          last_sign_in_at: authUser?.last_sign_in_at || null,
+          active_status: profile.active_status
         };
       });
 
