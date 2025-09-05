@@ -144,8 +144,8 @@ export const useAuth = () => {
     signOut,
     isAuthenticated: !!session?.user,
     isAdmin: userRole?.role === 'admin',
-    isPM: userRole?.role === 'pm',
-    isAR1: userRole?.role === 'ar1_planning',
-    isAR2: userRole?.role === 'ar2_field',
+    isPM: userRole?.role === 'pm' || userRole?.role === 'admin', // Admins have PM privileges
+    isAR1: userRole?.role === 'ar1_planning' || userRole?.role === 'admin', // Admins have AR1 privileges
+    isAR2: userRole?.role === 'ar2_field' || userRole?.role === 'admin', // Admins have AR2 privileges
   };
 };

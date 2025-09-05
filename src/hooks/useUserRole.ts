@@ -59,8 +59,8 @@ export const useUserRole = (): UserRoleHook => {
     loading,
     hasRole,
     isAdmin: role === 'admin',
-    isPM: role === 'pm',
-    isAR1: role === 'ar1_planning',
-    isAR2: role === 'ar2_field'
+    isPM: role === 'pm' || role === 'admin', // Admins have PM privileges
+    isAR1: role === 'ar1_planning' || role === 'admin', // Admins have AR1 privileges
+    isAR2: role === 'ar2_field' || role === 'admin' // Admins have AR2 privileges
   };
 };

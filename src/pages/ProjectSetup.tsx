@@ -195,7 +195,7 @@ const ProjectSetup = () => {
   
   const { toast } = useToast();
   const { user } = useAuth();
-  const { isPM, isAR2 } = useUserRole();
+  const { isPM, isAR2, isAdmin, role } = useUserRole();
   
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -210,15 +210,23 @@ const ProjectSetup = () => {
 
   const fetchARUsers = async () => {
     try {
+      console.log('Fetching AR users...');
+      
       // First get user roles
       const { data: userRoles, error: rolesError } = await supabase
         .from('user_roles')
         .select('user_id, role')
         .in('role', ['ar1_planning', 'ar2_field']);
 
-      if (rolesError) throw rolesError;
+      if (rolesError) {
+        console.error('Error fetching user roles:', rolesError);
+        throw rolesError;
+      }
+
+      console.log('Found user roles:', userRoles);
 
       if (!userRoles || userRoles.length === 0) {
+        console.log('No AR users found in user_roles table');
         setArUsers([]);
         return;
       }
@@ -230,7 +238,12 @@ const ProjectSetup = () => {
         .select('user_id, name')
         .in('user_id', userIds);
 
-      if (profilesError) throw profilesError;
+      if (profilesError) {
+        console.error('Error fetching profiles:', profilesError);
+        throw profilesError;
+      }
+
+      console.log('Found profiles:', profiles);
 
       // Combine the data
       const formattedUsers: AR[] = userRoles.map(userRole => {
@@ -242,9 +255,15 @@ const ProjectSetup = () => {
         };
       });
 
+      console.log('Formatted AR users:', formattedUsers);
       setArUsers(formattedUsers);
     } catch (error) {
       console.error('Error fetching AR users:', error);
+      toast({
+        title: "Warning",
+        description: "Unable to load AR users. Please check your permissions.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -296,10 +315,13 @@ const ProjectSetup = () => {
   };
 
   const createProject = async () => {
+    console.log('Creating project - User roles:', { isPM, isAR2, isAdmin, userRole: role });
+    
     if (!user || (!isPM && !isAR2)) {
+      console.error('Access denied - User roles:', { isPM, isAR2, isAdmin, role });
       toast({
         title: "Access Denied",
-        description: "Only Project Managers and AR2 Field users can create projects.",
+        description: "Only Project Managers, AR2 Field users, and Admins can create projects.",
         variant: "destructive",
       });
       return;
@@ -316,6 +338,8 @@ const ProjectSetup = () => {
 
     setLoading(true);
     try {
+      console.log('Inserting project with data:', { ...projectData, user_id: user.id });
+      
       const { data: project, error: projectError } = await supabase
         .from('projects')
         .insert({
@@ -325,7 +349,12 @@ const ProjectSetup = () => {
         .select()
         .single();
 
-      if (projectError) throw projectError;
+      if (projectError) {
+        console.error('Project creation error:', projectError);
+        throw projectError;
+      }
+
+      console.log('Project created successfully:', project);
 
       // Insert tasks
       const tasksToInsert = tasks.map((task, index) => ({
