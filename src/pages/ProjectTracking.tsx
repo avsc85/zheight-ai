@@ -107,7 +107,8 @@ const ProjectTracking = () => {
             ar_field_id
           )
         `)
-        .in('task_status', ['in_queue', 'started', 'blocked']); // Only active tasks
+        .in('task_status', ['in_queue', 'started', 'blocked']) // Only active tasks
+        .eq('assigned_skip_flag', 'Y'); // Only assigned tasks
 
       // Apply role-based filtering
       if (isPM && !isAdmin) {

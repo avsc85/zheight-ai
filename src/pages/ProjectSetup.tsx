@@ -336,9 +336,8 @@ const ProjectSetup = () => {
       if (projectError) throw projectError;
 
       // Check if user has permission to edit this project
-      const canEdit = isAdmin || 
-        (isPM && project.user_id === user?.id) || 
-        (isAR2 && project.ar_field_id === user?.id);
+      // PMs can edit all projects, AR2 can edit assigned projects, Admins can edit all
+      const canEdit = isAdmin || isPM || (isAR2 && project.ar_field_id === user?.id);
 
       if (!canEdit) {
         toast({
