@@ -210,11 +210,21 @@ const ProjectSetup = () => {
 
   useEffect(() => {
     fetchARUsers();
-    if (projectId && !roleLoading) {
+    
+    // Only fetch project data when we have projectId and roles are fully loaded and available
+    if (projectId && !roleLoading && (isPM || isAR2 || isAdmin)) {
       setEditMode(true);
       fetchProjectData(projectId);
+    } else if (projectId && !roleLoading && !isPM && !isAR2 && !isAdmin) {
+      // If roles are loaded but user doesn't have permission, redirect immediately
+      toast({
+        title: "Access Denied",
+        description: "You don't have permission to access this project.",
+        variant: "destructive",
+      });
+      navigate('/project-mgmt/tracking');
     }
-  }, [projectId, roleLoading]);
+  }, [projectId, roleLoading, isPM, isAR2, isAdmin, user]);
 
   const fetchARUsers = async () => {
     try {
@@ -325,30 +335,61 @@ const ProjectSetup = () => {
   const fetchProjectData = async (id: string) => {
     try {
       setLoading(true);
+      console.log('Fetching project data for ID:', id);
+      console.log('Current user roles:', { isPM, isAR2, isAdmin, roleLoading });
       
-      // Don't proceed if roles are still loading
+      // Ensure roles are loaded before proceeding
       if (roleLoading) {
+        console.log('Roles still loading, aborting fetch');
         setLoading(false);
+        return;
+      }
+
+      // Ensure user has basic permissions before fetching
+      if (!isPM && !isAR2 && !isAdmin) {
+        console.log('User does not have required roles');
+        toast({
+          title: "Access Denied",
+          description: "You don't have permission to access this project.",
+          variant: "destructive",
+        });
+        navigate('/project-mgmt/tracking');
         return;
       }
       
       // Fetch project data
+      console.log('Fetching project from database...');
       const { data: project, error: projectError } = await supabase
         .from('projects')
         .select('*')
         .eq('id', id)
         .single();
 
-      if (projectError) throw projectError;
+      if (projectError) {
+        console.error('Project fetch error:', projectError);
+        throw projectError;
+      }
 
-      // Check if user has permission to edit this project
+      console.log('Project data fetched:', project);
+
+      // Check if user has permission to edit this specific project
       // PMs can edit all projects, AR2 can edit assigned projects, Admins can edit all
       const canEdit = isAdmin || isPM || (isAR2 && project.ar_field_id === user?.id);
+      
+      console.log('Permission check:', { 
+        canEdit, 
+        isAdmin, 
+        isPM, 
+        isAR2, 
+        projectArFieldId: project.ar_field_id, 
+        userId: user?.id 
+      });
 
       if (!canEdit) {
+        console.log('Permission denied for this specific project');
         toast({
           title: "Access Denied", 
-          description: "You don't have permission to edit this project.",
+          description: "You don't have permission to edit this specific project.",
           variant: "destructive",
         });
         navigate('/project-mgmt/tracking');
@@ -389,12 +430,18 @@ const ProjectSetup = () => {
       }));
 
       setTasks(formattedTasks.length > 0 ? formattedTasks : defaultTasks);
+      
+      console.log('Project data loaded successfully');
+      toast({
+        title: "Project Loaded",
+        description: `Project "${project.project_name}" loaded successfully.`,
+      });
 
     } catch (error) {
       console.error('Error fetching project data:', error);
       toast({
         title: "Error",
-        description: "Failed to load project data.",
+        description: `Failed to load project data: ${error.message || 'Unknown error'}`,
         variant: "destructive",
       });
       navigate('/project-mgmt/tracking');
@@ -557,15 +604,36 @@ const ProjectSetup = () => {
       
       <main className="container mx-auto px-6 py-8">
         <div className="max-w-6xl mx-auto">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-8">
-              <TabsTrigger value="setup" className="text-sm font-medium">
-                Project Setup
-              </TabsTrigger>
-              <TabsTrigger value="tracking" className="text-sm font-medium">
-                Project Tracking
-              </TabsTrigger>
-            </TabsList>
+          {/* Show loading state while roles are loading or project data is being fetched */}
+          {(roleLoading || (editMode && loading)) && (
+            <Card>
+              <CardContent className="p-8 text-center">
+                <div className="flex flex-col items-center gap-4">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                  <div className="space-y-2">
+                    <p className="text-lg font-medium">
+                      {roleLoading ? 'Checking permissions...' : 'Loading project data...'}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {roleLoading ? 'Please wait while we verify your access.' : 'Please wait while we load your project information.'}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          
+          {/* Show main content only when roles are loaded */}
+          {!roleLoading && (!editMode || !loading) && (
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <TabsList className="grid w-full grid-cols-2 mb-8">
+                <TabsTrigger value="setup" className="text-sm font-medium">
+                  Project Setup
+                </TabsTrigger>
+                <TabsTrigger value="tracking" className="text-sm font-medium">
+                  Project Tracking
+                </TabsTrigger>
+              </TabsList>
             
             <TabsContent value="setup" className="space-y-8">
               {/* Project Details Form */}
@@ -769,6 +837,7 @@ const ProjectSetup = () => {
               </Card>
             </TabsContent>
           </Tabs>
+          )}
         </div>
       </main>
     </div>
