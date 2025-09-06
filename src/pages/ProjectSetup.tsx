@@ -201,6 +201,9 @@ const ProjectSetup = () => {
   const { user } = useAuth();
   const { isPM, isAR2, isAdmin, role, loading: roleLoading } = useUserRole();
   
+  // Combine auth and role loading states
+  const combinedLoading = roleLoading || !user;
+  
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
@@ -211,20 +214,25 @@ const ProjectSetup = () => {
   useEffect(() => {
     fetchARUsers();
     
-    // Only fetch project data when we have projectId and roles are fully loaded and available
-    if (projectId && !roleLoading && (isPM || isAR2 || isAdmin)) {
-      setEditMode(true);
-      fetchProjectData(projectId);
-    } else if (projectId && !roleLoading && !isPM && !isAR2 && !isAdmin) {
-      // If roles are loaded but user doesn't have permission, redirect immediately
-      toast({
-        title: "Access Denied",
-        description: "You don't have permission to access this project.",
-        variant: "destructive",
-      });
-      navigate('/project-mgmt/tracking');
+    // Only proceed when roles are fully loaded
+    if (!combinedLoading) {
+      console.log('Roles loaded, checking permissions:', { isPM, isAR2, isAdmin, role, projectId });
+      
+      if (projectId && (isPM || isAR2 || isAdmin)) {
+        console.log('User has permission, fetching project data');
+        setEditMode(true);
+        fetchProjectData(projectId);
+      } else if (projectId && !isPM && !isAR2 && !isAdmin) {
+        console.log('User lacks permission for project access');
+        toast({
+          title: "Access Denied",
+          description: "You don't have permission to access this project.",
+          variant: "destructive",
+        });
+        navigate('/project-mgmt/tracking');
+      }
     }
-  }, [projectId, roleLoading, isPM, isAR2, isAdmin, user]);
+  }, [projectId, combinedLoading, isPM, isAR2, isAdmin, user]);
 
   const fetchARUsers = async () => {
     try {
@@ -373,7 +381,7 @@ const ProjectSetup = () => {
       console.log('Project data fetched:', project);
 
       // Check if user has permission to edit this specific project
-      // PMs can edit all projects, AR2 can edit assigned projects, Admins can edit all
+      // PMs can edit ALL projects (updated RLS policy), AR2 can edit assigned projects, Admins can edit all
       const canEdit = isAdmin || isPM || (isAR2 && project.ar_field_id === user?.id);
       
       console.log('Permission check:', { 
@@ -382,7 +390,8 @@ const ProjectSetup = () => {
         isPM, 
         isAR2, 
         projectArFieldId: project.ar_field_id, 
-        userId: user?.id 
+        userId: user?.id,
+        note: 'PMs now have access to ALL projects per updated RLS policy'
       });
 
       if (!canEdit) {
@@ -605,26 +614,49 @@ const ProjectSetup = () => {
       <main className="container mx-auto px-6 py-8">
         <div className="max-w-6xl mx-auto">
           {/* Show loading state while roles are loading or project data is being fetched */}
-          {(roleLoading || (editMode && loading)) && (
+          {combinedLoading && (
             <Card>
               <CardContent className="p-8 text-center">
                 <div className="flex flex-col items-center gap-4">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                   <div className="space-y-2">
                     <p className="text-lg font-medium">
-                      {roleLoading ? 'Checking permissions...' : 'Loading project data...'}
+                      Checking permissions and loading data...
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      {roleLoading ? 'Please wait while we verify your access.' : 'Please wait while we load your project information.'}
+                      Please wait while we verify your access and load project information.
                     </p>
                   </div>
                 </div>
               </CardContent>
             </Card>
           )}
+
+          {/* Show permission denied state when roles are loaded but user lacks access */}
+          {!combinedLoading && !isPM && !isAR2 && !isAdmin && (
+            <Card>
+              <CardContent className="p-8 text-center">
+                <div className="space-y-4">
+                  <h2 className="text-2xl font-bold text-destructive">Access Denied</h2>
+                  <p className="text-muted-foreground">
+                    You don't have permission to access project setup.
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Required role: PM, AR2, or Admin | Your role: {role || 'Unknown'}
+                  </p>
+                  <Button 
+                    onClick={() => navigate('/project-mgmt/tracking')} 
+                    className="mt-4"
+                  >
+                    Return to Project Tracking
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
           
-          {/* Show main content only when roles are loaded */}
-          {!roleLoading && (!editMode || !loading) && (
+          {/* Show main content only when roles are loaded and user has permission */}
+          {!combinedLoading && (isPM || isAR2 || isAdmin) && (
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-8">
                 <TabsTrigger value="setup" className="text-sm font-medium">
