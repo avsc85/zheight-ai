@@ -199,7 +199,7 @@ const ProjectSetup = () => {
   
   const { toast } = useToast();
   const { user } = useAuth();
-  const { isPM, isAR2, isAdmin, role } = useUserRole();
+  const { isPM, isAR2, isAdmin, role, loading: roleLoading } = useUserRole();
   
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -210,11 +210,11 @@ const ProjectSetup = () => {
 
   useEffect(() => {
     fetchARUsers();
-    if (projectId) {
+    if (projectId && !roleLoading) {
       setEditMode(true);
       fetchProjectData(projectId);
     }
-  }, [projectId]);
+  }, [projectId, roleLoading]);
 
   const fetchARUsers = async () => {
     try {
@@ -326,6 +326,12 @@ const ProjectSetup = () => {
     try {
       setLoading(true);
       
+      // Don't proceed if roles are still loading
+      if (roleLoading) {
+        setLoading(false);
+        return;
+      }
+      
       // Fetch project data
       const { data: project, error: projectError } = await supabase
         .from('projects')
@@ -341,7 +347,7 @@ const ProjectSetup = () => {
 
       if (!canEdit) {
         toast({
-          title: "Access Denied",
+          title: "Access Denied", 
           description: "You don't have permission to edit this project.",
           variant: "destructive",
         });
