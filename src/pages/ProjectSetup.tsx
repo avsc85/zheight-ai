@@ -399,6 +399,7 @@ const ProjectSetup = () => {
   };
 
   const saveProject = async () => {
+    // Save or update project based on edit mode
     console.log('Saving project - User roles:', { isPM, isAR2, isAdmin, userRole: role });
     
     if (!user || (!isPM && !isAR2 && !isAdmin)) {
