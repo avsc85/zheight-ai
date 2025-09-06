@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -178,6 +179,8 @@ const SortableRow = ({ task, index, handleTaskChange, deleteTask, arUsers, hours
 };
 
 const ProjectSetup = () => {
+  const { projectId } = useParams();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("setup");
   const [projectData, setProjectData] = useState({
     project_name: "",
@@ -192,6 +195,7 @@ const ProjectSetup = () => {
   const [tasks, setTasks] = useState(defaultTasks);
   const [arUsers, setArUsers] = useState<AR[]>([]);
   const [loading, setLoading] = useState(false);
+  const [editMode, setEditMode] = useState(false);
   
   const { toast } = useToast();
   const { user } = useAuth();
@@ -206,7 +210,11 @@ const ProjectSetup = () => {
 
   useEffect(() => {
     fetchARUsers();
-  }, []);
+    if (projectId) {
+      setEditMode(true);
+      fetchProjectData(projectId);
+    }
+  }, [projectId]);
 
   const fetchARUsers = async () => {
     try {
@@ -314,14 +322,90 @@ const ProjectSetup = () => {
     }
   };
 
-  const createProject = async () => {
-    console.log('Creating project - User roles:', { isPM, isAR2, isAdmin, userRole: role });
+  const fetchProjectData = async (id: string) => {
+    try {
+      setLoading(true);
+      
+      // Fetch project data
+      const { data: project, error: projectError } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (projectError) throw projectError;
+
+      // Check if user has permission to edit this project
+      const canEdit = isAdmin || 
+        (isPM && project.user_id === user?.id) || 
+        (isAR2 && project.ar_field_id === user?.id);
+
+      if (!canEdit) {
+        toast({
+          title: "Access Denied",
+          description: "You don't have permission to edit this project.",
+          variant: "destructive",
+        });
+        navigate('/project-mgmt/tracking');
+        return;
+      }
+
+      // Set project data
+      setProjectData({
+        project_name: project.project_name,
+        start_date: project.start_date || "",
+        expected_end_date: project.expected_end_date || "",
+        difficulty_level: project.difficulty_level,
+        project_notes: project.project_notes || "",
+        hours_allocated: project.hours_allocated || 32,
+        ar_planning_id: project.ar_planning_id || "",
+        ar_field_id: project.ar_field_id || ""
+      });
+
+      // Fetch project tasks
+      const { data: projectTasks, error: tasksError } = await supabase
+        .from('project_tasks')
+        .select('*')
+        .eq('project_id', id)
+        .order('milestone_number');
+
+      if (tasksError) throw tasksError;
+
+      // Format tasks for editing
+      const formattedTasks = projectTasks.map((task, index) => ({
+        id: Math.max(...defaultTasks.map(t => t.id), index + 1), // Convert to number ID for consistency
+        task_name: task.task_name,
+        assigned_ar_id: task.assigned_ar_id,
+        assigned_skip_flag: task.assigned_skip_flag || "N",
+        due_date: task.due_date || "",
+        priority_exception: task.priority_exception || "",
+        time_percentage: task.time_percentage || 0,
+        notes_tasks: task.notes_tasks || ""
+      }));
+
+      setTasks(formattedTasks.length > 0 ? formattedTasks : defaultTasks);
+
+    } catch (error) {
+      console.error('Error fetching project data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load project data.",
+        variant: "destructive",
+      });
+      navigate('/project-mgmt/tracking');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveProject = async () => {
+    console.log('Saving project - User roles:', { isPM, isAR2, isAdmin, userRole: role });
     
     if (!user || (!isPM && !isAR2 && !isAdmin)) {
       console.error('Access denied - User roles:', { isPM, isAR2, isAdmin, role });
       toast({
         title: "Access Denied",
-        description: "Only Project Managers, AR2 Field users, and Admins can create projects.",
+        description: "Only Project Managers, AR2 Field users, and Admins can manage projects.",
         variant: "destructive",
       });
       return;
@@ -348,67 +432,112 @@ const ProjectSetup = () => {
 
     setLoading(true);
     try {
-      console.log('Inserting project with data:', { ...projectData, user_id: user.id });
-      
-      const { data: project, error: projectError } = await supabase
-        .from('projects')
-        .insert({
-          ...projectData,
-          user_id: user.id
-        })
-        .select()
-        .single();
+      if (editMode && projectId) {
+        // Update existing project
+        const { error: projectError } = await supabase
+          .from('projects')
+          .update(projectData)
+          .eq('id', projectId);
 
-      if (projectError) {
-        console.error('Project creation error:', projectError);
-        throw projectError;
+        if (projectError) throw projectError;
+
+        // Delete existing tasks
+        const { error: deleteError } = await supabase
+          .from('project_tasks')
+          .delete()
+          .eq('project_id', projectId);
+
+        if (deleteError) throw deleteError;
+
+        // Insert updated tasks
+        const tasksToInsert = tasks.map((task, index) => ({
+          project_id: projectId,
+          milestone_number: index + 1,
+          task_name: task.task_name,
+          assigned_ar_id: task.assigned_ar_id,
+          assigned_skip_flag: task.assigned_skip_flag,
+          due_date: task.due_date || null,
+          priority_exception: task.priority_exception,
+          time_percentage: task.time_percentage,
+          notes_tasks: task.notes_tasks,
+          task_status: 'in_queue'
+        }));
+
+        const { error: tasksError } = await supabase
+          .from('project_tasks')
+          .insert(tasksToInsert);
+
+        if (tasksError) throw tasksError;
+
+        toast({
+          title: "Success",
+          description: "Project updated successfully!",
+        });
+
+      } else {
+        // Create new project
+        console.log('Inserting project with data:', { ...projectData, user_id: user.id });
+        
+        const { data: project, error: projectError } = await supabase
+          .from('projects')
+          .insert({
+            ...projectData,
+            user_id: user.id
+          })
+          .select()
+          .single();
+
+        if (projectError) {
+          console.error('Project creation error:', projectError);
+          throw projectError;
+        }
+
+        console.log('Project created successfully:', project);
+
+        // Insert tasks
+        const tasksToInsert = tasks.map((task, index) => ({
+          project_id: project.id,
+          milestone_number: index + 1,
+          task_name: task.task_name,
+          assigned_ar_id: task.assigned_ar_id,
+          assigned_skip_flag: task.assigned_skip_flag,
+          due_date: task.due_date || null,
+          priority_exception: task.priority_exception,
+          time_percentage: task.time_percentage,
+          notes_tasks: task.notes_tasks,
+          task_status: 'in_queue'
+        }));
+
+        const { error: tasksError } = await supabase
+          .from('project_tasks')
+          .insert(tasksToInsert);
+
+        if (tasksError) throw tasksError;
+
+        toast({
+          title: "Success",
+          description: "Project created successfully!",
+        });
+
+        // Reset form
+        setProjectData({
+          project_name: "",
+          start_date: "",
+          expected_end_date: "",
+          difficulty_level: null,
+          project_notes: "",
+          hours_allocated: 32,
+          ar_planning_id: "",
+          ar_field_id: ""
+        });
+        setTasks(defaultTasks);
       }
 
-      console.log('Project created successfully:', project);
-
-      // Insert tasks
-      const tasksToInsert = tasks.map((task, index) => ({
-        project_id: project.id,
-        milestone_number: index + 1,
-        task_name: task.task_name,
-        assigned_ar_id: task.assigned_ar_id,
-        assigned_skip_flag: task.assigned_skip_flag,
-        due_date: task.due_date || null,
-        priority_exception: task.priority_exception,
-        time_percentage: task.time_percentage,
-        notes_tasks: task.notes_tasks,
-        task_status: 'in_queue'
-      }));
-
-      const { error: tasksError } = await supabase
-        .from('project_tasks')
-        .insert(tasksToInsert);
-
-      if (tasksError) throw tasksError;
-
-      toast({
-        title: "Success",
-        description: "Project created successfully!",
-      });
-
-      // Reset form
-      setProjectData({
-        project_name: "",
-        start_date: "",
-        expected_end_date: "",
-        difficulty_level: null,
-        project_notes: "",
-        hours_allocated: 32,
-        ar_planning_id: "",
-        ar_field_id: ""
-      });
-      setTasks(defaultTasks);
-
     } catch (error) {
-      console.error('Error creating project:', error);
+      console.error('Error saving project:', error);
       toast({
         title: "Error",
-        description: "Failed to create project. Please try again.",
+        description: `Failed to ${editMode ? 'update' : 'create'} project. Please try again.`,
         variant: "destructive",
       });
     } finally {
@@ -436,7 +565,20 @@ const ProjectSetup = () => {
               {/* Project Details Form */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Project Information</CardTitle>
+                  <CardTitle>
+                    {editMode ? `Edit Project: ${projectData.project_name}` : 'Project Information'}
+                  </CardTitle>
+                  {editMode && (
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => navigate('/project-mgmt/tracking')}
+                      >
+                        Back to Tracking
+                      </Button>
+                    </div>
+                  )}
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -592,8 +734,8 @@ const ProjectSetup = () => {
                     </Button>
                     <div className="flex gap-4">
                       <Button variant="outline" disabled={loading}>Save Draft</Button>
-                      <Button onClick={createProject} disabled={loading}>
-                        {loading ? "Creating..." : "Create Project"}
+                      <Button onClick={saveProject} disabled={loading}>
+                        {loading ? (editMode ? "Updating..." : "Creating...") : (editMode ? "Update Project" : "Create Project")}
                       </Button>
                     </div>
                   </div>

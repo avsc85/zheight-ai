@@ -76,7 +76,7 @@ const App = () => (
             } 
           />
           <Route 
-            path="/project-mgmt/setup" 
+            path="/project-mgmt/setup/:projectId?" 
             element={
               <ProtectedRoute>
                 <ProjectSetup />

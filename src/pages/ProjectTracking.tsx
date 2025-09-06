@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Filter, Download, RefreshCw, Edit, Save, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -46,7 +46,6 @@ const getStatusBadge = (status: string) => {
 
 const ProjectTracking = () => {
   const [filterTerm, setFilterTerm] = useState("");
-  const [activeTab, setActiveTab] = useState("setup");
   const [projects, setProjects] = useState<ProjectTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingNotes, setEditingNotes] = useState<string | null>(null);
@@ -101,12 +100,14 @@ const ProjectTracking = () => {
         .select(`
           *,
           projects (
+            id,
             project_name,
             user_id,
             ar_planning_id,
             ar_field_id
           )
-        `);
+        `)
+        .in('task_status', ['in_queue', 'started', 'blocked']); // Only active tasks
 
       // Apply role-based filtering
       if (isPM && !isAdmin) {
@@ -141,7 +142,7 @@ const ProjectTracking = () => {
       const formattedTasks: ProjectTask[] = (tasks || []).map(task => ({
         id: task.task_id,
         project: task.projects?.project_name || 'Unknown Project',
-        projectId: task.project_id,
+        projectId: task.projects?.id || task.project_id,
         taskActiveAssigned: task.task_name,
         arAssigned: task.assigned_ar_id || '',
         arAssignedName: userNames[task.assigned_ar_id] || 'Unassigned',
@@ -242,36 +243,7 @@ const ProjectTracking = () => {
       <Header />
       
       <main className="container mx-auto px-6 py-8">
-        <div className="max-w-7xl mx-auto">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-8">
-              <TabsTrigger value="setup" className="text-sm font-medium">
-                Project Setup
-              </TabsTrigger>
-              <TabsTrigger value="tracking" className="text-sm font-medium">
-                Project Tracking
-              </TabsTrigger>
-            </TabsList>
-            
-            <TabsContent value="setup" className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Project Setup</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-muted-foreground mb-4">
-                    This section will redirect you to the Project Setup page for creating new projects.
-                  </p>
-                  <Button 
-                    onClick={() => window.location.href = '/project-mgmt/setup'}
-                  >
-                    Go to Project Setup
-                  </Button>
-                </CardContent>
-              </Card>
-            </TabsContent>
-            
-            <TabsContent value="tracking" className="space-y-6">
+        <div className="max-w-7xl mx-auto space-y-6">
               {/* Header with Filter and Actions */}
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div className="space-y-2">
@@ -333,11 +305,16 @@ const ProjectTracking = () => {
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {filteredProjects.map((project) => (
-                              <TableRow key={project.id} className="hover:bg-muted/50">
-                                <TableCell className="font-medium">
-                                  {project.project}
-                                </TableCell>
+                             {filteredProjects.map((project) => (
+                               <TableRow key={project.id} className="hover:bg-muted/50">
+                                 <TableCell className="font-medium">
+                                   <Link 
+                                     to={`/project-mgmt/setup/${project.projectId}`}
+                                     className="text-primary hover:text-primary/80 underline underline-offset-4 transition-colors"
+                                   >
+                                     {project.project}
+                                   </Link>
+                                 </TableCell>
                                 <TableCell>{project.taskActiveAssigned}</TableCell>
                                 <TableCell>
                                   {project.arAssignedName && project.arAssignedName !== 'Unassigned' && (
@@ -427,47 +404,9 @@ const ProjectTracking = () => {
                         </Table>
                       </div>
                     </CardContent>
-                  </Card>
-
-                  {/* Summary Stats */}
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <Card>
-                      <CardContent className="p-4">
-                        <div className="text-2xl font-bold text-blue-600">
-                          {filteredProjects.filter(p => p.currentStatus === "started").length}
-                        </div>
-                        <p className="text-sm text-muted-foreground">Started Tasks</p>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardContent className="p-4">
-                        <div className="text-2xl font-bold text-gray-600">
-                          {filteredProjects.filter(p => p.currentStatus === "in_queue").length}
-                        </div>
-                        <p className="text-sm text-muted-foreground">Queued Tasks</p>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardContent className="p-4">
-                        <div className="text-2xl font-bold text-green-600">
-                          {filteredProjects.filter(p => p.currentStatus === "completed").length}
-                        </div>
-                        <p className="text-sm text-muted-foreground">Completed Tasks</p>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardContent className="p-4">
-                        <div className="text-2xl font-bold text-red-600">
-                          {filteredProjects.filter(p => p.currentStatus === "blocked").length}
-                        </div>
-                        <p className="text-sm text-muted-foreground">Blocked Tasks</p>
-                      </CardContent>
-                    </Card>
-                  </div>
+                   </Card>
                 </>
               )}
-            </TabsContent>
-          </Tabs>
         </div>
       </main>
     </div>
