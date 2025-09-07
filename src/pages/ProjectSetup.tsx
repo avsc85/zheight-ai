@@ -24,7 +24,6 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { useUserRole } from "@/hooks/useUserRole";
 
 // Default task template
 const defaultTasks = [
@@ -198,11 +197,10 @@ const ProjectSetup = () => {
   const [editMode, setEditMode] = useState(false);
   
   const { toast } = useToast();
-  const { user } = useAuth();
-  const { isPM, isAR2, isAdmin, role, loading: roleLoading } = useUserRole();
+  const { user, loading: authLoading, isPM, isAR2, isAdmin, userRole } = useAuth();
   
-  // Combine auth and role loading states
-  const combinedLoading = roleLoading || !user;
+  // Wait for both auth and role data to be loaded
+  const isLoading = authLoading || !user || !userRole;
   
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -213,10 +211,19 @@ const ProjectSetup = () => {
 
   useEffect(() => {
     fetchARUsers();
-    
-    // Only proceed when roles are fully loaded
-    if (!combinedLoading) {
-      console.log('Roles loaded, checking permissions:', { isPM, isAR2, isAdmin, role, projectId });
+  }, []); // Fetch AR users only once
+
+  useEffect(() => {
+    // Only proceed when authentication and roles are fully loaded
+    if (!isLoading) {
+      console.log('Auth and roles loaded, checking permissions:', { 
+        isPM, 
+        isAR2, 
+        isAdmin, 
+        role: userRole?.role, 
+        projectId,
+        user: user?.id 
+      });
       
       if (projectId && (isPM || isAR2 || isAdmin)) {
         console.log('User has permission, fetching project data');
@@ -232,7 +239,7 @@ const ProjectSetup = () => {
         navigate('/project-mgmt/tracking');
       }
     }
-  }, [projectId, combinedLoading, isPM, isAR2, isAdmin, user]);
+  }, [projectId, isLoading, isPM, isAR2, isAdmin, user?.id]);
 
   const fetchARUsers = async () => {
     try {
@@ -344,11 +351,11 @@ const ProjectSetup = () => {
     try {
       setLoading(true);
       console.log('Fetching project data for ID:', id);
-      console.log('Current user roles:', { isPM, isAR2, isAdmin, roleLoading });
+      console.log('Current user roles:', { isPM, isAR2, isAdmin, authLoading });
       
-      // Ensure roles are loaded before proceeding
-      if (roleLoading) {
-        console.log('Roles still loading, aborting fetch');
+      // Ensure auth and roles are loaded before proceeding
+      if (isLoading) {
+        console.log('Auth or roles still loading, aborting fetch');
         setLoading(false);
         return;
       }
@@ -461,10 +468,10 @@ const ProjectSetup = () => {
 
   const saveProject = async () => {
     // Save or update project based on edit mode
-    console.log('Saving project - User roles:', { isPM, isAR2, isAdmin, userRole: role });
+    console.log('Saving project - User roles:', { isPM, isAR2, isAdmin, userRole: userRole?.role });
     
     if (!user || (!isPM && !isAR2 && !isAdmin)) {
-      console.error('Access denied - User roles:', { isPM, isAR2, isAdmin, role });
+      console.error('Access denied - User roles:', { isPM, isAR2, isAdmin, role: userRole?.role });
       toast({
         title: "Access Denied",
         description: "Only Project Managers, AR2 Field users, and Admins can manage projects.",
@@ -614,7 +621,7 @@ const ProjectSetup = () => {
       <main className="container mx-auto px-6 py-8">
         <div className="max-w-6xl mx-auto">
           {/* Show loading state while roles are loading or project data is being fetched */}
-          {combinedLoading && (
+          {isLoading && (
             <Card>
               <CardContent className="p-8 text-center">
                 <div className="flex flex-col items-center gap-4">
@@ -633,7 +640,7 @@ const ProjectSetup = () => {
           )}
 
           {/* Show permission denied state when roles are loaded but user lacks access */}
-          {!combinedLoading && !isPM && !isAR2 && !isAdmin && (
+          {!isLoading && !isPM && !isAR2 && !isAdmin && (
             <Card>
               <CardContent className="p-8 text-center">
                 <div className="space-y-4">
@@ -642,7 +649,7 @@ const ProjectSetup = () => {
                     You don't have permission to access project setup.
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    Required role: PM, AR2, or Admin | Your role: {role || 'Unknown'}
+                    Required role: PM, AR2, or Admin | Your role: {userRole?.role || 'Unknown'}
                   </p>
                   <Button 
                     onClick={() => navigate('/project-mgmt/tracking')} 
@@ -656,7 +663,7 @@ const ProjectSetup = () => {
           )}
           
           {/* Show main content only when roles are loaded and user has permission */}
-          {!combinedLoading && (isPM || isAR2 || isAdmin) && (
+          {!isLoading && (isPM || isAR2 || isAdmin) && (
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-8">
                 <TabsTrigger value="setup" className="text-sm font-medium">
