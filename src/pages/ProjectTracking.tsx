@@ -27,6 +27,8 @@ interface ProjectTask {
   notesAR: string;
   notesPM: string;
   completionDate?: string;
+  taskType: 'assigned' | 'next_unassigned';
+  milestoneNumber: number;
 }
 
 const getStatusBadge = (status: string) => {
@@ -95,7 +97,8 @@ const ProjectTracking = () => {
     try {
       setLoading(true);
       
-      let query = supabase
+      // Fetch assigned tasks
+      let assignedQuery = supabase
         .from('project_tasks')
         .select(`
           *,
@@ -107,25 +110,63 @@ const ProjectTracking = () => {
             ar_field_id
           )
         `)
-        .in('task_status', ['in_queue', 'started', 'blocked']) // Only active tasks
-        .eq('assigned_skip_flag', 'Y'); // Only assigned tasks
+        .in('task_status', ['in_queue', 'started', 'blocked'])
+        .eq('assigned_skip_flag', 'Y');
 
-      // Apply role-based filtering
+      // Apply role-based filtering for assigned tasks
       if (isPM && !isAdmin) {
-        // PM users see projects they created
-        query = query.filter('projects.user_id', 'eq', user?.id);
+        assignedQuery = assignedQuery.filter('projects.user_id', 'eq', user?.id);
       } else if (isAR2 && !isAdmin) {
-        // AR2 users see projects assigned to them
-        query = query.filter('projects.ar_field_id', 'eq', user?.id);
+        assignedQuery = assignedQuery.filter('projects.ar_field_id', 'eq', user?.id);
       }
-      // Admin users see all projects (no additional filter)
 
-      const { data: tasks, error } = await query;
+      const { data: assignedTasks, error: assignedError } = await assignedQuery;
+      if (assignedError) throw assignedError;
 
-      if (error) throw error;
+      // Fetch next unassigned task per project
+      let nextUnassignedQuery = supabase
+        .from('project_tasks')
+        .select(`
+          *,
+          projects (
+            id,
+            project_name,
+            user_id,
+            ar_planning_id,
+            ar_field_id
+          )
+        `)
+        .eq('assigned_skip_flag', 'N')
+        .order('milestone_number', { ascending: true });
+
+      // Apply role-based filtering for next unassigned tasks
+      if (isPM && !isAdmin) {
+        nextUnassignedQuery = nextUnassignedQuery.filter('projects.user_id', 'eq', user?.id);
+      } else if (isAR2 && !isAdmin) {
+        nextUnassignedQuery = nextUnassignedQuery.filter('projects.ar_field_id', 'eq', user?.id);
+      }
+
+      const { data: allUnassignedTasks, error: unassignedError } = await nextUnassignedQuery;
+      if (unassignedError) throw unassignedError;
+
+      // Get only the first (lowest milestone_number) unassigned task per project
+      const nextUnassignedByProject = new Map();
+      (allUnassignedTasks || []).forEach(task => {
+        const projectId = task.projects?.id || task.project_id;
+        if (!nextUnassignedByProject.has(projectId)) {
+          nextUnassignedByProject.set(projectId, task);
+        }
+      });
+      const nextUnassignedTasks = Array.from(nextUnassignedByProject.values());
+
+      // Combine both task types
+      const allTasks = [
+        ...(assignedTasks || []).map(task => ({ ...task, task_type: 'assigned' })),
+        ...nextUnassignedTasks.map(task => ({ ...task, task_type: 'next_unassigned' }))
+      ];
 
       // Get user names for assigned AR users
-      const assignedUserIds = [...new Set((tasks || []).map(task => task.assigned_ar_id).filter(Boolean))];
+      const assignedUserIds = [...new Set(allTasks.map(task => task.assigned_ar_id).filter(Boolean))];
       let userNames: Record<string, string> = {};
       
       if (assignedUserIds.length > 0) {
@@ -140,13 +181,13 @@ const ProjectTracking = () => {
         }, {} as Record<string, string>);
       }
 
-      const formattedTasks: ProjectTask[] = (tasks || []).map(task => ({
+      const formattedTasks: ProjectTask[] = allTasks.map(task => ({
         id: task.task_id,
         project: task.projects?.project_name || 'Unknown Project',
         projectId: task.projects?.id || task.project_id,
         taskActiveAssigned: task.task_name,
         arAssigned: task.assigned_ar_id || '',
-        arAssignedName: userNames[task.assigned_ar_id] || 'Unassigned',
+        arAssignedName: userNames[task.assigned_ar_id] || (task.task_type === 'next_unassigned' ? 'Unassigned' : 'Unknown'),
         currentStatus: task.task_status || 'in_queue',
         dueDate: task.due_date || '',
         priorityException: task.priority_exception || '',
@@ -154,8 +195,17 @@ const ProjectTracking = () => {
           new Date(task.last_step_timestamp).toLocaleString() : '',
         notesAR: task.notes_tasks_ar || '',
         notesPM: task.notes_tasks_pm || '',
-        completionDate: task.completion_date
+        completionDate: task.completion_date,
+        taskType: task.task_type as 'assigned' | 'next_unassigned',
+        milestoneNumber: task.milestone_number
       }));
+
+      // Sort by project name, then by task type (assigned first), then by milestone number
+      formattedTasks.sort((a, b) => {
+        if (a.project !== b.project) return a.project.localeCompare(b.project);
+        if (a.taskType !== b.taskType) return a.taskType === 'assigned' ? -1 : 1;
+        return a.milestoneNumber - b.milestoneNumber;
+      });
 
       setProjects(formattedTasks);
     } catch (error) {
@@ -292,115 +342,158 @@ const ProjectTracking = () => {
                     <CardContent className="p-0">
                       <div className="overflow-x-auto">
                         <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead className="min-w-48">Project</TableHead>
-                              <TableHead className="min-w-48">Task Active Assigned</TableHead>
-                              <TableHead className="w-32">AR Assigned</TableHead>
-                              <TableHead className="w-32">Current Status</TableHead>
-                              <TableHead className="w-32">Due Date</TableHead>
-                              <TableHead className="min-w-48">Priority Exception</TableHead>
-                              <TableHead className="w-40">Last Step Timestamp</TableHead>
-                              <TableHead className="min-w-64">AR Notes</TableHead>
-                              <TableHead className="min-w-64">PM Notes</TableHead>
-                            </TableRow>
-                          </TableHeader>
+                           <TableHeader>
+                             <TableRow>
+                               <TableHead className="min-w-48">Project</TableHead>
+                               <TableHead className="min-w-48">Task Active Assigned</TableHead>
+                               <TableHead className="w-32">Task Type</TableHead>
+                               <TableHead className="w-32">AR Assigned</TableHead>
+                               <TableHead className="w-32">Current Status</TableHead>
+                               <TableHead className="w-32">Due Date</TableHead>
+                               <TableHead className="min-w-48">Priority Exception</TableHead>
+                               <TableHead className="w-40">Last Step Timestamp</TableHead>
+                               <TableHead className="min-w-64">AR Notes</TableHead>
+                               <TableHead className="min-w-64">PM Notes</TableHead>
+                             </TableRow>
+                           </TableHeader>
                           <TableBody>
-                             {filteredProjects.map((project) => (
-                               <TableRow key={project.id} className="hover:bg-muted/50">
-                                 <TableCell className="font-medium">
-                                   <Link 
-                                     to={`/project-mgmt/setup/${project.projectId}`}
-                                     className="text-primary hover:text-primary/80 underline underline-offset-4 transition-colors"
-                                   >
-                                     {project.project}
-                                   </Link>
+                              {filteredProjects.map((project) => (
+                                <TableRow 
+                                  key={project.id} 
+                                  className={`hover:bg-muted/50 ${
+                                    project.taskType === 'next_unassigned' 
+                                      ? 'bg-orange-50/50 border-l-4 border-l-orange-400' 
+                                      : 'bg-green-50/30 border-l-4 border-l-green-400'
+                                  }`}
+                                >
+                                  <TableCell className="font-medium">
+                                    <Link 
+                                      to={`/project-mgmt/setup/${project.projectId}`}
+                                      className="text-primary hover:text-primary/80 underline underline-offset-4 transition-colors"
+                                    >
+                                      {project.project}
+                                    </Link>
+                                  </TableCell>
+                                 <TableCell>
+                                   <div className="flex items-center gap-2">
+                                     <span>{project.taskActiveAssigned}</span>
+                                     <Badge variant="outline" className="text-xs">
+                                       M{project.milestoneNumber}
+                                     </Badge>
+                                   </div>
                                  </TableCell>
-                                <TableCell>{project.taskActiveAssigned}</TableCell>
-                                <TableCell>
-                                  {project.arAssignedName && project.arAssignedName !== 'Unassigned' && (
-                                    <Badge variant="outline">{project.arAssignedName}</Badge>
-                                  )}
-                                </TableCell>
-                                <TableCell>
-                                  {getStatusBadge(project.currentStatus)}
-                                </TableCell>
-                                <TableCell className="text-sm">
-                                  {project.dueDate}
-                                </TableCell>
-                                <TableCell className="text-sm">
-                                  {project.priorityException && (
-                                    <Badge variant="destructive" className="text-xs">
-                                      {project.priorityException}
-                                    </Badge>
-                                  )}
-                                </TableCell>
-                                <TableCell className="text-sm text-muted-foreground">
-                                  {project.lastStepTimestamp}
-                                </TableCell>
-                                <TableCell className="text-sm">
-                                  {project.notesAR && (
-                                    <div className="max-w-64 p-2 bg-blue-50 rounded text-xs">
-                                      {project.notesAR}
-                                    </div>
-                                  )}
-                                </TableCell>
-                                <TableCell className="text-sm">
-                                  {editingNotes === project.id ? (
-                                    <div className="space-y-2">
-                                      <Textarea
-                                        value={editedNotesValue}
-                                        onChange={(e) => setEditedNotesValue(e.target.value)}
-                                        className="text-xs min-h-16 resize-none"
-                                        placeholder="Add PM notes..."
-                                      />
-                                      <div className="flex gap-2">
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={() => handleSaveNotes(project.id)}
-                                          className="h-6 text-xs text-green-600 hover:text-green-700"
-                                        >
-                                          <Save className="h-3 w-3 mr-1" />
-                                          Save
-                                        </Button>
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={handleCancelEdit}
-                                          className="h-6 text-xs text-red-600 hover:text-red-700"
-                                        >
-                                          <X className="h-3 w-3 mr-1" />
-                                          Cancel
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <div className="flex items-center gap-2">
-                                      {project.notesPM ? (
-                                        <div className="max-w-64 p-2 bg-green-50 rounded text-xs">
-                                          {project.notesPM}
-                                        </div>
-                                      ) : (
-                                        <div className="text-xs text-muted-foreground/60 italic">
-                                          No PM notes
-                                        </div>
-                                      )}
-                                      {(isPM || isAdmin) && (
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          onClick={() => startEditingNotes(project.id, project.notesPM)}
-                                          className="h-6 w-6 p-0"
-                                        >
-                                          <Edit className="h-3 w-3" />
-                                        </Button>
-                                      )}
-                                    </div>
-                                  )}
-                                </TableCell>
-                              </TableRow>
-                            ))}
+                                 <TableCell>
+                                   <Badge 
+                                     variant={project.taskType === 'assigned' ? 'default' : 'secondary'}
+                                     className={
+                                       project.taskType === 'assigned' 
+                                         ? 'bg-green-100 text-green-800 hover:bg-green-200' 
+                                         : 'bg-orange-100 text-orange-800 hover:bg-orange-200'
+                                     }
+                                   >
+                                     {project.taskType === 'assigned' ? 'Assigned' : 'Next to Assign'}
+                                   </Badge>
+                                 </TableCell>
+                                 <TableCell>
+                                   {project.arAssignedName && project.arAssignedName !== 'Unassigned' && (
+                                     <Badge variant="outline">{project.arAssignedName}</Badge>
+                                   )}
+                                   {project.taskType === 'next_unassigned' && (
+                                     <Badge variant="outline" className="text-muted-foreground">
+                                       Unassigned
+                                     </Badge>
+                                   )}
+                                 </TableCell>
+                                 <TableCell>
+                                   {project.taskType === 'assigned' ? (
+                                     getStatusBadge(project.currentStatus)
+                                   ) : (
+                                     <Badge variant="outline" className="text-muted-foreground">
+                                       Not Started
+                                     </Badge>
+                                   )}
+                                 </TableCell>
+                                 <TableCell className="text-sm">
+                                   {project.dueDate}
+                                 </TableCell>
+                                 <TableCell className="text-sm">
+                                   {project.priorityException && (
+                                     <Badge variant="destructive" className="text-xs">
+                                       {project.priorityException}
+                                     </Badge>
+                                   )}
+                                 </TableCell>
+                                 <TableCell className="text-sm text-muted-foreground">
+                                   {project.taskType === 'assigned' ? project.lastStepTimestamp : '-'}
+                                 </TableCell>
+                                 <TableCell className="text-sm">
+                                   {project.taskType === 'assigned' && project.notesAR && (
+                                     <div className="max-w-64 p-2 bg-blue-50 rounded text-xs">
+                                       {project.notesAR}
+                                     </div>
+                                   )}
+                                   {project.taskType === 'next_unassigned' && (
+                                     <div className="text-xs text-muted-foreground/60 italic">
+                                       Task not assigned yet
+                                     </div>
+                                   )}
+                                 </TableCell>
+                                 <TableCell className="text-sm">
+                                   {editingNotes === project.id ? (
+                                     <div className="space-y-2">
+                                       <Textarea
+                                         value={editedNotesValue}
+                                         onChange={(e) => setEditedNotesValue(e.target.value)}
+                                         className="text-xs min-h-16 resize-none"
+                                         placeholder="Add PM notes..."
+                                       />
+                                       <div className="flex gap-2">
+                                         <Button
+                                           variant="ghost"
+                                           size="sm"
+                                           onClick={() => handleSaveNotes(project.id)}
+                                           className="h-6 text-xs text-green-600 hover:text-green-700"
+                                         >
+                                           <Save className="h-3 w-3 mr-1" />
+                                           Save
+                                         </Button>
+                                         <Button
+                                           variant="ghost"
+                                           size="sm"
+                                           onClick={handleCancelEdit}
+                                           className="h-6 text-xs text-red-600 hover:text-red-700"
+                                         >
+                                           <X className="h-3 w-3 mr-1" />
+                                           Cancel
+                                         </Button>
+                                       </div>
+                                     </div>
+                                   ) : (
+                                     <div className="flex items-center gap-2">
+                                       {project.notesPM ? (
+                                         <div className="max-w-64 p-2 bg-green-50 rounded text-xs">
+                                           {project.notesPM}
+                                         </div>
+                                       ) : (
+                                         <div className="text-xs text-muted-foreground/60 italic">
+                                           No PM notes
+                                         </div>
+                                       )}
+                                       {(isPM || isAdmin) && (
+                                         <Button
+                                           variant="ghost"
+                                           size="sm"
+                                           onClick={() => startEditingNotes(project.id, project.notesPM)}
+                                           className="h-6 w-6 p-0"
+                                         >
+                                           <Edit className="h-3 w-3" />
+                                         </Button>
+                                       )}
+                                     </div>
+                                   )}
+                                 </TableCell>
+                               </TableRow>
+                             ))}
                           </TableBody>
                         </Table>
                       </div>
