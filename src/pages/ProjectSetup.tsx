@@ -305,11 +305,20 @@ const ProjectSetup = () => {
   };
 
   const handleTaskChange = (id: number, field: string, value: any) => {
-    setTasks(prev => 
-      prev.map(task => 
-        task.id === id ? { ...task, [field]: value } : task
-      )
-    );
+    console.log('Task change:', { id, field, value, currentTasks: tasks.length });
+    
+    setTasks(prev => {
+      const updated = prev.map(task => {
+        if (task.id === id) {
+          console.log('Updating task:', { taskId: id, field, oldValue: task[field], newValue: value });
+          return { ...task, [field]: value };
+        }
+        return task;
+      });
+      
+      console.log('Updated tasks:', updated.map(t => ({ id: t.id, [field]: t[field] })));
+      return updated;
+    });
   };
 
   const addTask = () => {

@@ -341,6 +341,8 @@ const ProjectBoard = () => {
   const [loading, setLoading] = useState(true);
   const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [selectedARFilter, setSelectedARFilter] = useState<string>('current');
+  const [allARUsers, setAllARUsers] = useState<any[]>([]);
   const { toast } = useToast();
   const { user, userRole } = useAuth();
   
@@ -355,8 +357,11 @@ const ProjectBoard = () => {
     if (user) {
       fetchUserProfile();
       fetchTasks();
+      if (userRole?.role === 'pm' || userRole?.role === 'admin') {
+        fetchAllARUsers();
+      }
     }
-  }, [user]);
+  }, [user, userRole]);
 
   const fetchUserProfile = async () => {
     try {
@@ -373,12 +378,50 @@ const ProjectBoard = () => {
     }
   };
 
+  const fetchAllARUsers = async () => {
+    try {
+      console.log('Fetching all AR users for PM...');
+      
+      const { data: userRoles, error: rolesError } = await supabase
+        .from('user_roles')
+        .select('user_id, role')
+        .in('role', ['ar1_planning', 'ar2_field']);
+
+      if (rolesError) throw rolesError;
+
+      if (userRoles && userRoles.length > 0) {
+        const userIds = userRoles.map(role => role.user_id);
+        const { data: profiles, error: profilesError } = await supabase
+          .from('profiles')
+          .select('user_id, name')
+          .in('user_id', userIds);
+
+        if (profilesError) throw profilesError;
+
+        const formattedUsers = userRoles.map(userRole => {
+          const profile = profiles?.find(p => p.user_id === userRole.user_id);
+          return {
+            id: userRole.user_id,
+            name: profile?.name || 'Unknown',
+            role: userRole.role
+          };
+        });
+
+        setAllARUsers(formattedUsers);
+        console.log('All AR users loaded:', formattedUsers);
+      }
+    } catch (error) {
+      console.error('Error fetching AR users:', error);
+    }
+  };
+
   const fetchTasks = async () => {
     try {
       setLoading(true);
-      console.log('Fetching tasks for user:', user?.id);
+      console.log('Fetching tasks for user:', user?.id, 'Role:', userRole?.role);
       
-      const { data: tasks, error } = await supabase
+      // For PMs and Admins, fetch all tasks. For ARs, fetch only their assigned tasks
+      let query = supabase
         .from('project_tasks')
         .select(`
           *,
@@ -389,6 +432,13 @@ const ProjectBoard = () => {
         `)
         .not('assigned_ar_id', 'is', null)
         .neq('assigned_skip_flag', 'Skip');
+
+      // If user is not PM or Admin, filter by their assigned tasks only
+      if (userRole?.role !== 'pm' && userRole?.role !== 'admin') {
+        query = query.eq('assigned_ar_id', user?.id);
+      }
+
+      const { data: tasks, error } = await query;
 
       if (error) throw error;
       
@@ -548,14 +598,47 @@ const ProjectBoard = () => {
     }
   };
 
-  // Filter tasks for current AR user
-  const currentUserName = currentUserProfile?.name || '';
-  const userTasks = tasks.filter(task => 
-    task.arAssigned === user?.id &&
-    (searchTerm === '' || 
-     task.project.toLowerCase().includes(searchTerm.toLowerCase()) ||
-     task.task.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  // Filter tasks based on user role and selected AR filter
+  const getDisplayName = () => {
+    if (userRole?.role === 'pm' || userRole?.role === 'admin') {
+      if (selectedARFilter === 'current') {
+        return `${currentUserProfile?.name || 'Your'} Tasks (PM View)`;
+      } else {
+        const selectedAR = allARUsers.find(ar => ar.id === selectedARFilter);
+        return `${selectedAR?.name || 'Selected AR'}'s Tasks`;
+      }
+    }
+    return `${currentUserProfile?.name || 'Your'} Tasks`;
+  };
+
+  const getFilteredTasks = () => {
+    let filteredTasks = tasks;
+
+    // Apply AR filter based on user role and selection
+    if (userRole?.role === 'pm' || userRole?.role === 'admin') {
+      if (selectedARFilter === 'current') {
+        filteredTasks = tasks.filter(task => task.arAssigned === user?.id);
+      } else if (selectedARFilter !== 'all') {
+        filteredTasks = tasks.filter(task => task.arAssigned === selectedARFilter);
+      }
+      // For 'all', show all tasks (no additional filtering)
+    } else {
+      // For regular AR users, only show their assigned tasks
+      filteredTasks = tasks.filter(task => task.arAssigned === user?.id);
+    }
+
+    // Apply search filter
+    if (searchTerm) {
+      filteredTasks = filteredTasks.filter(task =>
+        task.project.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        task.task.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    return filteredTasks;
+  };
+
+  const userTasks = getFilteredTasks();
 
   // Helper function to check if task was completed this week
   const isCompletedThisWeek = (task: Task) => {
@@ -619,19 +702,39 @@ const ProjectBoard = () => {
         <div className="max-w-7xl mx-auto">
           <div className="mb-6">
             <h1 className="text-2xl font-bold text-foreground mb-2">
-              AR Board - {currentUserName || 'Your Tasks'}
+              AR Board - {getDisplayName()}
             </h1>
             <p className="text-muted-foreground mb-4">
-              Manage your assigned tasks and update progress
+              {userRole?.role === 'pm' || userRole?.role === 'admin' 
+                ? 'View and manage AR tasks across the project' 
+                : 'Manage your assigned tasks and update progress'}
             </p>
             
             <div className="flex items-center gap-4">
               <Input
-                placeholder="Find Board"
+                placeholder="Search tasks..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="max-w-sm"
               />
+              
+              {/* AR Filter for PM and Admin users */}
+              {(userRole?.role === 'pm' || userRole?.role === 'admin') && (
+                <Select value={selectedARFilter} onValueChange={setSelectedARFilter}>
+                  <SelectTrigger className="max-w-xs">
+                    <SelectValue placeholder="Select AR to view" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="current">My Tasks</SelectItem>
+                    <SelectItem value="all">All AR Tasks</SelectItem>
+                    {allARUsers.map((ar) => (
+                      <SelectItem key={ar.id} value={ar.id}>
+                        {ar.name} ({ar.role === 'ar1_planning' ? 'AR1' : 'AR2'})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
           </div>
 
