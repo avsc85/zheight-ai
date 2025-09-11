@@ -305,18 +305,30 @@ const ProjectSetup = () => {
   };
 
   const handleTaskChange = (id: number, field: string, value: any) => {
-    console.log('Task change:', { id, field, value, currentTasks: tasks.length });
+    console.log('=== TASK CHANGE REQUEST ===');
+    console.log('Target ID:', id, 'Field:', field, 'New Value:', value);
+    console.log('Current task IDs:', tasks.map(t => ({ id: t.id, name: t.task_name })));
     
     setTasks(prev => {
       const updated = prev.map(task => {
         if (task.id === id) {
-          console.log('Updating task:', { taskId: id, field, oldValue: task[field], newValue: value });
+          console.log(`✓ UPDATING Task ID ${id}: ${field} from "${task[field]}" to "${value}"`);
           return { ...task, [field]: value };
         }
         return task;
       });
       
-      console.log('Updated tasks:', updated.map(t => ({ id: t.id, [field]: t[field] })));
+      // Validate that only one task was updated for assignment changes
+      if (field === 'assigned_ar_id') {
+        const changedTasks = updated.filter((task, index) => task[field] !== prev[index][field]);
+        console.log('Tasks with changed AR assignment:', changedTasks.map(t => ({ id: t.id, name: t.task_name, newAR: t.assigned_ar_id })));
+        
+        if (changedTasks.length !== 1) {
+          console.error(`ERROR: Expected 1 task to change, but ${changedTasks.length} tasks changed!`);
+        }
+      }
+      
+      console.log('Final updated tasks:', updated.map(t => ({ id: t.id, [field]: t[field] })));
       return updated;
     });
   };
@@ -442,17 +454,35 @@ const ProjectSetup = () => {
 
       if (tasksError) throw tasksError;
 
-      // Format tasks for editing
-      const formattedTasks = projectTasks.map((task, index) => ({
-        id: Math.max(...defaultTasks.map(t => t.id), index + 1), // Convert to number ID for consistency
-        task_name: task.task_name,
-        assigned_ar_id: task.assigned_ar_id,
-        assigned_skip_flag: task.assigned_skip_flag || "N",
-        due_date: task.due_date || "",
-        priority_exception: task.priority_exception || "",
-        time_percentage: task.time_percentage || 0,
-        notes_tasks: task.notes_tasks || ""
-      }));
+      // Format tasks for editing with unique IDs
+      const formattedTasks = projectTasks.map((task, index) => {
+        const uniqueId = typeof task.task_id === 'number' ? task.task_id : (Math.max(...defaultTasks.map(t => t.id)) + index + 1);
+        console.log(`Task ${index}: ID=${uniqueId}, Name=${task.task_name}, AR=${task.assigned_ar_id}`);
+        return {
+          id: uniqueId, // Use database task_id or generate truly unique sequential ID
+          task_name: task.task_name,
+          assigned_ar_id: task.assigned_ar_id,
+          assigned_skip_flag: task.assigned_skip_flag || "N",
+          due_date: task.due_date || "",
+          priority_exception: task.priority_exception || "",
+          time_percentage: task.time_percentage || 0,
+          notes_tasks: task.notes_tasks || ""
+        };
+      });
+
+      // Validate unique IDs
+      const taskIds = formattedTasks.map(t => t.id);
+      const uniqueIds = [...new Set(taskIds)];
+      if (taskIds.length !== uniqueIds.length) {
+        console.error('DUPLICATE TASK IDs DETECTED!', { taskIds, uniqueIds });
+        toast({
+          title: "Warning: Duplicate Task IDs",
+          description: "Some tasks have duplicate IDs. Please refresh the page.",
+          variant: "destructive",
+        });
+      } else {
+        console.log('All task IDs are unique:', taskIds);
+      }
 
       setTasks(formattedTasks.length > 0 ? formattedTasks : defaultTasks);
       
