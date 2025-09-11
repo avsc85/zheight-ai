@@ -143,8 +143,19 @@ const TaskCard = ({ task, onUpdateNotes, onUpdateStatus, currentUserId, userRole
     setIsEditingPMNotes(false);
   };
 
-  const canEditARNotes = task.arAssigned === currentUserId && (userRole === 'ar1_planning' || userRole === 'admin');
-  const canEditPMNotes = userRole === 'pm' || userRole === 'admin';
+  // Enhanced logging for role-based permissions  
+  console.log('Role check debug:', { 
+    taskId: task.id,
+    taskArAssigned: task.arAssigned, 
+    currentUserId,
+    userRoleObject: userRole,
+    userRoleString: userRole,
+    isTaskAssignedToUser: task.arAssigned === currentUserId
+  });
+  
+  const canEditARNotes = task.arAssigned === currentUserId && 
+    (userRole === 'ar1_planning' || userRole === 'ar2_field' || userRole === 'admin');
+  const canEditPMNotes = userRole === 'pm' || userRole === 'admin';  
   const canEditStatus = canEditARNotes;
 
   return (
@@ -365,6 +376,8 @@ const ProjectBoard = () => {
   const fetchTasks = async () => {
     try {
       setLoading(true);
+      console.log('Fetching tasks for user:', user?.id);
+      
       const { data: tasks, error } = await supabase
         .from('project_tasks')
         .select(`
@@ -378,6 +391,8 @@ const ProjectBoard = () => {
         .neq('assigned_skip_flag', 'Skip');
 
       if (error) throw error;
+      
+      console.log('Raw tasks from database:', tasks);
 
       const formattedTasks: Task[] = (tasks || []).map(task => ({
         id: task.task_id,
@@ -393,6 +408,8 @@ const ProjectBoard = () => {
         projectId: task.project_id,
         completionDate: task.completion_date
       }));
+      
+      console.log('Formatted tasks:', formattedTasks);
 
       setTasks(formattedTasks);
     } catch (error) {
@@ -443,17 +460,46 @@ const ProjectBoard = () => {
 
   const handleUpdateStatus = async (taskId: string, status: Task['status']) => {
     try {
-      const { error } = await supabase
+      console.log('Updating task status:', { taskId, status, currentUserId: user?.id, userRole: userRole?.role });
+      
+      // Map frontend status to database status values
+      const statusMapping = {
+        'in_queue': 'in_queue',
+        'started': 'started', 
+        'completed': 'completed',
+        'blocked': 'blocked'
+      };
+      
+      const dbStatus = statusMapping[status];
+      if (!dbStatus) {
+        throw new Error(`Invalid status: ${status}`);
+      }
+      
+      const { data, error } = await supabase
         .from('project_tasks')
-        .update({ task_status: status })
-        .eq('task_id', taskId);
+        .update({ 
+          task_status: dbStatus,
+          completion_date: dbStatus === 'completed' ? new Date().toISOString().split('T')[0] : null
+        })
+        .eq('task_id', taskId)
+        .select('*')
+        .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Database error updating status:', error);
+        throw error;
+      }
 
-      // Update local state
+      console.log('Status update successful:', data);
+
+      // Update local state with completion date
       setTasks(prevTasks => 
         prevTasks.map(task => 
-          task.id === taskId ? { ...task, status } : task
+          task.id === taskId ? { 
+            ...task, 
+            status,
+            completionDate: data.completion_date
+          } : task
         )
       );
 
@@ -461,11 +507,11 @@ const ProjectBoard = () => {
         title: "Success",
         description: "Task status updated successfully.",
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating status:', error);
       toast({
-        title: "Error",
-        description: "Failed to update status. Please try again.",
+        title: "Error", 
+        description: `Failed to update status: ${error.message || 'Please try again.'}`,
         variant: "destructive",
       });
     }
@@ -482,10 +528,23 @@ const ProjectBoard = () => {
     if (!over) return;
 
     const activeTask = tasks.find(task => task.id === active.id);
-    const overColumn = over.id as Task['status'];
-
-    if (activeTask && activeTask.status !== overColumn) {
-      handleUpdateStatus(activeTask.id, overColumn);
+    const overColumnId = over.id as string;
+    
+    console.log('Drag end:', { activeTaskId: active.id, overColumnId, activeTask });
+    
+    // Map column IDs to task status values
+    const statusMapping: { [key: string]: Task['status'] } = {
+      'in_queue': 'in_queue',
+      'started': 'started', 
+      'completed': 'completed',
+      'blocked': 'blocked'
+    };
+    
+    const newStatus = statusMapping[overColumnId];
+    
+    if (activeTask && newStatus && activeTask.status !== newStatus) {
+      console.log('Updating task from drag:', { taskId: activeTask.id, oldStatus: activeTask.status, newStatus });
+      handleUpdateStatus(activeTask.id, newStatus);
     }
   };
 
@@ -500,15 +559,34 @@ const ProjectBoard = () => {
 
   // Helper function to check if task was completed this week
   const isCompletedThisWeek = (task: Task) => {
-    if (task.status !== 'completed' || !task.completionDate) return false;
+    if (task.status !== 'completed') return false;
     
-    const completionDate = new Date(task.completionDate);
-    const now = new Date();
-    const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - now.getDay()); // Start of current week (Sunday)
-    weekStart.setHours(0, 0, 0, 0);
+    // If no completion date, but status is completed, assume it was completed recently
+    if (!task.completionDate) {
+      console.log('Task completed but no completion date:', task.id);
+      return true; // Show completed tasks even without completion date
+    }
     
-    return completionDate >= weekStart;
+    try {
+      const completionDate = new Date(task.completionDate);
+      const now = new Date();
+      const weekStart = new Date(now);
+      weekStart.setDate(now.getDate() - now.getDay()); // Start of current week (Sunday)
+      weekStart.setHours(0, 0, 0, 0);
+      
+      const isThisWeek = completionDate >= weekStart;
+      console.log('Completion date check:', { 
+        taskId: task.id, 
+        completionDate: task.completionDate,
+        weekStart: weekStart.toISOString(),
+        isThisWeek 
+      });
+      
+      return isThisWeek;
+    } catch (error) {
+      console.error('Error parsing completion date:', error);
+      return true; // Show task if date parsing fails
+    }
   };
 
   const columns = {
@@ -602,8 +680,8 @@ const ProjectBoard = () => {
                               task={task} 
                               onUpdateNotes={handleUpdateNotes}
                               onUpdateStatus={handleUpdateStatus}
-                              currentUserId={user?.id || ''}
-                              userRole={userRole?.role || null}
+                               currentUserId={user?.id || ''}
+                               userRole={userRole?.role || null}
                             />
                           ))}
                         </div>
