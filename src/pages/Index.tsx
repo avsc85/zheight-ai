@@ -38,7 +38,7 @@ const Index = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
           {/* Project Management Tool */}
-          <Card className="hover:shadow-lg transition-shadow border-primary/20">
+          <Card className="hover:shadow-lg transition-shadow border-primary/20 flex flex-col h-full">
             <CardHeader>
               <CardTitle className="text-primary flex items-center gap-2">
                 <Folder className="h-5 w-5" />
@@ -48,8 +48,8 @@ const Index = () => {
                 Comprehensive project setup, milestone tracking, and AR assignment system
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground mb-4">
+            <CardContent className="flex-1 flex flex-col">
+              <p className="text-sm text-muted-foreground mb-4 flex-1">
                 Manage projects, assign tasks to ARs, and track progress through Kanban boards and detailed reporting.
               </p>
               <Link to="/project-mgmt">
@@ -61,7 +61,7 @@ const Index = () => {
           </Card>
 
           {/* AI Agent 1 */}
-          <Card className="hover:shadow-lg transition-shadow border-primary/20">
+          <Card className="hover:shadow-lg transition-shadow border-primary/20 flex flex-col h-full">
             <CardHeader>
               <CardTitle className="text-primary flex items-center gap-2">
                 <Bot className="h-5 w-5" />
@@ -71,8 +71,8 @@ const Index = () => {
                 Extract compliance checklists from plan check documents
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground mb-4">
+            <CardContent className="flex-1 flex flex-col">
+              <p className="text-sm text-muted-foreground mb-4 flex-1">
                 AI-powered analysis of architectural documents to extract compliance requirements.
               </p>
               <Link to="/ai-plan-checker">
@@ -84,7 +84,7 @@ const Index = () => {
           </Card>
           
           {/* AI Agent 2 */}
-          <Card className="hover:shadow-lg transition-shadow border-primary/20">
+          <Card className="hover:shadow-lg transition-shadow border-primary/20 flex flex-col h-full">
             <CardHeader>
               <CardTitle className="text-primary flex items-center gap-2">
                 <FileCheck className="h-5 w-5" />
@@ -94,8 +94,8 @@ const Index = () => {
                 Verify architectural plans against extracted requirements
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground mb-4">
+            <CardContent className="flex-1 flex flex-col">
+              <p className="text-sm text-muted-foreground mb-4 flex-1">
                 Compare your architectural plans against compliance requirements for quality assurance.
               </p>
               <Link to="/ai-plan-checker">
