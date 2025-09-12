@@ -75,6 +75,11 @@ const Index = () => {
               <p className="text-sm text-muted-foreground mb-4">
                 AI-powered analysis of architectural documents to extract compliance requirements.
               </p>
+              <Link to="/ai-plan-checker">
+                <Button className="w-full">
+                  Access Checklist Extractor
+                </Button>
+              </Link>
             </CardContent>
           </Card>
           
@@ -93,6 +98,11 @@ const Index = () => {
               <p className="text-sm text-muted-foreground mb-4">
                 Compare your architectural plans against compliance requirements for quality assurance.
               </p>
+              <Link to="/ai-plan-checker">
+                <Button className="w-full">
+                  Access Plan Checker
+                </Button>
+              </Link>
             </CardContent>
           </Card>
         </div>
