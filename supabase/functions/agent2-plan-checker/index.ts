@@ -228,25 +228,26 @@ If you are unsure, lower confidence and explain why.`;
 CHECKLIST ITEMS:
 ${JSON.stringify(checklistItems, null, 2)}
 
-Please return your findings in the following JSON schema:
-{
-  "issues": [
-    {
-      "checklist_item_id": "string (ID from checklist_items)",
-      "plan_sheet_name": "string (exact sheet name from PDF)",
-      "location_in_sheet": "string (specific location description)",
-      "issue_type": "Missing | Non-compliant | Inconsistent",
-      "issue_description": "string (what specific issue was found)",
-      "confidence_level": "High | Medium | Low",
-      "confidence_rationale": "string (explanation of confidence level)",
-      "recommendation": "string (suggested fix)",
-      "code_reference": "string (from checklist item)",
-      "severity": "High | Medium | Low"
-    }
-  ]
-}
+Please return your findings in the following JSON schema format. Return an array of issue objects, where each object represents a single compliance issue found:
 
-Only return issues that are actually found. Do not create null or empty objects for compliant items.`;
+[
+  {
+    "checklist_item_id": "string (ID from checklist_items that this issue relates to)",
+    "plan_sheet_name": "string (exact sheet name from PDF where issue was found)",
+    "issue_description": "string (concise description of what is wrong or missing)",
+    "location_in_sheet": "string (plain-language locator within the sheet)",
+    "issue_type": "Missing | Non-compliant | Inconsistent",
+    "compliance_source": "California Code | Local",
+    "specific_code_identifier": "string (exact code ref from checklist item)",
+    "short_code_requirement": "string (1-line requirement summary from checklist item)",
+    "long_code_requirement": "string (detailed requirement from checklist item)",
+    "source_link": "string (URL from checklist item)",
+    "confidence_level": "High | Medium | Low",
+    "confidence_rationale": "string (why you chose this confidence level)"
+  }
+]
+
+IMPORTANT: Only return issues that are actually found. Do not create null or empty objects for compliant items. Return an empty array [] if no issues are found.`;
 
     console.log('Adding message to thread');
     const messageResponse = await fetch(`https://api.openai.com/v1/threads/${threadData.id}/messages`, {
@@ -386,15 +387,72 @@ Only return issues that are actually found. Do not create null or empty objects 
 
     // Parse the JSON response
     let analysisResult;
+    let savedIssues = [];
+    
     try {
       // Extract JSON from the response (in case there's extra text)
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      const jsonMatch = responseText.match(/\[[\s\S]*\]/) || responseText.match(/\{[\s\S]*\}/);
       const jsonText = jsonMatch ? jsonMatch[0] : responseText;
-      analysisResult = JSON.parse(jsonText);
+      
+      // Parse as array directly or extract from object
+      let issues = [];
+      const parsed = JSON.parse(jsonText);
+      
+      if (Array.isArray(parsed)) {
+        issues = parsed;
+      } else if (parsed.issues && Array.isArray(parsed.issues)) {
+        issues = parsed.issues;
+      } else {
+        issues = [];
+      }
+      
+      // Generate a unique analysis session ID for this batch of issues
+      const analysisSessionId = crypto.randomUUID();
+      
+      // Save each issue to the database
+      for (const issue of issues) {
+        const { data: savedIssue, error: saveError } = await supabase
+          .from('architectural_issue_reports')
+          .insert({
+            user_id: user.id,
+            checklist_item_id: issue.checklist_item_id,
+            analysis_session_id: analysisSessionId,
+            plan_sheet_name: issue.plan_sheet_name,
+            issue_description: issue.issue_description,
+            location_in_sheet: issue.location_in_sheet,
+            issue_type: issue.issue_type,
+            compliance_source: issue.compliance_source,
+            specific_code_identifier: issue.specific_code_identifier,
+            short_code_requirement: issue.short_code_requirement,
+            long_code_requirement: issue.long_code_requirement,
+            source_link: issue.source_link,
+            confidence_level: issue.confidence_level,
+            confidence_rationale: issue.confidence_rationale
+          })
+          .select()
+          .single();
+          
+        if (saveError) {
+          console.error('Error saving issue to database:', saveError);
+        } else {
+          savedIssues.push(savedIssue);
+        }
+      }
+      
+      analysisResult = {
+        issues: savedIssues,
+        analysis_session_id: analysisSessionId,
+        total_issues_found: savedIssues.length
+      };
+      
     } catch (parseError) {
       console.error('Failed to parse assistant response as JSON:', parseError);
       // Return the raw response if JSON parsing fails
-      analysisResult = { raw_response: responseText, issues: [] };
+      analysisResult = { 
+        raw_response: responseText, 
+        issues: [],
+        error: 'Failed to parse LLM response as JSON'
+      };
     }
 
     console.log('Plan analysis completed successfully');

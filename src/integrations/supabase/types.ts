@@ -38,6 +38,74 @@ export type Database = {
         }
         Relationships: []
       }
+      architectural_issue_reports: {
+        Row: {
+          analysis_session_id: string
+          checklist_item_id: string | null
+          compliance_source: Database["public"]["Enums"]["compliance_source_enum"]
+          confidence_level: Database["public"]["Enums"]["confidence_level_enum"]
+          confidence_rationale: string
+          created_at: string
+          id: string
+          issue_description: string
+          issue_type: Database["public"]["Enums"]["issue_type_enum"]
+          location_in_sheet: string
+          long_code_requirement: string
+          plan_sheet_name: string
+          short_code_requirement: string
+          source_link: string
+          specific_code_identifier: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          analysis_session_id?: string
+          checklist_item_id?: string | null
+          compliance_source: Database["public"]["Enums"]["compliance_source_enum"]
+          confidence_level: Database["public"]["Enums"]["confidence_level_enum"]
+          confidence_rationale: string
+          created_at?: string
+          id?: string
+          issue_description: string
+          issue_type: Database["public"]["Enums"]["issue_type_enum"]
+          location_in_sheet: string
+          long_code_requirement: string
+          plan_sheet_name: string
+          short_code_requirement: string
+          source_link: string
+          specific_code_identifier: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          analysis_session_id?: string
+          checklist_item_id?: string | null
+          compliance_source?: Database["public"]["Enums"]["compliance_source_enum"]
+          confidence_level?: Database["public"]["Enums"]["confidence_level_enum"]
+          confidence_rationale?: string
+          created_at?: string
+          id?: string
+          issue_description?: string
+          issue_type?: Database["public"]["Enums"]["issue_type_enum"]
+          location_in_sheet?: string
+          long_code_requirement?: string
+          plan_sheet_name?: string
+          short_code_requirement?: string
+          source_link?: string
+          specific_code_identifier?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "architectural_issue_reports_checklist_item_id_fkey"
+            columns: ["checklist_item_id"]
+            isOneToOne: false
+            referencedRelation: "checklist_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       checklist_items: {
         Row: {
           city: string | null
@@ -361,6 +429,9 @@ export type Database = {
     }
     Enums: {
       app_role: "user" | "admin" | "pm" | "ar1_planning" | "ar2_field"
+      compliance_source_enum: "California Code" | "Local"
+      confidence_level_enum: "High" | "Medium" | "Low"
+      issue_type_enum: "Missing" | "Non-compliant" | "Inconsistent"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -489,6 +560,9 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["user", "admin", "pm", "ar1_planning", "ar2_field"],
+      compliance_source_enum: ["California Code", "Local"],
+      confidence_level_enum: ["High", "Medium", "Low"],
+      issue_type_enum: ["Missing", "Non-compliant", "Inconsistent"],
     },
   },
 } as const
