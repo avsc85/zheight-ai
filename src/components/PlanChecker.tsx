@@ -1,28 +1,35 @@
 import { useState } from "react";
 import { AgentCard } from "./AgentCard";
 import { DocumentUpload } from "./DocumentUpload";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { ArchitecturalIssueReports } from "./ArchitecturalIssueReports";
 import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, CheckCircle, XCircle, Search, Download } from "lucide-react";
+import { Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
-interface ComplianceIssue {
+interface ArchitecturalIssueReport {
   id: string;
-  category: string;
-  issue: string;
-  severity: "high" | "medium" | "low";
-  location: string;
-  recommendation: string;
-  checklistItem: string;
+  checklist_item_id: string;
+  analysis_session_id: string;
+  plan_sheet_name: string;
+  issue_description: string;
+  location_in_sheet: string;
+  issue_type: "Missing" | "Non-compliant" | "Inconsistent";
+  compliance_source: "California Code" | "Local";
+  specific_code_identifier: string;
+  short_code_requirement: string;
+  long_code_requirement: string;
+  source_link: string;
+  confidence_level: "High" | "Medium" | "Low";
+  confidence_rationale: string;
+  created_at: string;
 }
 
 export const PlanChecker = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [issues, setIssues] = useState<ComplianceIssue[]>([]);
+  const [issues, setIssues] = useState<ArchitecturalIssueReport[]>([]);
+  const [analysisSessionId, setAnalysisSessionId] = useState<string>("");
   const [uploadedPlans, setUploadedPlans] = useState<File[]>([]);
   const { toast } = useToast();
 
@@ -43,12 +50,18 @@ export const PlanChecker = () => {
     setIsProcessing(true);
     setProgress(0);
     setIssues([]);
+    setAnalysisSessionId("");
 
     try {
       toast({
         title: "Starting analysis",
         description: "Analyzing plans against compliance checklist...",
       });
+
+      // Simulate progress updates
+      const progressInterval = setInterval(() => {
+        setProgress(prev => Math.min(prev + 10, 90));
+      }, 2000);
 
       // Prepare form data for the edge function
       const formData = new FormData();
@@ -63,6 +76,8 @@ export const PlanChecker = () => {
         body: formData,
       });
 
+      clearInterval(progressInterval);
+
       if (error) {
         throw new Error(error.message || 'Analysis failed');
       }
@@ -75,24 +90,13 @@ export const PlanChecker = () => {
       const analysisResults = data.data;
       
       if (analysisResults.issues && Array.isArray(analysisResults.issues)) {
-        // Convert OpenAI response to our component format
-        const formattedIssues: ComplianceIssue[] = analysisResults.issues.map((issue: any, index: number) => ({
-          id: `issue-${index}`,
-          category: issue.code_reference || "General",
-          issue: issue.issue_description,
-          severity: issue.severity?.toLowerCase() || "medium",
-          location: `${issue.plan_sheet_name} - ${issue.location_in_sheet}`,
-          recommendation: issue.recommendation,
-          checklistItem: `Checklist Item ID: ${issue.checklist_item_id}`
-        }));
-
-        setIssues(formattedIssues);
+        setIssues(analysisResults.issues);
+        setAnalysisSessionId(analysisResults.analysis_session_id);
         
-        const highSeverity = formattedIssues.filter(i => i.severity === "high").length;
         toast({
           title: "Analysis complete",
-          description: `Found ${formattedIssues.length} compliance issues (${highSeverity} high priority)`,
-          variant: highSeverity > 0 ? "destructive" : "default"
+          description: `Found ${analysisResults.issues.length} compliance issues`,
+          variant: analysisResults.issues.length > 0 ? "destructive" : "default"
         });
       } else {
         toast({
@@ -112,42 +116,6 @@ export const PlanChecker = () => {
       setIsProcessing(false);
       setProgress(100);
     }
-  };
-
-  const getSeverityConfig = (severity: string) => {
-    switch (severity) {
-      case "high":
-        return {
-          icon: XCircle,
-          color: "text-destructive",
-          badge: "bg-destructive text-destructive-foreground"
-        };
-      case "medium":
-        return {
-          icon: AlertTriangle,
-          color: "text-yellow-600",
-          badge: "bg-yellow-100 text-yellow-800"
-        };
-      case "low":
-        return {
-          icon: CheckCircle,
-          color: "text-accent",
-          badge: "bg-accent/10 text-accent"
-        };
-      default:
-        return {
-          icon: AlertTriangle,
-          color: "text-muted-foreground",
-          badge: "bg-muted text-muted-foreground"
-        };
-    }
-  };
-
-  const issueStats = {
-    total: issues.length,
-    high: issues.filter(i => i.severity === "high").length,
-    medium: issues.filter(i => i.severity === "medium").length,
-    low: issues.filter(i => i.severity === "low").length
   };
 
   return (
@@ -179,78 +147,11 @@ export const PlanChecker = () => {
         maxFiles={15}
       />
 
-      {issues.length > 0 && (
-        <>
-          <Card className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-semibold text-foreground">Compliance Report</h3>
-                <p className="text-muted-foreground text-sm">
-                  Analysis complete - {issueStats.total} issues identified
-                </p>
-              </div>
-              <Button size="sm" variant="gradient">
-                <Download className="w-4 h-4 mr-2" />
-                Export Report
-              </Button>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <div className="text-center p-3 bg-muted rounded-lg">
-                <p className="text-2xl font-bold text-foreground">{issueStats.total}</p>
-                <p className="text-sm text-muted-foreground">Total Issues</p>
-              </div>
-              <div className="text-center p-3 bg-destructive/10 rounded-lg">
-                <p className="text-2xl font-bold text-destructive">{issueStats.high}</p>
-                <p className="text-sm text-muted-foreground">High Priority</p>
-              </div>
-              <div className="text-center p-3 bg-yellow-50 rounded-lg">
-                <p className="text-2xl font-bold text-yellow-600">{issueStats.medium}</p>
-                <p className="text-sm text-muted-foreground">Medium Priority</p>
-              </div>
-              <div className="text-center p-3 bg-accent/10 rounded-lg">
-                <p className="text-2xl font-bold text-accent">{issueStats.low}</p>
-                <p className="text-sm text-muted-foreground">Low Priority</p>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-6">
-            <h4 className="text-lg font-semibold text-foreground mb-4">Detailed Issues</h4>
-            <div className="space-y-4">
-              {issues.map(issue => {
-                const config = getSeverityConfig(issue.severity);
-                const Icon = config.icon;
-                
-                return (
-                  <div key={issue.id} className="p-4 border rounded-lg">
-                    <div className="flex items-start gap-4">
-                      <Icon className={`w-5 h-5 mt-1 ${config.color}`} />
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Badge variant="outline">{issue.category}</Badge>
-                          <Badge className={config.badge}>
-                            {issue.severity.toUpperCase()}
-                          </Badge>
-                        </div>
-                        <h5 className="font-semibold text-foreground mb-2">{issue.issue}</h5>
-                        <p className="text-muted-foreground text-sm mb-2">
-                          <strong>Location:</strong> {issue.location}
-                        </p>
-                        <p className="text-muted-foreground text-sm mb-2">
-                          <strong>Recommendation:</strong> {issue.recommendation}
-                        </p>
-                        <p className="text-xs text-muted-foreground italic">
-                          Checklist Item: {issue.checklistItem}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-        </>
+      {(issues.length > 0 || (!isProcessing && analysisSessionId)) && (
+        <ArchitecturalIssueReports 
+          issues={issues} 
+          analysisSessionId={analysisSessionId}
+        />
       )}
     </div>
   );
