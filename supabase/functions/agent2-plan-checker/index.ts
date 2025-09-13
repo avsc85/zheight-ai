@@ -127,6 +127,9 @@ serve(async (req) => {
       .single();
 
     const systemPrompt = promptData?.prompt || customPrompt || `You are Architectural Compliance Checker for single-family residential plan sets.
+
+CRITICAL: You MUST ONLY return valid JSON. NO explanatory text, NO introductions, NO conclusions. ONLY JSON.
+
 Your job is to read plan PDFs and compare them row-by-row against a compliance checklist (from a Supabase table called checklist_items). For each checklist row:
 • Use the provided sheet_label_candidates array to find the best matching sheet in the plan. These candidates represent common variations of sheet names/labels that might appear in the PDF (e.g., "A-6.0", "MEP", "ELECTRICAL" for electrical plans).
 • Search that sheet for the issue_to_check using both text and visual cues (callouts, tags, symbols, schedules, legends).
@@ -145,22 +148,22 @@ Use only these checklist fields below from the data Table checklist_items in Sup
 • source_link (URL)
 • project_type (e.g., "Single Family Residence", ADU, Addition/Remodel; use to ensure applicability)
 
-Output rules (STRICT)
-• Only return JSON that conforms to the Issue Report JSON Schema below.
-• One object per issue found. If no issue for a row, return nothing for that row.
-• Do not invent code identifiers or links; only use what's provided in the row.
-• If you must choose California vs Local, use the row's code_source.
-• When reporting plan_sheet_name, use the exact sheet label found in the PDF (e.g., "A2.1 – Floor Plan") that best matches one of the sheet_label_candidates.
-• Use a short, human-readable location_in_sheet (e.g., "Kitchen range wall, upper right quadrant", "General Notes column B", "Detail 5/A4.2 callout").
-• issue_type must be one of: Missing, Non-compliant, Inconsistent.
-• confidence_level must be one of: High, Medium, Low.
-• confidence_rationale should explain visibility/clarity, sheet match quality, and any cross-reference you used.
+OUTPUT FORMAT - CRITICAL RULES:
+• ONLY return a JSON array. NO other text.
+• If no issues found, return: []
+• If issues found, return: [{"checklist_item_id": "...", ...}, {"checklist_item_id": "...", ...}]
+• Do not include explanations, reasoning, or any text outside the JSON array.
+• Each issue object must have these exact fields: checklist_item_id, plan_sheet_name, issue_description, location_in_sheet, issue_type, compliance_source, specific_code_identifier, short_code_requirement, long_code_requirement, source_link, confidence_level, confidence_rationale
+• issue_type must be one of: Missing, Non-compliant, Inconsistent
+• confidence_level must be one of: High, Medium, Low
+• compliance_source must be one of: California Code, Local
 
-Confidence rubric
+Confidence rubric:
 • High: Found matching sheet from candidates; requirement clearly absent or clearly violated; unambiguous notes/details.
 • Medium: Partial sheet match from candidates; requirement inferred from partial notes/symbols; mild ambiguity.
 • Low: Weak sheet match from candidates; blurry/obscured content; conflicting details with no clear resolution.
-If you are unsure, lower confidence and explain why.`;
+
+REMEMBER: Return ONLY the JSON array. No additional text whatsoever.`;
 
     // Upload files to OpenAI
     const uploadedFiles: string[] = [];
@@ -434,27 +437,63 @@ IMPORTANT: Only return issues that are actually found. Do not create null or emp
     let savedIssues = [];
     
     try {
-      // Extract JSON from the response (in case there's extra text)
-      const jsonMatch = responseText.match(/\[[\s\S]*\]/) || responseText.match(/\{[\s\S]*\}/);
-      const jsonText = jsonMatch ? jsonMatch[0] : responseText;
+      console.log('Raw assistant response:', responseText);
+      
+      // Clean the response text by removing any potential markdown or extra text
+      let cleanedResponse = responseText.trim();
+      
+      // Remove markdown code blocks if present
+      cleanedResponse = cleanedResponse.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+      
+      // Find JSON content - look for array or object patterns
+      const jsonArrayMatch = cleanedResponse.match(/(\[[\s\S]*\])/);
+      const jsonObjectMatch = cleanedResponse.match(/(\{[\s\S]*\})/);
+      
+      let jsonText = '';
+      if (jsonArrayMatch) {
+        jsonText = jsonArrayMatch[1];
+      } else if (jsonObjectMatch) {
+        jsonText = jsonObjectMatch[1];
+      } else {
+        // If no JSON pattern found, try the whole cleaned response
+        jsonText = cleanedResponse;
+      }
+      
+      console.log('Extracted JSON text:', jsonText);
       
       // Parse as array directly or extract from object
       let issues = [];
-      const parsed = JSON.parse(jsonText);
-      
-      if (Array.isArray(parsed)) {
-        issues = parsed;
-      } else if (parsed.issues && Array.isArray(parsed.issues)) {
-        issues = parsed.issues;
-      } else {
+      if (jsonText.trim() === '' || jsonText.trim() === '[]') {
         issues = [];
+      } else {
+        const parsed = JSON.parse(jsonText);
+        
+        if (Array.isArray(parsed)) {
+          issues = parsed;
+        } else if (parsed.issues && Array.isArray(parsed.issues)) {
+          issues = parsed.issues;
+        } else if (typeof parsed === 'object' && parsed !== null) {
+          // If it's a single object, wrap it in an array
+          issues = [parsed];
+        } else {
+          console.error('Unexpected JSON structure:', parsed);
+          issues = [];
+        }
       }
+      
+      console.log(`Processing ${issues.length} issues`);
       
       // Generate a unique analysis session ID for this batch of issues
       const analysisSessionId = crypto.randomUUID();
       
       // Save each issue to the database
       for (const issue of issues) {
+        // Validate required fields
+        if (!issue.checklist_item_id) {
+          console.warn('Skipping issue without checklist_item_id:', issue);
+          continue;
+        }
+        
         const { data: savedIssue, error: saveError } = await supabase
           .from('architectural_issue_reports')
           .insert({
@@ -477,9 +516,10 @@ IMPORTANT: Only return issues that are actually found. Do not create null or emp
           .single();
           
         if (saveError) {
-          console.error('Error saving issue to database:', saveError);
+          console.error('Error saving issue to database:', saveError, 'Issue data:', issue);
         } else {
           savedIssues.push(savedIssue);
+          console.log('Successfully saved issue:', savedIssue.id);
         }
       }
       
@@ -491,11 +531,13 @@ IMPORTANT: Only return issues that are actually found. Do not create null or emp
       
     } catch (parseError) {
       console.error('Failed to parse assistant response as JSON:', parseError);
+      console.error('Response text that failed to parse:', responseText);
       // Return the raw response if JSON parsing fails
       analysisResult = { 
         raw_response: responseText, 
         issues: [],
-        error: 'Failed to parse LLM response as JSON'
+        error: 'Failed to parse LLM response as JSON',
+        parse_error: parseError.message
       };
     }
 
