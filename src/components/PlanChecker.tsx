@@ -7,6 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, CheckCircle, XCircle, Search, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 interface ComplianceIssue {
   id: string;
@@ -41,63 +42,75 @@ export const PlanChecker = () => {
 
     setIsProcessing(true);
     setProgress(0);
+    setIssues([]);
 
-    // Simulate AI analysis
-    const totalSteps = 4;
-    for (let i = 0; i <= totalSteps; i++) {
-      setTimeout(() => {
-        setProgress((i / totalSteps) * 100);
-        if (i === totalSteps) {
-          setIsProcessing(false);
-          // Simulate compliance issues
-          const mockIssues: ComplianceIssue[] = [
-            {
-              id: "1",
-              category: "Structural",
-              issue: "Foundation reinforcement schedule missing",
-              severity: "high",
-              location: "Foundation Plan - Sheet A1",
-              recommendation: "Add detailed rebar schedule with sizes and spacing",
-              checklistItem: "Foundation details must include reinforcement schedule"
-            },
-            {
-              id: "2",
-              category: "Fire Safety", 
-              issue: "Smoke detector not shown in master bedroom",
-              severity: "medium",
-              location: "Floor Plan - Sheet A2",
-              recommendation: "Add smoke detector symbol in master bedroom ceiling",
-              checklistItem: "Smoke detectors required in all bedrooms and hallways"
-            },
-            {
-              id: "3",
-              category: "Accessibility",
-              issue: "Entry door width appears to be 30 inches",
-              severity: "high",
-              location: "Floor Plan - Sheet A2", 
-              recommendation: "Increase door width to minimum 32 inches",
-              checklistItem: "Door width minimum 32 inches for primary entrance"
-            },
-            {
-              id: "4",
-              category: "Electrical",
-              issue: "Kitchen island outlet location unclear",
-              severity: "low",
-              location: "Electrical Plan - Sheet E1",
-              recommendation: "Clarify outlet locations on kitchen island",
-              checklistItem: "GFCI outlets required within 6 feet of sinks"
-            }
-          ];
-          setIssues(mockIssues);
-          
-          const highSeverity = mockIssues.filter(i => i.severity === "high").length;
-          toast({
-            title: "Analysis complete",
-            description: `Found ${mockIssues.length} issues (${highSeverity} high priority)`,
-            variant: highSeverity > 0 ? "destructive" : "default"
-          });
-        }
-      }, i * 2000);
+    try {
+      toast({
+        title: "Starting analysis",
+        description: "Analyzing plans against compliance checklist...",
+      });
+
+      // Prepare form data for the edge function
+      const formData = new FormData();
+      
+      // Add all uploaded files
+      uploadedPlans.forEach((file, index) => {
+        formData.append(`file_${index}`, file);
+      });
+
+      // Call the agent2-plan-checker edge function
+      const { data, error } = await supabase.functions.invoke('agent2-plan-checker', {
+        body: formData,
+      });
+
+      if (error) {
+        throw new Error(error.message || 'Analysis failed');
+      }
+
+      if (!data.success) {
+        throw new Error(data.error || 'Analysis failed');
+      }
+
+      // Process the results
+      const analysisResults = data.data;
+      
+      if (analysisResults.issues && Array.isArray(analysisResults.issues)) {
+        // Convert OpenAI response to our component format
+        const formattedIssues: ComplianceIssue[] = analysisResults.issues.map((issue: any, index: number) => ({
+          id: `issue-${index}`,
+          category: issue.code_reference || "General",
+          issue: issue.issue_description,
+          severity: issue.severity?.toLowerCase() || "medium",
+          location: `${issue.plan_sheet_name} - ${issue.location_in_sheet}`,
+          recommendation: issue.recommendation,
+          checklistItem: `Checklist Item ID: ${issue.checklist_item_id}`
+        }));
+
+        setIssues(formattedIssues);
+        
+        const highSeverity = formattedIssues.filter(i => i.severity === "high").length;
+        toast({
+          title: "Analysis complete",
+          description: `Found ${formattedIssues.length} compliance issues (${highSeverity} high priority)`,
+          variant: highSeverity > 0 ? "destructive" : "default"
+        });
+      } else {
+        toast({
+          title: "Analysis complete",
+          description: "No compliance issues found",
+        });
+      }
+
+    } catch (error: any) {
+      console.error('Analysis error:', error);
+      toast({
+        title: "Analysis failed",
+        description: error.message || "Please try again",
+        variant: "destructive"
+      });
+    } finally {
+      setIsProcessing(false);
+      setProgress(100);
     }
   };
 

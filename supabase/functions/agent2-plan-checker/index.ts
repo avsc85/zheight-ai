@@ -1,0 +1,420 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.56.0';
+import "https://deno.land/x/xhr@0.1.0/mod.ts";
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+serve(async (req) => {
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    console.log('Starting Agent 2 Plan Checker process');
+    
+    // Get environment variables
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
+
+    if (!openAIApiKey) {
+      throw new Error('OpenAI API key not found');
+    }
+
+    console.log('Environment variables loaded successfully');
+
+    // Initialize Supabase client
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Get user from authorization header
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      throw new Error('No authorization header');
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    
+    if (userError || !user) {
+      throw new Error('Invalid user token');
+    }
+
+    console.log('User authenticated:', user.id);
+
+    // Parse request body
+    const formData = await req.formData();
+    const files: File[] = [];
+    const customPrompt = formData.get('prompt') as string || '';
+
+    // Extract uploaded files
+    for (const [key, value] of formData.entries()) {
+      if (key.startsWith('file_') && value instanceof File) {
+        files.push(value);
+      }
+    }
+
+    if (files.length === 0) {
+      throw new Error('No files provided');
+    }
+
+    console.log(`Processing ${files.length} plan files`);
+
+    // Fetch checklist items from database for this user
+    const { data: checklistItems, error: checklistError } = await supabase
+      .from('checklist_items')
+      .select('*')
+      .eq('user_id', user.id);
+
+    if (checklistError) {
+      console.error('Error fetching checklist items:', checklistError);
+      throw new Error('Failed to fetch checklist items');
+    }
+
+    console.log(`Found ${checklistItems?.length || 0} checklist items`);
+
+    // Get the plan checker prompt from database
+    const { data: promptData } = await supabase
+      .from('agent_prompts')
+      .select('prompt')
+      .eq('name', 'default_plan_checker')
+      .single();
+
+    const systemPrompt = promptData?.prompt || customPrompt || `You are Architectural Compliance Checker for single-family residential plan sets.
+Your job is to read plan PDFs and compare them row-by-row against a compliance checklist (from a Supabase table called checklist_items). For each checklist row:
+• Open the plan sheet that best matches the provided sheet_name (e.g. "Cover Sheet", "General Notes"). If an exact match isn't found, pick the closest architectural page by label or title and say so in your confidence rationale.
+• Search that sheet for the issue_to_check using both text and visual cues (callouts, tags, symbols, schedules, legends).
+• Decide whether the requirement is present, missing, non-compliant, or inconsistent across sheets (cross-ref as relevant—e.g., a note on A-sheet vs detail on S-sheet).
+• If you find an issue, output one JSON object per issue using the schema provided. If no issue is found for that row, output nothing for that row (do not emit "null" objects).
+
+Use only these checklist fields below from the data Table checklist_items in Supabase (ignore others):
+• sheet_name (where to look on the plan)
+• issue_to_check (what to verify)
+• type_of_issue (mechanical / fire / etc., helps you reason about where details usually live)
+• code_source (California vs Local)
+• code_identifier (e.g., CRC R703.2)
+• short_code_requirement (1-line interpretation for single-family)
+• long_code_requirement (detailed interpretation for single-family)
+• source_link (URL)
+• project_type (e.g., "Single Family Residence", ADU, Addition/Remodel; use to ensure applicability)
+
+Output rules (STRICT)
+• Only return JSON that conforms to the Issue Report JSON Schema below.
+• One object per issue found. If no issue for a row, return nothing for that row.
+• Do not invent code identifiers or links; only use what's provided in the row.
+• If you must choose California vs Local, use the row's code_source.
+• Prefer the exact sheet label found in the PDF (e.g., "A2.1 – Floor Plan") for plan_sheet_name.
+• Use a short, human-readable location_in_sheet (e.g., "Kitchen range wall, upper right quadrant", "General Notes column B", "Detail 5/A4.2 callout").
+• issue_type must be one of: Missing, Non-compliant, Inconsistent.
+• confidence_level must be one of: High, Medium, Low.
+• confidence_rationale should explain visibility/clarity, sheet match quality, and any cross-reference you used.
+
+Confidence rubric
+• High: Exact sheet match; requirement clearly absent or clearly violated; unambiguous notes/details.
+• Medium: Near sheet match; requirement inferred from partial notes/symbols; mild ambiguity.
+• Low: Weak sheet match; blurry/obscured content; conflicting details with no clear resolution.
+If you are unsure, lower confidence and explain why.`;
+
+    // Upload files to OpenAI
+    const uploadedFiles: string[] = [];
+    
+    for (const file of files) {
+      console.log(`Uploading file: ${file.name}`);
+      
+      const fileFormData = new FormData();
+      fileFormData.append('file', file);
+      fileFormData.append('purpose', 'assistants');
+
+      const uploadResponse = await fetch('https://api.openai.com/v1/files', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openAIApiKey}`,
+        },
+        body: fileFormData,
+      });
+
+      if (!uploadResponse.ok) {
+        const errorData = await uploadResponse.text();
+        console.error('File upload failed:', errorData);
+        throw new Error(`Failed to upload file: ${file.name}`);
+      }
+
+      const uploadData = await uploadResponse.json();
+      uploadedFiles.push(uploadData.id);
+      console.log(`File uploaded successfully: ${uploadData.id}`);
+    }
+
+    // Create vector store for the files
+    console.log('Creating vector store');
+    const vectorStoreResponse = await fetch('https://api.openai.com/v1/vector_stores', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openAIApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: `plan-analysis-${Date.now()}`,
+        file_ids: uploadedFiles,
+      }),
+    });
+
+    if (!vectorStoreResponse.ok) {
+      const errorData = await vectorStoreResponse.text();
+      console.error('Vector store creation failed:', errorData);
+      throw new Error('Failed to create vector store');
+    }
+
+    const vectorStoreData = await vectorStoreResponse.json();
+    console.log('Vector store created:', vectorStoreData.id);
+
+    // Create OpenAI Assistant for plan checking
+    console.log('Creating OpenAI assistant');
+    const assistantResponse = await fetch('https://api.openai.com/v1/assistants', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openAIApiKey}`,
+        'Content-Type': 'application/json',
+        'OpenAI-Beta': 'assistants=v2',
+      },
+      body: JSON.stringify({
+        name: 'Plan Checker Agent',
+        instructions: systemPrompt,
+        model: 'gpt-4o',
+        tools: [{ type: 'file_search' }],
+        tool_resources: {
+          file_search: {
+            vector_store_ids: [vectorStoreData.id],
+          },
+        },
+      }),
+    });
+
+    if (!assistantResponse.ok) {
+      const errorData = await assistantResponse.text();
+      console.error('Assistant creation failed:', errorData);
+      throw new Error('Failed to create assistant');
+    }
+
+    const assistantData = await assistantResponse.json();
+    console.log('Assistant created:', assistantData.id);
+
+    // Create a thread
+    console.log('Creating thread');
+    const threadResponse = await fetch('https://api.openai.com/v1/threads', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openAIApiKey}`,
+        'Content-Type': 'application/json',
+        'OpenAI-Beta': 'assistants=v2',
+      },
+      body: JSON.stringify({}),
+    });
+
+    if (!threadResponse.ok) {
+      const errorData = await threadResponse.text();
+      console.error('Thread creation failed:', errorData);
+      throw new Error('Failed to create thread');
+    }
+
+    const threadData = await threadResponse.json();
+    console.log('Thread created:', threadData.id);
+
+    // Add user message with checklist items context
+    const userMessage = `Please analyze the uploaded architectural plans against the following checklist items and identify compliance issues:
+
+CHECKLIST ITEMS:
+${JSON.stringify(checklistItems, null, 2)}
+
+Please return your findings in the following JSON schema:
+{
+  "issues": [
+    {
+      "checklist_item_id": "string (ID from checklist_items)",
+      "plan_sheet_name": "string (exact sheet name from PDF)",
+      "location_in_sheet": "string (specific location description)",
+      "issue_type": "Missing | Non-compliant | Inconsistent",
+      "issue_description": "string (what specific issue was found)",
+      "confidence_level": "High | Medium | Low",
+      "confidence_rationale": "string (explanation of confidence level)",
+      "recommendation": "string (suggested fix)",
+      "code_reference": "string (from checklist item)",
+      "severity": "High | Medium | Low"
+    }
+  ]
+}
+
+Only return issues that are actually found. Do not create null or empty objects for compliant items.`;
+
+    console.log('Adding message to thread');
+    const messageResponse = await fetch(`https://api.openai.com/v1/threads/${threadData.id}/messages`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openAIApiKey}`,
+        'Content-Type': 'application/json',
+        'OpenAI-Beta': 'assistants=v2',
+      },
+      body: JSON.stringify({
+        role: 'user',
+        content: userMessage,
+      }),
+    });
+
+    if (!messageResponse.ok) {
+      const errorData = await messageResponse.text();
+      console.error('Message creation failed:', errorData);
+      throw new Error('Failed to add message');
+    }
+
+    // Run the assistant
+    console.log('Running assistant');
+    const runResponse = await fetch(`https://api.openai.com/v1/threads/${threadData.id}/runs`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openAIApiKey}`,
+        'Content-Type': 'application/json',
+        'OpenAI-Beta': 'assistants=v2',
+      },
+      body: JSON.stringify({
+        assistant_id: assistantData.id,
+      }),
+    });
+
+    if (!runResponse.ok) {
+      const errorData = await runResponse.text();
+      console.error('Run creation failed:', errorData);
+      throw new Error('Failed to run assistant');
+    }
+
+    const runData = await runResponse.json();
+    console.log('Run started:', runData.id);
+
+    // Poll for completion
+    let runStatus = runData.status;
+    let attempts = 0;
+    const maxAttempts = 60; // 5 minutes max
+
+    while (runStatus === 'queued' || runStatus === 'in_progress') {
+      if (attempts >= maxAttempts) {
+        throw new Error('Assistant run timed out');
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+      attempts++;
+
+      const statusResponse = await fetch(`https://api.openai.com/v1/threads/${threadData.id}/runs/${runData.id}`, {
+        headers: {
+          'Authorization': `Bearer ${openAIApiKey}`,
+          'OpenAI-Beta': 'assistants=v2',
+        },
+      });
+
+      if (!statusResponse.ok) {
+        throw new Error('Failed to check run status');
+      }
+
+      const statusData = await statusResponse.json();
+      runStatus = statusData.status;
+      console.log(`Run status: ${runStatus} (attempt ${attempts})`);
+    }
+
+    if (runStatus !== 'completed') {
+      throw new Error(`Assistant run failed with status: ${runStatus}`);
+    }
+
+    // Get the assistant's response
+    console.log('Retrieving assistant response');
+    const messagesResponse = await fetch(`https://api.openai.com/v1/threads/${threadData.id}/messages`, {
+      headers: {
+        'Authorization': `Bearer ${openAIApiKey}`,
+        'OpenAI-Beta': 'assistants=v2',
+      },
+    });
+
+    if (!messagesResponse.ok) {
+      const errorData = await messagesResponse.text();
+      console.error('Failed to retrieve messages:', errorData);
+      throw new Error('Failed to retrieve messages');
+    }
+
+    const messagesData = await messagesResponse.json();
+    const assistantMessage = messagesData.data.find(msg => msg.role === 'assistant');
+
+    if (!assistantMessage || !assistantMessage.content[0]) {
+      throw new Error('No response from assistant');
+    }
+
+    const responseText = assistantMessage.content[0].text.value;
+    console.log('Assistant response received');
+
+    // Clean up OpenAI resources
+    console.log('Cleaning up resources');
+    try {
+      // Delete assistant
+      await fetch(`https://api.openai.com/v1/assistants/${assistantData.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${openAIApiKey}`,
+          'OpenAI-Beta': 'assistants=v2',
+        },
+      });
+
+      // Delete vector store
+      await fetch(`https://api.openai.com/v1/vector_stores/${vectorStoreData.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${openAIApiKey}`,
+          'OpenAI-Beta': 'assistants=v2',
+        },
+      });
+
+      // Delete uploaded files
+      for (const fileId of uploadedFiles) {
+        await fetch(`https://api.openai.com/v1/files/${fileId}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${openAIApiKey}`,
+          },
+        });
+      }
+    } catch (cleanupError) {
+      console.error('Cleanup error:', cleanupError);
+      // Don't throw here as the main operation was successful
+    }
+
+    // Parse the JSON response
+    let analysisResult;
+    try {
+      // Extract JSON from the response (in case there's extra text)
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      const jsonText = jsonMatch ? jsonMatch[0] : responseText;
+      analysisResult = JSON.parse(jsonText);
+    } catch (parseError) {
+      console.error('Failed to parse assistant response as JSON:', parseError);
+      // Return the raw response if JSON parsing fails
+      analysisResult = { raw_response: responseText, issues: [] };
+    }
+
+    console.log('Plan analysis completed successfully');
+
+    return new Response(JSON.stringify({
+      success: true,
+      data: analysisResult,
+      message: 'Plan analysis completed successfully'
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+
+  } catch (error: any) {
+    console.error('Error in plan checker:', error);
+    return new Response(JSON.stringify({
+      success: false,
+      error: error.message || 'Plan analysis failed'
+    }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+});

@@ -2,3 +2,6 @@ project_id = "tiiuowhbntuoepxpnobs"
 
 [functions.agent1-extract-checklist]
 verify_jwt = false
+
+[functions.agent2-plan-checker]
+verify_jwt = false
