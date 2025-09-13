@@ -188,7 +188,7 @@ If you are unsure, lower confidence and explain why.`;
           value={prompt}
           onChange={(e) => handlePromptChange(e.target.value)}
           placeholder="Enter the AI prompt for document analysis..."
-          className="min-h-[200px] resize-none"
+          className="min-h-[120px] resize-none"
           readOnly={isReadonly}
         />
         
