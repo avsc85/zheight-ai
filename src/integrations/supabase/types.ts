@@ -48,7 +48,7 @@ export type Database = {
           created_at: string
           id: string
           issue_description: string
-          issue_type: Database["public"]["Enums"]["issue_type_enum"]
+          issue_type: string
           location_in_sheet: string
           long_code_requirement: string
           plan_sheet_name: string
@@ -67,7 +67,7 @@ export type Database = {
           created_at?: string
           id?: string
           issue_description: string
-          issue_type: Database["public"]["Enums"]["issue_type_enum"]
+          issue_type: string
           location_in_sheet: string
           long_code_requirement: string
           plan_sheet_name: string
@@ -86,7 +86,7 @@ export type Database = {
           created_at?: string
           id?: string
           issue_description?: string
-          issue_type?: Database["public"]["Enums"]["issue_type_enum"]
+          issue_type?: string
           location_in_sheet?: string
           long_code_requirement?: string
           plan_sheet_name?: string
