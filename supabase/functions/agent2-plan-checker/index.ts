@@ -66,7 +66,7 @@ serve(async (req) => {
     // Fetch checklist items from database for this user
     const { data: checklistItems, error: checklistError } = await supabase
       .from('checklist_items')
-      .select('*')
+      .select('id, sheet_name, issue_to_check, type_of_issue, code_source, code_identifier, short_code_requirement, long_code_requirement, project_type')
       .eq('user_id', user.id);
 
     if (checklistError) {
