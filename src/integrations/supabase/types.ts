@@ -42,8 +42,8 @@ export type Database = {
         Row: {
           analysis_session_id: string
           checklist_item_id: string | null
-          compliance_source: Database["public"]["Enums"]["compliance_source_enum"]
-          confidence_level: Database["public"]["Enums"]["confidence_level_enum"]
+          compliance_source: string
+          confidence_level: string
           confidence_rationale: string
           created_at: string
           id: string
@@ -61,8 +61,8 @@ export type Database = {
         Insert: {
           analysis_session_id?: string
           checklist_item_id?: string | null
-          compliance_source: Database["public"]["Enums"]["compliance_source_enum"]
-          confidence_level: Database["public"]["Enums"]["confidence_level_enum"]
+          compliance_source: string
+          confidence_level: string
           confidence_rationale: string
           created_at?: string
           id?: string
@@ -80,8 +80,8 @@ export type Database = {
         Update: {
           analysis_session_id?: string
           checklist_item_id?: string | null
-          compliance_source?: Database["public"]["Enums"]["compliance_source_enum"]
-          confidence_level?: Database["public"]["Enums"]["confidence_level_enum"]
+          compliance_source?: string
+          confidence_level?: string
           confidence_rationale?: string
           created_at?: string
           id?: string
