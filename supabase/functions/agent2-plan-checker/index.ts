@@ -76,6 +76,49 @@ serve(async (req) => {
 
     console.log(`Found ${checklistItems?.length || 0} checklist items`);
 
+    // Normalize sheet hints before sending to LLM
+    const normalizeSheetName = (sheetName: string): string[] => {
+      const normalizedName = sheetName?.toLowerCase() || '';
+      
+      // Map common sheet names to likely candidates
+      if (normalizedName.includes('electrical') || normalizedName.includes('elec')) {
+        return ["A-6.0", "MEP", "ELECTRICAL", "ELEC"];
+      }
+      if (normalizedName.includes('site') && normalizedName.includes('plan')) {
+        return ["A-1.1", "PROPOSED SITE", "SITE PLAN"];
+      }
+      if (normalizedName.includes('title') || normalizedName.includes('cover')) {
+        return ["A-0.0", "TITLE", "COVER", "COVER SHEET"];
+      }
+      if (normalizedName.includes('floor plan') || normalizedName.includes('interior')) {
+        return ["A-2.1", "A-2.0", "FIRST FLOOR PLAN", "FLOOR PLAN"];
+      }
+      if (normalizedName.includes('a3.1') || normalizedName.includes('second floor')) {
+        return ["A-3.0", "SECOND FLOOR PLAN", "A-3.1"];
+      }
+      if (normalizedName.includes('foundation')) {
+        return ["A-1.0", "FOUNDATION PLAN", "FOUNDATION"];
+      }
+      if (normalizedName.includes('roof')) {
+        return ["A-4.0", "ROOF PLAN", "ROOF"];
+      }
+      if (normalizedName.includes('section') || normalizedName.includes('detail')) {
+        return ["A-5.0", "SECTIONS", "DETAILS", "SECTION"];
+      }
+      if (normalizedName.includes('elevation')) {
+        return ["A-3.0", "ELEVATIONS", "ELEVATION"];
+      }
+      
+      // If no specific mapping, return the original name as candidate
+      return [sheetName || ""];
+    };
+
+    // Add sheet label candidates to checklist items
+    const enhancedChecklistItems = checklistItems?.map(item => ({
+      ...item,
+      sheet_label_candidates: normalizeSheetName(item.sheet_name)
+    })) || [];
+
     // Get the plan checker prompt from database
     const { data: promptData } = await supabase
       .from('agent_prompts')
@@ -85,13 +128,14 @@ serve(async (req) => {
 
     const systemPrompt = promptData?.prompt || customPrompt || `You are Architectural Compliance Checker for single-family residential plan sets.
 Your job is to read plan PDFs and compare them row-by-row against a compliance checklist (from a Supabase table called checklist_items). For each checklist row:
-• Open the plan sheet that best matches the provided sheet_name (e.g. "Cover Sheet", "General Notes"). If an exact match isn't found, pick the closest architectural page by label or title and say so in your confidence rationale.
+• Use the provided sheet_label_candidates array to find the best matching sheet in the plan. These candidates represent common variations of sheet names/labels that might appear in the PDF (e.g., "A-6.0", "MEP", "ELECTRICAL" for electrical plans).
 • Search that sheet for the issue_to_check using both text and visual cues (callouts, tags, symbols, schedules, legends).
 • Decide whether the requirement is present, missing, non-compliant, or inconsistent across sheets (cross-ref as relevant—e.g., a note on A-sheet vs detail on S-sheet).
 • If you find an issue, output one JSON object per issue using the schema provided. If no issue is found for that row, output nothing for that row (do not emit "null" objects).
 
 Use only these checklist fields below from the data Table checklist_items in Supabase (ignore others):
-• sheet_name (where to look on the plan)
+• sheet_name (original CSV sheet name for reference)
+• sheet_label_candidates (normalized array of likely sheet labels to look for in the PDF)
 • issue_to_check (what to verify)
 • type_of_issue (mechanical / fire / etc., helps you reason about where details usually live)
 • code_source (California vs Local)
@@ -106,16 +150,16 @@ Output rules (STRICT)
 • One object per issue found. If no issue for a row, return nothing for that row.
 • Do not invent code identifiers or links; only use what's provided in the row.
 • If you must choose California vs Local, use the row's code_source.
-• Prefer the exact sheet label found in the PDF (e.g., "A2.1 – Floor Plan") for plan_sheet_name.
+• When reporting plan_sheet_name, use the exact sheet label found in the PDF (e.g., "A2.1 – Floor Plan") that best matches one of the sheet_label_candidates.
 • Use a short, human-readable location_in_sheet (e.g., "Kitchen range wall, upper right quadrant", "General Notes column B", "Detail 5/A4.2 callout").
 • issue_type must be one of: Missing, Non-compliant, Inconsistent.
 • confidence_level must be one of: High, Medium, Low.
 • confidence_rationale should explain visibility/clarity, sheet match quality, and any cross-reference you used.
 
 Confidence rubric
-• High: Exact sheet match; requirement clearly absent or clearly violated; unambiguous notes/details.
-• Medium: Near sheet match; requirement inferred from partial notes/symbols; mild ambiguity.
-• Low: Weak sheet match; blurry/obscured content; conflicting details with no clear resolution.
+• High: Found matching sheet from candidates; requirement clearly absent or clearly violated; unambiguous notes/details.
+• Medium: Partial sheet match from candidates; requirement inferred from partial notes/symbols; mild ambiguity.
+• Low: Weak sheet match from candidates; blurry/obscured content; conflicting details with no clear resolution.
 If you are unsure, lower confidence and explain why.`;
 
     // Upload files to OpenAI
@@ -226,7 +270,7 @@ If you are unsure, lower confidence and explain why.`;
     const userMessage = `Please analyze the uploaded architectural plans against the following checklist items and identify compliance issues:
 
 CHECKLIST ITEMS:
-${JSON.stringify(checklistItems, null, 2)}
+${JSON.stringify(enhancedChecklistItems, null, 2)}
 
 Please return your findings in the following JSON schema format. Return an array of issue objects, where each object represents a single compliance issue found:
 
