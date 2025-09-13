@@ -27,7 +27,7 @@ const AIPlanChecker = () => {
           <h2 className="text-2xl font-bold text-foreground mb-6">Agent 1: Checklist Extractor</h2>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <ChecklistExtractor />
-            <PromptEditor onPromptChange={handlePromptChange} />
+            <PromptEditor onPromptChange={handlePromptChange} agentType="agent1" />
           </div>
         </div>
 
@@ -36,7 +36,7 @@ const AIPlanChecker = () => {
           <h2 className="text-2xl font-bold text-foreground mb-6">Agent 2: Plan Checker</h2>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <PlanChecker />
-            <PromptEditor onPromptChange={handlePromptChange} />
+            <PromptEditor onPromptChange={handlePromptChange} agentType="agent2" />
           </div>
         </div>
       </main>
