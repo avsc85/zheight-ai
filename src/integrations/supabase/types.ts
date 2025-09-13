@@ -96,15 +96,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "architectural_issue_reports_checklist_item_id_fkey"
-            columns: ["checklist_item_id"]
-            isOneToOne: false
-            referencedRelation: "checklist_items"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       checklist_items: {
         Row: {
