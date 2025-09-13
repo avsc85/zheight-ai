@@ -201,6 +201,7 @@ REMEMBER: Return ONLY the JSON array. No additional text whatsoever.`;
       headers: {
         'Authorization': `Bearer ${openAIApiKey}`,
         'Content-Type': 'application/json',
+        'OpenAI-Beta': 'assistants=v2',
       },
       body: JSON.stringify({
         name: `plan-analysis-${Date.now()}`,
@@ -369,7 +370,30 @@ IMPORTANT: Only return issues that are actually found. Do not create null or emp
     }
 
     if (runStatus !== 'completed') {
-      throw new Error(`Assistant run failed with status: ${runStatus}`);
+      // Fetch detailed run info to expose error cause
+      const detailsResponse = await fetch(`https://api.openai.com/v1/threads/${threadData.id}/runs/${runData.id}`, {
+        headers: {
+          'Authorization': `Bearer ${openAIApiKey}`,
+          'OpenAI-Beta': 'assistants=v2',
+        },
+      });
+      let details: any = null;
+      try {
+        details = await detailsResponse.json();
+      } catch (_) {
+        // ignore parse errors
+      }
+      console.error('Assistant run failed. Details:', JSON.stringify(details, null, 2));
+      const lastErrorMsg = details?.last_error?.message || details?.required_action?.submit_tool_outputs?.tool_calls?.[0]?.error || details?.status || 'unknown error';
+      return new Response(JSON.stringify({
+        success: false,
+        error: `Assistant run failed with status: ${runStatus}`,
+        last_error: lastErrorMsg,
+        details,
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     // Get the assistant's response
