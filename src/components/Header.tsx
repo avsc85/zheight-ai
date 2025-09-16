@@ -19,6 +19,7 @@ export const Header = () => {
     if (path === '/' && location.pathname === '/') return true;
     if (path === '/project-mgmt' && location.pathname.startsWith('/project-mgmt')) return true;
     if (path === '/ai-plan-checker' && location.pathname === '/ai-plan-checker') return true;
+    if (path === '/ai-feasibility' && location.pathname === '/ai-feasibility') return true;
     return false;
   };
 
@@ -67,6 +68,15 @@ export const Header = () => {
                     AI Plan Checker
                   </Button>
                 </Link>
+                <Link to="/ai-feasibility">
+                  <Button 
+                    variant={isActive('/ai-feasibility') ? "default" : "ghost"} 
+                    size="sm"
+                    className="font-medium"
+                  >
+                    AI Feasibility
+                  </Button>
+                </Link>
               </nav>
             )}
           </div>
@@ -74,7 +84,7 @@ export const Header = () => {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Bot className="w-4 h-4" />
-              <span>2 AI Agents Active</span>
+              <span>3 AI Agents Active</span>
             </div>
             
             {isAuthenticated ? (

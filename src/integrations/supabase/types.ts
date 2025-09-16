@@ -170,6 +170,153 @@ export type Database = {
         }
         Relationships: []
       }
+      feasibility_analyses: {
+        Row: {
+          city_dept_link: string | null
+          created_at: string
+          id: string
+          jurisdiction: string | null
+          last_updated: string | null
+          last_updated_by: string | null
+          lot_size: string | null
+          notes: string | null
+          project_address: string
+          source_link: string | null
+          updated_at: string
+          user_id: string
+          zone: string | null
+        }
+        Insert: {
+          city_dept_link?: string | null
+          created_at?: string
+          id?: string
+          jurisdiction?: string | null
+          last_updated?: string | null
+          last_updated_by?: string | null
+          lot_size?: string | null
+          notes?: string | null
+          project_address: string
+          source_link?: string | null
+          updated_at?: string
+          user_id: string
+          zone?: string | null
+        }
+        Update: {
+          city_dept_link?: string | null
+          created_at?: string
+          id?: string
+          jurisdiction?: string | null
+          last_updated?: string | null
+          last_updated_by?: string | null
+          lot_size?: string | null
+          notes?: string | null
+          project_address?: string
+          source_link?: string | null
+          updated_at?: string
+          user_id?: string
+          zone?: string | null
+        }
+        Relationships: []
+      }
+      jurisdiction_ordinances: {
+        Row: {
+          code_reference: string | null
+          created_at: string
+          daylight_plan_rear: string | null
+          daylight_plan_side: string | null
+          definition_floor_area: string | null
+          definition_lot_coverage: string | null
+          exemption_front_setback_encroachment: string | null
+          exemption_max_height: string | null
+          exemption_side_setback_encroachment: string | null
+          exemption_substandard_lot: string | null
+          floor_area_ratio: string | null
+          id: string
+          jurisdiction: string
+          last_updated: string | null
+          last_updated_by: string | null
+          lot_coverage: string | null
+          max_height_ft: string | null
+          min_garage_length: string | null
+          min_garage_width: string | null
+          min_setback_corner_ft: string | null
+          min_setback_front_ft: string | null
+          min_setback_rear_ft: string | null
+          min_setback_side_ft: string | null
+          notes: string | null
+          ordinance_source_link: string | null
+          parking: string | null
+          tag_1: string | null
+          tag_2: string | null
+          updated_at: string
+          zone: string
+        }
+        Insert: {
+          code_reference?: string | null
+          created_at?: string
+          daylight_plan_rear?: string | null
+          daylight_plan_side?: string | null
+          definition_floor_area?: string | null
+          definition_lot_coverage?: string | null
+          exemption_front_setback_encroachment?: string | null
+          exemption_max_height?: string | null
+          exemption_side_setback_encroachment?: string | null
+          exemption_substandard_lot?: string | null
+          floor_area_ratio?: string | null
+          id?: string
+          jurisdiction: string
+          last_updated?: string | null
+          last_updated_by?: string | null
+          lot_coverage?: string | null
+          max_height_ft?: string | null
+          min_garage_length?: string | null
+          min_garage_width?: string | null
+          min_setback_corner_ft?: string | null
+          min_setback_front_ft?: string | null
+          min_setback_rear_ft?: string | null
+          min_setback_side_ft?: string | null
+          notes?: string | null
+          ordinance_source_link?: string | null
+          parking?: string | null
+          tag_1?: string | null
+          tag_2?: string | null
+          updated_at?: string
+          zone: string
+        }
+        Update: {
+          code_reference?: string | null
+          created_at?: string
+          daylight_plan_rear?: string | null
+          daylight_plan_side?: string | null
+          definition_floor_area?: string | null
+          definition_lot_coverage?: string | null
+          exemption_front_setback_encroachment?: string | null
+          exemption_max_height?: string | null
+          exemption_side_setback_encroachment?: string | null
+          exemption_substandard_lot?: string | null
+          floor_area_ratio?: string | null
+          id?: string
+          jurisdiction?: string
+          last_updated?: string | null
+          last_updated_by?: string | null
+          lot_coverage?: string | null
+          max_height_ft?: string | null
+          min_garage_length?: string | null
+          min_garage_width?: string | null
+          min_setback_corner_ft?: string | null
+          min_setback_front_ft?: string | null
+          min_setback_rear_ft?: string | null
+          min_setback_side_ft?: string | null
+          notes?: string | null
+          ordinance_source_link?: string | null
+          parking?: string | null
+          tag_1?: string | null
+          tag_2?: string | null
+          updated_at?: string
+          zone?: string
+        }
+        Relationships: []
+      }
       notes: {
         Row: {
           comment_id: string

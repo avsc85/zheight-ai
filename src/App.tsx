@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import AIPlanChecker from "./pages/AIPlanChecker";
+import AIFeasibility from "./pages/AIFeasibility";
 import UserManagement from "./pages/UserManagement";
 import ProjectManagement from "./pages/ProjectManagement";
 import ProjectBoard from "./pages/ProjectBoard";
@@ -48,6 +49,14 @@ const App = () => (
             element={
               <ProtectedRoute>
                 <AIPlanChecker />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/ai-feasibility" 
+            element={
+              <ProtectedRoute>
+                <AIFeasibility />
               </ProtectedRoute>
             } 
           />
