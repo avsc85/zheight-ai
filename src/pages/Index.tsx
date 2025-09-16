@@ -3,7 +3,7 @@ import { Header } from "@/components/Header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { Bot, FileCheck, Folder } from "lucide-react";
+import { Bot, FileCheck, Folder, Calculator } from "lucide-react";
 
 const Index = () => {
   const { user } = useAuth();
@@ -101,6 +101,31 @@ const Index = () => {
               <Link to="/ai-plan-checker">
                 <Button className="w-full">
                   Access Plan Checker
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* AI Agent 3 - Feasibility Checker */}
+        <div className="max-w-md mb-12">
+          <Card className="hover:shadow-lg transition-shadow border-primary/20 flex flex-col h-full">
+            <CardHeader>
+              <CardTitle className="text-primary flex items-center gap-2">
+                <Calculator className="h-5 w-5" />
+                AI Agent 3: Feasibility Checker
+              </CardTitle>
+              <CardDescription>
+                AI-powered residential single-family house feasibility analysis
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex-1 flex flex-col">
+              <p className="text-sm text-muted-foreground mb-4 flex-1">
+                Analyze lot details, zoning, and jurisdiction data against local ordinance requirements for residential projects.
+              </p>
+              <Link to="/ai-feasibility">
+                <Button className="w-full bg-blue-600 hover:bg-blue-700">
+                  Access the Feasibility Checker
                 </Button>
               </Link>
             </CardContent>
