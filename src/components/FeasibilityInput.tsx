@@ -95,47 +95,35 @@ export function FeasibilityInput({ onAnalysisComplete, onAnalysisStart, onAnalys
         }
       });
 
-      // Check if the function returned a 422 error with debug info
-      if (error && error.message && error.message.includes('422')) {
-        console.log('422 Error from edge function - allowing analysis to complete for debugging');
-        // For debugging phase, show error but don't block completion
-        toast.error('Analysis completed with warnings - some data may be missing', {
-          duration: 6000,
-        });
-      } else if (error) {
+      // Handle function errors
+      if (error) {
+        console.error('Edge function error:', error);
         throw error;
       }
 
-      if (data.error) {
+      // Handle application errors from the edge function
+      if (data?.error) {
         console.error('Analysis error:', data.error);
-        // Check if this is a debug error with partial data
-        if (data.debugInfo) {
-          console.log('Debug info available:', data.debugInfo);
-          toast.error(`${data.error}\n\nDebug: ${data.debugInfo.missingFields?.join(', ')} missing`, {
-            duration: 8000,
-          });
-          return; // Don't proceed with incomplete data in strict mode
+        
+        // Show detailed error message from server
+        let errorMessage = data.error;
+        if (data.suggestions && data.suggestions.length > 0) {
+          errorMessage += '\n\nSuggestions:\n• ' + data.suggestions.join('\n• ');
         }
-        throw new Error(data.error);
-      }
-
-      // For debugging phase, allow partial results but warn the user
-      const extractedData = data.extractedData;
-      const missingFields = [];
-      
-      if (!extractedData?.lot_size) missingFields.push('lot_size');
-      if (!extractedData?.zone) missingFields.push('zone');
-      if (!extractedData?.jurisdiction) missingFields.push('jurisdiction');
-      
-      if (missingFields.length > 0) {
-        toast.warning(`Analysis completed but missing: ${missingFields.join(', ')}. Results may be incomplete.`, {
-          duration: 6000,
+        
+        toast.error(errorMessage, {
+          duration: 10000,
         });
-      } else {
-        toast.success('Feasibility analysis completed successfully');
+        return; // Don't proceed with analysis
       }
 
-      onAnalysisComplete(data.feasibilityAnalysis, data.ordinances);
+      // Successful analysis
+      if (data.feasibilityAnalysis && data.ordinances !== undefined) {
+        toast.success('Feasibility analysis completed successfully');
+        onAnalysisComplete(data.feasibilityAnalysis, data.ordinances);
+      } else {
+        throw new Error('Invalid response format from analysis service');
+      }
       
     } catch (error) {
       console.error('Error running feasibility analysis:', error);
@@ -188,6 +176,14 @@ export function FeasibilityInput({ onAnalysisComplete, onAnalysisStart, onAnalys
             disabled={isLoading || isSavingPrompt}
           >
             {isSavingPrompt ? 'Saving...' : 'Update Prompt'}
+          </Button>
+          <Button 
+            variant="ghost"
+            onClick={() => setAiPrompt('Extract the lot size, zoning designation, and jurisdiction (city/county) from this residential property address. Provide accurate information based on public records and zoning data.')}
+            disabled={isLoading}
+            size="sm"
+          >
+            Reset Prompt
           </Button>
         </div>
       </CardContent>
