@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Header } from '@/components/Header';
 import { FeasibilityInput } from '@/components/FeasibilityInput';
 import { FeasibilityResults } from '@/components/FeasibilityResults';
-import { OrdinanceTable } from '@/components/OrdinanceTable';
+import { JurisdictionOrdinanceTable } from '@/components/JurisdictionOrdinanceTable';
 
 export interface FeasibilityAnalysis {
   id: string;
@@ -89,7 +89,7 @@ export default function AIFeasibility() {
             </p>
           </div>
 
-          {/* Input Section */}
+          {/* Input and Output Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <FeasibilityInput 
               onAnalysisComplete={handleAnalysisComplete}
@@ -97,24 +97,34 @@ export default function AIFeasibility() {
               isLoading={isLoading}
             />
             
-            {/* Results Section */}
-            {feasibilityAnalysis && (
-              <FeasibilityResults 
-                analysis={feasibilityAnalysis}
-                onUpdate={handleFeasibilityUpdate}
-              />
-            )}
+            {/* Output Section - Always visible */}
+            <FeasibilityResults 
+              analysis={feasibilityAnalysis || {
+                id: '',
+                project_address: '',
+                lot_size: null,
+                zone: null,
+                jurisdiction: null,
+                source_link: null,
+                city_dept_link: null,
+                notes: null,
+                last_updated_by: null,
+                last_updated: '',
+                user_id: '',
+                created_at: '',
+                updated_at: ''
+              }}
+              onUpdate={handleFeasibilityUpdate}
+            />
           </div>
 
-          {/* Ordinance Table Section */}
-          {ordinances.length > 0 && (
-            <div className="w-full">
-              <OrdinanceTable 
-                ordinances={ordinances}
-                onUpdate={handleOrdinanceUpdate}
-              />
-            </div>
-          )}
+          {/* Ordinance Table Section - Always visible */}
+          <div className="w-full">
+            <JurisdictionOrdinanceTable 
+              ordinances={ordinances}
+              onUpdate={handleOrdinanceUpdate}
+            />
+          </div>
         </div>
       </main>
     </div>
