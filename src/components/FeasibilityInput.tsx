@@ -103,6 +103,12 @@ export function FeasibilityInput({ onAnalysisComplete, onAnalysisStart, onAnalys
         throw new Error(data.error);
       }
 
+      // Validate that we have complete extracted data
+      const extractedData = data.extractedData;
+      if (!extractedData || !extractedData.lot_size || !extractedData.zone || !extractedData.jurisdiction) {
+        throw new Error('Analysis incomplete: Unable to extract all required property information (lot size, zone, jurisdiction). Please verify the address and try again.');
+      }
+
       toast.success('Feasibility analysis completed successfully');
       onAnalysisComplete(data.feasibilityAnalysis, data.ordinances);
       

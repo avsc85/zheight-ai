@@ -42,12 +42,18 @@ serve(async (req) => {
             content: `You are an AI assistant that extracts property information from addresses. 
             You must respond with ONLY valid JSON in this exact format:
             {
-              "lot_size": "extracted lot size or null",
-              "zone": "extracted zoning information or null", 
-              "jurisdiction": "extracted city/jurisdiction or null"
+              "lot_size": "specific lot size with units (e.g., '0.25 acres', '10,000 sq ft') or null",
+              "zone": "specific zoning designation (e.g., 'R-1-5000', 'R-2') or null", 
+              "jurisdiction": "specific city or county name (e.g., 'Palo Alto', 'Santa Clara County') or null"
             }
             
-            Extract what you can from the address provided. If information cannot be determined, use null for that field.` 
+            CRITICAL: 
+            - Only return non-null values if you can determine specific, accurate information
+            - For lot_size: Must include units (sq ft, acres, etc.)
+            - For zone: Must be specific zoning code, not generic descriptions
+            - For jurisdiction: Must be specific city/county name, not state or generic location
+            - If you cannot determine accurate specific information, return null for that field
+            - Never return empty strings - use null instead` 
           },
           { 
             role: 'user', 
@@ -63,9 +69,18 @@ serve(async (req) => {
             schema: {
               type: "object",
               properties: {
-                lot_size: { type: ["string", "null"] },
-                zone: { type: ["string", "null"] },
-                jurisdiction: { type: ["string", "null"] }
+                lot_size: { 
+                  type: ["string", "null"],
+                  minLength: 1
+                },
+                zone: { 
+                  type: ["string", "null"],
+                  minLength: 1
+                },
+                jurisdiction: { 
+                  type: ["string", "null"],
+                  minLength: 1
+                }
               },
               required: ["lot_size", "zone", "jurisdiction"],
               additionalProperties: false
@@ -100,7 +115,38 @@ serve(async (req) => {
       extractedData = { lot_size: null, zone: null, jurisdiction: null };
     }
 
-    console.log('GPT-5 extracted data:', extractedData);
+    // Normalize and validate extracted data
+    const normalizeField = (value: any): string | null => {
+      if (value === null || value === undefined) return null;
+      const trimmed = String(value).trim();
+      return trimmed === '' ? null : trimmed;
+    };
+
+    extractedData = {
+      lot_size: normalizeField(extractedData.lot_size),
+      zone: normalizeField(extractedData.zone), 
+      jurisdiction: normalizeField(extractedData.jurisdiction)
+    };
+
+    console.log('GPT-5 extracted and normalized data:', extractedData);
+
+    // Validate that required fields have values
+    const missingFields = [];
+    if (!extractedData.lot_size) missingFields.push('lot_size');
+    if (!extractedData.zone) missingFields.push('zone');
+    if (!extractedData.jurisdiction) missingFields.push('jurisdiction');
+
+    if (missingFields.length > 0) {
+      console.error('Missing required fields:', missingFields);
+      return new Response(JSON.stringify({ 
+        error: `Unable to extract required property information: ${missingFields.join(', ')}. Please provide a more specific address or try again.`,
+        missingFields: missingFields,
+        extractedData: extractedData
+      }), {
+        status: 422,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
