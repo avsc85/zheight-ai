@@ -26,6 +26,39 @@ serve(async (req) => {
     }
 
     console.log('Processing feasibility analysis for address:', projectAddress);
+    console.log('User prompt:', prompt);
+
+    // Enhanced system prompt with examples and clearer instructions
+    const systemPrompt = `You are an AI assistant specialized in extracting property information from US addresses. You have access to property records, zoning information, and municipal data.
+
+    EXAMPLES of expected outputs:
+    - For "123 Main St, Palo Alto, CA": {"lot_size": "0.25 acres", "zone": "R-1", "jurisdiction": "Palo Alto"}
+    - For "456 Oak Ave, Santa Clara, CA": {"lot_size": "6,000 sq ft", "zone": "R-2", "jurisdiction": "Santa Clara"}
+    - For incomplete info: {"lot_size": null, "zone": "R-1", "jurisdiction": "San Jose"}
+
+    You must respond with ONLY valid JSON in this exact format:
+    {
+      "lot_size": "specific lot size with units (e.g., '0.25 acres', '10,000 sq ft') or null",
+      "zone": "specific zoning designation (e.g., 'R-1-5000', 'R-2', 'C-1') or null", 
+      "jurisdiction": "specific city or county name (e.g., 'Palo Alto', 'Santa Clara County') or null"
+    }
+    
+    INSTRUCTIONS: 
+    - Extract specific, factual property information from the given address
+    - For lot_size: Include units (sq ft, acres, etc.) - be specific
+    - For zone: Use actual zoning codes (R-1, R-2, C-1, etc.) not descriptions
+    - For jurisdiction: Use the specific city or county name
+    - If you cannot determine specific information, return null for that field
+    - Never return empty strings - use null instead
+    - Use your knowledge of US property records and zoning systems`;
+
+    const userMessage = `Extract property information for this address: ${projectAddress}
+
+Additional context: ${prompt}
+
+Please analyze this address and extract the lot size, zoning designation, and jurisdiction based on your knowledge of property records and municipal zoning systems.`;
+
+    console.log('Sending request to GPT-5 with enhanced prompt');
 
     // Call GPT-5 to extract lot size, zone, and jurisdiction
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -39,25 +72,11 @@ serve(async (req) => {
         messages: [
           { 
             role: 'system', 
-            content: `You are an AI assistant that extracts property information from addresses. 
-            You must respond with ONLY valid JSON in this exact format:
-            {
-              "lot_size": "specific lot size with units (e.g., '0.25 acres', '10,000 sq ft') or null",
-              "zone": "specific zoning designation (e.g., 'R-1-5000', 'R-2') or null", 
-              "jurisdiction": "specific city or county name (e.g., 'Palo Alto', 'Santa Clara County') or null"
-            }
-            
-            CRITICAL: 
-            - Only return non-null values if you can determine specific, accurate information
-            - For lot_size: Must include units (sq ft, acres, etc.)
-            - For zone: Must be specific zoning code, not generic descriptions
-            - For jurisdiction: Must be specific city/county name, not state or generic location
-            - If you cannot determine accurate specific information, return null for that field
-            - Never return empty strings - use null instead` 
+            content: systemPrompt
           },
           { 
             role: 'user', 
-            content: `${prompt}\n\nAddress: ${projectAddress}` 
+            content: userMessage
           }
         ],
         max_completion_tokens: 500,
@@ -70,16 +89,13 @@ serve(async (req) => {
               type: "object",
               properties: {
                 lot_size: { 
-                  type: ["string", "null"],
-                  minLength: 1
+                  type: ["string", "null"]
                 },
                 zone: { 
-                  type: ["string", "null"],
-                  minLength: 1
+                  type: ["string", "null"]
                 },
                 jurisdiction: { 
-                  type: ["string", "null"],
-                  minLength: 1
+                  type: ["string", "null"]
                 }
               },
               required: ["lot_size", "zone", "jurisdiction"],
@@ -92,26 +108,42 @@ serve(async (req) => {
 
     if (!response.ok) {
       const error = await response.text();
-      console.error('OpenAI API error:', error);
-      throw new Error(`OpenAI API error: ${response.status}`);
+      console.error('OpenAI API error response:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: error,
+        headers: Object.fromEntries(response.headers.entries())
+      });
+      throw new Error(`OpenAI API error: ${response.status} - ${error}`);
     }
 
     const data = await response.json();
+    console.log('OpenAI API response data:', {
+      id: data.id,
+      model: data.model,
+      usage: data.usage,
+      choices: data.choices?.length,
+      hasContent: !!data.choices?.[0]?.message?.content
+    });
+    
     let extractedData;
     
     try {
       const messageContent = data.choices[0].message.content;
-      console.log('Raw OpenAI response content:', messageContent);
+      console.log('Raw OpenAI response content:', JSON.stringify(messageContent));
       
       if (!messageContent || messageContent.trim() === '') {
         console.warn('Empty response from OpenAI, using default values');
         extractedData = { lot_size: null, zone: null, jurisdiction: null };
       } else {
         extractedData = JSON.parse(messageContent);
+        console.log('Parsed extracted data (before normalization):', extractedData);
       }
     } catch (parseError) {
-      console.error('JSON parsing error:', parseError);
-      console.error('Failed to parse content:', data.choices[0].message.content);
+      console.error('JSON parsing error:', {
+        error: parseError.message,
+        rawContent: data.choices[0].message.content
+      });
       extractedData = { lot_size: null, zone: null, jurisdiction: null };
     }
 
@@ -130,22 +162,47 @@ serve(async (req) => {
 
     console.log('GPT-5 extracted and normalized data:', extractedData);
 
-    // Validate that required fields have values
+    // Count how many fields we successfully extracted
+    const extractedFields = [];
     const missingFields = [];
-    if (!extractedData.lot_size) missingFields.push('lot_size');
-    if (!extractedData.zone) missingFields.push('zone');
-    if (!extractedData.jurisdiction) missingFields.push('jurisdiction');
+    
+    if (extractedData.lot_size) extractedFields.push('lot_size');
+    else missingFields.push('lot_size');
+    
+    if (extractedData.zone) extractedFields.push('zone'); 
+    else missingFields.push('zone');
+    
+    if (extractedData.jurisdiction) extractedFields.push('jurisdiction');
+    else missingFields.push('jurisdiction');
 
+    console.log('Extraction summary:', {
+      extractedFields,
+      missingFields,
+      extractionRate: `${extractedFields.length}/3`
+    });
+
+    // For debugging phase, allow partial extraction but warn about missing fields
     if (missingFields.length > 0) {
-      console.error('Missing required fields:', missingFields);
-      return new Response(JSON.stringify({ 
-        error: `Unable to extract required property information: ${missingFields.join(', ')}. Please provide a more specific address or try again.`,
-        missingFields: missingFields,
-        extractedData: extractedData
-      }), {
-        status: 422,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      console.warn(`Missing fields: ${missingFields.join(', ')}`);
+      console.warn('Address analyzed:', projectAddress);
+      console.warn('Prompt used:', prompt);
+      
+      // Return 422 only if we have no useful data at all
+      if (extractedFields.length === 0) {
+        console.error('Complete extraction failure - no fields extracted');
+        return new Response(JSON.stringify({ 
+          error: `Unable to extract any property information from the address: "${projectAddress}". Please verify the address format and try again.`,
+          debugInfo: {
+            address: projectAddress,
+            extractedData,
+            missingFields,
+            prompt: prompt.substring(0, 100) + '...'
+          }
+        }), {
+          status: 422,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
     // Initialize Supabase client

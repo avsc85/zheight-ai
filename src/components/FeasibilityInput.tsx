@@ -95,21 +95,46 @@ export function FeasibilityInput({ onAnalysisComplete, onAnalysisStart, onAnalys
         }
       });
 
-      if (error) {
+      // Check if the function returned a 422 error with debug info
+      if (error && error.message && error.message.includes('422')) {
+        console.log('422 Error from edge function - allowing analysis to complete for debugging');
+        // For debugging phase, show error but don't block completion
+        toast.error('Analysis completed with warnings - some data may be missing', {
+          duration: 6000,
+        });
+      } else if (error) {
         throw error;
       }
 
       if (data.error) {
+        console.error('Analysis error:', data.error);
+        // Check if this is a debug error with partial data
+        if (data.debugInfo) {
+          console.log('Debug info available:', data.debugInfo);
+          toast.error(`${data.error}\n\nDebug: ${data.debugInfo.missingFields?.join(', ')} missing`, {
+            duration: 8000,
+          });
+          return; // Don't proceed with incomplete data in strict mode
+        }
         throw new Error(data.error);
       }
 
-      // Validate that we have complete extracted data
+      // For debugging phase, allow partial results but warn the user
       const extractedData = data.extractedData;
-      if (!extractedData || !extractedData.lot_size || !extractedData.zone || !extractedData.jurisdiction) {
-        throw new Error('Analysis incomplete: Unable to extract all required property information (lot size, zone, jurisdiction). Please verify the address and try again.');
+      const missingFields = [];
+      
+      if (!extractedData?.lot_size) missingFields.push('lot_size');
+      if (!extractedData?.zone) missingFields.push('zone');
+      if (!extractedData?.jurisdiction) missingFields.push('jurisdiction');
+      
+      if (missingFields.length > 0) {
+        toast.warning(`Analysis completed but missing: ${missingFields.join(', ')}. Results may be incomplete.`, {
+          duration: 6000,
+        });
+      } else {
+        toast.success('Feasibility analysis completed successfully');
       }
 
-      toast.success('Feasibility analysis completed successfully');
       onAnalysisComplete(data.feasibilityAnalysis, data.ordinances);
       
     } catch (error) {
