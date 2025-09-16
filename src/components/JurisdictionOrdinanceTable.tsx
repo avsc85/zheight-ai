@@ -47,42 +47,53 @@ export function JurisdictionOrdinanceTable({ ordinances, onUpdate }: Jurisdictio
         <CardTitle>Project Feasibility</CardTitle>
       </CardHeader>
       <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-12">#</TableHead>
-              <TableHead className="w-1/3">Ordinance</TableHead>
-              <TableHead className="w-1/3">Value</TableHead>
-              <TableHead>Notes</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {ordinanceFields.map((field, index) => {
-              const value = currentOrdinance ? (currentOrdinance as any)[field.key] : '';
-              
-              return (
-                <TableRow key={field.key}>
-                  <TableCell className="font-medium">{index + 1}</TableCell>
-                  <TableCell>{field.label}</TableCell>
-                  <TableCell>
-                    <Input
-                      value={value || ''}
-                      placeholder={currentOrdinance ? '' : 'No data available'}
-                      readOnly
-                      className="w-full"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      placeholder="Add notes..."
-                      className="w-full"
-                    />
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-16 text-center">#</TableHead>
+                <TableHead className="min-w-[200px] w-[25%]">Ordinance</TableHead>
+                <TableHead className="min-w-[300px] w-[45%]">Value</TableHead>
+                <TableHead className="min-w-[200px] w-[30%]">Notes</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {ordinanceFields.map((field, index) => {
+                const value = currentOrdinance ? (currentOrdinance as any)[field.key] : '';
+                
+                return (
+                  <TableRow key={field.key} className="min-h-[60px]">
+                    <TableCell className="font-medium text-center align-top pt-4">{index + 1}</TableCell>
+                    <TableCell className="align-top pt-4">
+                      <div className="break-words text-sm leading-tight">
+                        {field.label.replace(/_/g, ' ')}
+                      </div>
+                    </TableCell>
+                    <TableCell className="align-top pt-2">
+                      <Input
+                        value={value || ''}
+                        placeholder={currentOrdinance ? '' : 'No data available'}
+                        readOnly
+                        className="w-full min-h-[40px] text-sm leading-tight resize-none"
+                        style={{ 
+                          whiteSpace: 'pre-wrap',
+                          wordWrap: 'break-word',
+                          overflow: 'visible'
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell className="align-top pt-2">
+                      <Input
+                        placeholder="Add notes..."
+                        className="w-full min-h-[40px] text-sm"
+                      />
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
         
         <div className="flex justify-end mt-4">
           <Button onClick={handleUpdate}>
