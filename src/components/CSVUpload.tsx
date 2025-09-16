@@ -22,7 +22,7 @@ interface ColumnMapping {
 }
 
 const DATABASE_COLUMNS = [
-  { value: '', label: 'Skip Column' },
+  { value: 'skip', label: 'Skip Column' },
   { value: 'tag_1', label: 'Tag 1' },
   { value: 'tag_2', label: 'Tag 2' },
   { value: 'jurisdiction', label: 'Jurisdiction *' },
@@ -95,12 +95,12 @@ export function CSVUpload() {
         const mappings = data.headers.map(header => {
           const lowerHeader = header.toLowerCase().replace(/[^a-z0-9]/g, '_');
           const matchedColumn = DATABASE_COLUMNS.find(col => 
-            col.value && col.value.toLowerCase().includes(lowerHeader.slice(0, 10))
+            col.value !== 'skip' && col.value.toLowerCase().includes(lowerHeader.slice(0, 10))
           );
           
           return {
             csvColumn: header,
-            dbColumn: matchedColumn?.value || ''
+            dbColumn: matchedColumn?.value || 'skip'
           };
         });
         setColumnMappings(mappings);
@@ -125,7 +125,7 @@ export function CSVUpload() {
   const validateMappings = (): boolean => {
     const requiredColumns = ['jurisdiction', 'zone'];
     const mappedDbColumns = columnMappings
-      .filter(m => m.dbColumn)
+      .filter(m => m.dbColumn && m.dbColumn !== 'skip')
       .map(m => m.dbColumn);
     
     const missingRequired = requiredColumns.filter(col => !mappedDbColumns.includes(col));
@@ -136,7 +136,7 @@ export function CSVUpload() {
     }
 
     // Check for duplicate mappings
-    const dbColumns = mappedDbColumns.filter(col => col);
+    const dbColumns = mappedDbColumns.filter(col => col && col !== 'skip');
     const duplicates = dbColumns.filter((col, index) => dbColumns.indexOf(col) !== index);
     
     if (duplicates.length > 0) {
@@ -156,7 +156,7 @@ export function CSVUpload() {
       const { data, error } = await supabase.functions.invoke('csv-upload-ordinances', {
         body: {
           csvData,
-          columnMappings: columnMappings.filter(m => m.dbColumn)
+          columnMappings: columnMappings.filter(m => m.dbColumn && m.dbColumn !== 'skip')
         }
       });
 
@@ -293,7 +293,7 @@ export function CSVUpload() {
                           {header}
                           <br />
                           <span className="text-xs text-muted-foreground">
-                            → {columnMappings[index]?.dbColumn || 'Skip'}
+                            → {columnMappings[index]?.dbColumn === 'skip' ? 'Skip' : columnMappings[index]?.dbColumn || 'Skip'}
                           </span>
                         </TableHead>
                       ))}
