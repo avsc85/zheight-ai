@@ -108,7 +108,7 @@ const Index = () => {
         </div>
 
         {/* AI Agent 3 - Feasibility Checker */}
-        <div className="max-w-md mb-12">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
           <Card className="hover:shadow-lg transition-shadow border-primary/20 flex flex-col h-full">
             <CardHeader>
               <CardTitle className="text-primary flex items-center gap-2">
