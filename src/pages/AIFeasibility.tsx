@@ -68,6 +68,10 @@ export default function AIFeasibility() {
     setIsLoading(true);
   };
 
+  const handleAnalysisEnd = () => {
+    setIsLoading(false);
+  };
+
   const handleFeasibilityUpdate = (updatedAnalysis: FeasibilityAnalysis) => {
     setFeasibilityAnalysis(updatedAnalysis);
   };
@@ -94,6 +98,7 @@ export default function AIFeasibility() {
             <FeasibilityInput 
               onAnalysisComplete={handleAnalysisComplete}
               onAnalysisStart={handleAnalysisStart}
+              onAnalysisEnd={handleAnalysisEnd}
               isLoading={isLoading}
             />
             

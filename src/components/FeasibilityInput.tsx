@@ -11,10 +11,11 @@ import { FeasibilityAnalysis, JurisdictionOrdinance } from '@/pages/AIFeasibilit
 interface FeasibilityInputProps {
   onAnalysisComplete: (analysis: FeasibilityAnalysis, ordinances: JurisdictionOrdinance[]) => void;
   onAnalysisStart: () => void;
+  onAnalysisEnd: () => void;
   isLoading: boolean;
 }
 
-export function FeasibilityInput({ onAnalysisComplete, onAnalysisStart, isLoading }: FeasibilityInputProps) {
+export function FeasibilityInput({ onAnalysisComplete, onAnalysisStart, onAnalysisEnd, isLoading }: FeasibilityInputProps) {
   const [projectAddress, setProjectAddress] = useState('');
   const [aiPrompt, setAiPrompt] = useState(
     'Extract the lot size, zoning designation, and jurisdiction (city/county) from this residential property address. Provide accurate information based on public records and zoning data.'
@@ -108,7 +109,8 @@ export function FeasibilityInput({ onAnalysisComplete, onAnalysisStart, isLoadin
     } catch (error) {
       console.error('Error running feasibility analysis:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to run feasibility analysis');
-      onAnalysisStart(); // Reset loading state
+    } finally {
+      onAnalysisEnd();
     }
   };
 

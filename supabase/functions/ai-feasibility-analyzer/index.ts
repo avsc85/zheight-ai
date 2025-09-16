@@ -55,7 +55,23 @@ serve(async (req) => {
           }
         ],
         max_completion_tokens: 500,
-        response_format: { type: "json_object" }
+        response_format: { 
+          type: "json_schema",
+          json_schema: {
+            name: "property_extraction",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: {
+                lot_size: { type: ["string", "null"] },
+                zone: { type: ["string", "null"] },
+                jurisdiction: { type: ["string", "null"] }
+              },
+              required: ["lot_size", "zone", "jurisdiction"],
+              additionalProperties: false
+            }
+          }
+        }
       }),
     });
 
@@ -66,7 +82,23 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    const extractedData = JSON.parse(data.choices[0].message.content);
+    let extractedData;
+    
+    try {
+      const messageContent = data.choices[0].message.content;
+      console.log('Raw OpenAI response content:', messageContent);
+      
+      if (!messageContent || messageContent.trim() === '') {
+        console.warn('Empty response from OpenAI, using default values');
+        extractedData = { lot_size: null, zone: null, jurisdiction: null };
+      } else {
+        extractedData = JSON.parse(messageContent);
+      }
+    } catch (parseError) {
+      console.error('JSON parsing error:', parseError);
+      console.error('Failed to parse content:', data.choices[0].message.content);
+      extractedData = { lot_size: null, zone: null, jurisdiction: null };
+    }
 
     console.log('GPT-5 extracted data:', extractedData);
 
