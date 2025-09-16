@@ -83,13 +83,25 @@ export function FeasibilityInput({ onAnalysisComplete, onAnalysisStart, isLoadin
           />
         </div>
         
-        <Button 
-          onClick={handleRun} 
-          disabled={isLoading || !projectAddress.trim()}
-          className="w-full"
-        >
-          {isLoading ? 'Running Analysis...' : 'RUN'}
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            onClick={handleRun} 
+            disabled={isLoading || !projectAddress.trim()}
+            className="flex-1"
+          >
+            {isLoading ? 'Running Analysis...' : 'RUN'}
+          </Button>
+          <Button 
+            variant="outline"
+            onClick={() => {
+              // TODO: Open prompt editor dialog
+              toast.info('Prompt editor coming soon');
+            }}
+            disabled={isLoading}
+          >
+            Update Prompt
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
