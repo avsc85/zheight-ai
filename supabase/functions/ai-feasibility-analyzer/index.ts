@@ -63,94 +63,166 @@ Additional context (informational only): ${sanitizedPrompt}
 
 Please analyze this address and extract the lot size, zoning designation, and jurisdiction based on your knowledge of property records and municipal zoning systems.`;
 
+    // Try GPT-5 first, then fallback to GPT-4.1 if needed
+    let response;
+    let modelUsed = 'gpt-5-2025-08-07';
+    let extractedData;
+
     console.log('Sending request to GPT-5 with enhanced prompt');
 
-    // Call GPT-5 to extract lot size, zone, and jurisdiction
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openAIApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-5-2025-08-07',
-        messages: [
-          { 
-            role: 'system', 
-            content: systemPrompt
-          },
-          { 
-            role: 'user', 
-            content: userMessage
-          }
-        ],
-        max_completion_tokens: 500,
-        response_format: { 
-          type: "json_schema",
-          json_schema: {
-            name: "property_extraction",
-            strict: true,
-            schema: {
-              type: "object",
-              properties: {
-                lot_size: { 
-                  type: ["string", "null"]
+    try {
+      // First attempt with GPT-5 and strict JSON schema
+      response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openAIApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-5-2025-08-07',
+          messages: [
+            { 
+              role: 'system', 
+              content: systemPrompt
+            },
+            { 
+              role: 'user', 
+              content: userMessage
+            }
+          ],
+          max_completion_tokens: 500,
+          response_format: { 
+            type: "json_schema",
+            json_schema: {
+              name: "property_extraction",
+              strict: true,
+              schema: {
+                type: "object",
+                properties: {
+                  lot_size: { 
+                    type: ["string", "null"]
+                  },
+                  zone: { 
+                    type: ["string", "null"]
+                  },
+                  jurisdiction: { 
+                    type: ["string", "null"]
+                  }
                 },
-                zone: { 
-                  type: ["string", "null"]
-                },
-                jurisdiction: { 
-                  type: ["string", "null"]
-                }
-              },
-              required: ["lot_size", "zone", "jurisdiction"],
-              additionalProperties: false
+                required: ["lot_size", "zone", "jurisdiction"],
+                additionalProperties: false
+              }
             }
           }
-        }
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('OpenAI API error response:', {
-        status: response.status,
-        statusText: response.statusText,
-        error: error,
-        headers: Object.fromEntries(response.headers.entries())
+        }),
       });
-      throw new Error(`OpenAI API error: ${response.status} - ${error}`);
-    }
 
-    const data = await response.json();
-    console.log('OpenAI API response data:', {
-      id: data.id,
-      model: data.model,
-      usage: data.usage,
-      choices: data.choices?.length,
-      hasContent: !!data.choices?.[0]?.message?.content
-    });
-    
-    let extractedData;
-    
-    try {
-      const messageContent = data.choices[0].message.content;
-      console.log('Raw OpenAI response content:', JSON.stringify(messageContent));
-      
-      if (!messageContent || messageContent.trim() === '') {
-        console.warn('Empty response from OpenAI, using default values');
-        extractedData = { lot_size: null, zone: null, jurisdiction: null };
-      } else {
-        extractedData = JSON.parse(messageContent);
-        console.log('Parsed extracted data (before normalization):', extractedData);
+      if (!response.ok) {
+        throw new Error(`GPT-5 API error: ${response.status}`);
       }
-    } catch (parseError) {
-      console.error('JSON parsing error:', {
-        error: parseError.message,
-        rawContent: data.choices[0].message.content
+
+      const data = await response.json();
+      console.log('GPT-5 API response data:', {
+        id: data.id,
+        model: data.model,
+        usage: data.usage,
+        choices: data.choices?.length,
+        hasContent: !!data.choices?.[0]?.message?.content
       });
-      extractedData = { lot_size: null, zone: null, jurisdiction: null };
+
+      const messageContent = data.choices[0].message.content;
+      console.log('Raw GPT-5 response content:', JSON.stringify(messageContent));
+
+      // Check if GPT-5 returned empty or invalid content
+      if (!messageContent || messageContent.trim() === '') {
+        throw new Error('GPT-5 returned empty content');
+      }
+
+      try {
+        extractedData = JSON.parse(messageContent);
+        console.log('GPT-5 parsed data:', extractedData);
+      } catch (parseError) {
+        throw new Error(`GPT-5 JSON parsing failed: ${parseError.message}`);
+      }
+
+    } catch (gpt5Error) {
+      console.warn('GPT-5 failed, attempting fallback to GPT-4.1:', gpt5Error.message);
+      
+      // Fallback to GPT-4.1 with simpler JSON object format
+      const fallbackPrompt = `Extract property information from this US address: ${projectAddress}
+
+Context: ${sanitizedPrompt}
+
+Return ONLY a valid JSON object with these exact fields:
+{
+  "lot_size": "size with units like '0.25 acres' or '8000 sq ft', or null if unknown",
+  "zone": "zoning code like 'R-1', 'R-2', etc., or null if unknown", 
+  "jurisdiction": "city or county name like 'Palo Alto' or 'Santa Clara County', or null if unknown"
+}
+
+Use your knowledge of US property records. If you cannot determine a field, use null.`;
+
+      response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openAIApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4.1-2025-04-14',
+          messages: [
+            { 
+              role: 'user', 
+              content: fallbackPrompt
+            }
+          ],
+          max_tokens: 300,
+          temperature: 0.1,
+          response_format: { type: "json_object" }
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        console.error('GPT-4.1 fallback API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: error
+        });
+        throw new Error(`Both GPT-5 and GPT-4.1 failed. GPT-4.1 error: ${response.status} - ${error}`);
+      }
+
+      const fallbackData = await response.json();
+      modelUsed = 'gpt-4.1-2025-04-14 (fallback)';
+      
+      console.log('GPT-4.1 fallback response data:', {
+        id: fallbackData.id,
+        model: fallbackData.model,
+        usage: fallbackData.usage,
+        choices: fallbackData.choices?.length,
+        hasContent: !!fallbackData.choices?.[0]?.message?.content
+      });
+
+      const fallbackContent = fallbackData.choices[0].message.content;
+      console.log('Raw GPT-4.1 fallback content:', JSON.stringify(fallbackContent));
+
+      if (!fallbackContent || fallbackContent.trim() === '') {
+        throw new Error('Both models returned empty content');
+      }
+
+      try {
+        extractedData = JSON.parse(fallbackContent);
+        console.log('GPT-4.1 fallback parsed data:', extractedData);
+      } catch (parseError) {
+        console.error('GPT-4.1 JSON parsing error:', {
+          error: parseError.message,
+          rawContent: fallbackContent
+        });
+        extractedData = { lot_size: null, zone: null, jurisdiction: null };
+      }
     }
+
+    console.log(`Successfully extracted data using model: ${modelUsed}`);
 
     // Normalize and validate extracted data
     const normalizeField = (value: any): string | null => {
@@ -165,7 +237,7 @@ Please analyze this address and extract the lot size, zoning designation, and ju
       jurisdiction: normalizeField(extractedData.jurisdiction)
     };
 
-    console.log('GPT-5 extracted and normalized data:', extractedData);
+    console.log(`${modelUsed} extracted and normalized data:`, extractedData);
 
     // Count how many fields we successfully extracted
     const extractedFields = [];
