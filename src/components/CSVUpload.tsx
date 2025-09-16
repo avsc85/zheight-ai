@@ -204,7 +204,7 @@ export function CSVUpload() {
           <FileText className="h-4 w-4" />
           <AlertDescription>
             Upload a CSV file to append data to the jurisdiction ordinances table. 
-            Required columns: Jurisdiction, Zone. Map your CSV columns to database columns below.
+            Required columns: Jurisdiction, Zone. Map your CSV columns to table rows names above.
           </AlertDescription>
         </Alert>
 
