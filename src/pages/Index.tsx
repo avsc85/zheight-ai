@@ -124,7 +124,7 @@ const Index = () => {
                 Analyze lot details, zoning, and jurisdiction data against local ordinance requirements for residential projects.
               </p>
               <Link to="/ai-feasibility">
-                <Button className="w-full bg-blue-600 hover:bg-blue-700">
+                <Button className="w-full">
                   Access the Feasibility Checker
                 </Button>
               </Link>
