@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.ai-feasibility-analyzer]
 verify_jwt = false
+
+[functions.csv-upload-ordinances]
+verify_jwt = false

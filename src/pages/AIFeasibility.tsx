@@ -3,6 +3,7 @@ import { Header } from '@/components/Header';
 import { FeasibilityInput } from '@/components/FeasibilityInput';
 import { FeasibilityResults } from '@/components/FeasibilityResults';
 import { JurisdictionOrdinanceTable } from '@/components/JurisdictionOrdinanceTable';
+import { CSVUpload } from '@/components/CSVUpload';
 
 export interface FeasibilityAnalysis {
   id: string;
@@ -129,6 +130,11 @@ export default function AIFeasibility() {
               ordinances={ordinances}
               onUpdate={handleOrdinanceUpdate}
             />
+          </div>
+
+          {/* CSV Upload Section - Admin only */}
+          <div className="w-full">
+            <CSVUpload />
           </div>
         </div>
       </main>
