@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,6 +19,64 @@ export function FeasibilityInput({ onAnalysisComplete, onAnalysisStart, isLoadin
   const [aiPrompt, setAiPrompt] = useState(
     'Extract the lot size, zoning designation, and jurisdiction (city/county) from this residential property address. Provide accurate information based on public records and zoning data.'
   );
+  const [isSavingPrompt, setIsSavingPrompt] = useState(false);
+
+  // Load existing prompt from database on component mount
+  useEffect(() => {
+    const loadPrompt = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('agent_prompts')
+          .select('prompt')
+          .eq('name', 'default_Feasibility_Prompt')
+          .maybeSingle();
+
+        if (error) {
+          console.error('Error loading prompt:', error);
+          return;
+        }
+
+        if (data?.prompt) {
+          setAiPrompt(data.prompt);
+        }
+      } catch (error) {
+        console.error('Error loading prompt:', error);
+      }
+    };
+
+    loadPrompt();
+  }, []);
+
+  const handleUpdatePrompt = async () => {
+    if (!aiPrompt.trim()) {
+      toast.error('Please enter a prompt before saving');
+      return;
+    }
+
+    setIsSavingPrompt(true);
+
+    try {
+      const { error } = await supabase
+        .from('agent_prompts')
+        .upsert({
+          name: 'default_Feasibility_Prompt',
+          prompt: aiPrompt.trim()
+        }, {
+          onConflict: 'name'
+        });
+
+      if (error) {
+        throw error;
+      }
+
+      toast.success('Prompt updated successfully');
+    } catch (error) {
+      console.error('Error saving prompt:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update prompt');
+    } finally {
+      setIsSavingPrompt(false);
+    }
+  };
 
   const handleRun = async () => {
     if (!projectAddress.trim()) {
@@ -93,13 +151,10 @@ export function FeasibilityInput({ onAnalysisComplete, onAnalysisStart, isLoadin
           </Button>
           <Button 
             variant="outline"
-            onClick={() => {
-              // TODO: Open prompt editor dialog
-              toast.info('Prompt editor coming soon');
-            }}
-            disabled={isLoading}
+            onClick={handleUpdatePrompt}
+            disabled={isLoading || isSavingPrompt}
           >
-            Update Prompt
+            {isSavingPrompt ? 'Saving...' : 'Update Prompt'}
           </Button>
         </div>
       </CardContent>
