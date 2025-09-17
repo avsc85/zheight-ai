@@ -60,7 +60,7 @@ serve(async (req) => {
   }
 
   const processingStartTime = Date.now();
-  let modelUsed = 'llama-3.1-sonar-large-128k-online';
+  let modelUsed = 'sonar';
 
   try {
     const { projectAddress, prompt } = await req.json();
