@@ -60,7 +60,7 @@ serve(async (req) => {
   }
 
   const processingStartTime = Date.now();
-  let modelUsed = 'llama-3.1-sonar-small-128k-online';
+  let modelUsed = 'sonar-small';
 
   try {
     const { projectAddress, prompt } = await req.json();
@@ -86,8 +86,8 @@ serve(async (req) => {
     console.log('🏠 Processing feasibility analysis for address:', projectAddress);
     console.log('📝 User prompt:', prompt);
 
-    const modelUsed = 'llama-3.1-sonar-small-128k-online';
-    console.log(`🚀 Using Perplexity for property analysis`);
+    // Validate Perplexity API connectivity and model availability
+    console.log(`🚀 Using Perplexity Sonar model: ${modelUsed}`);
 
     // 🎯 Enhanced System Prompt for US Property Research - Directed to use authoritative sources
     const systemPrompt = `You are a US property research AI specializing in property data extraction. Extract lot_size, zone, and jurisdiction data from authoritative sources like Zillow.com, Redfin.com, county assessor websites, and municipal planning departments.
@@ -150,9 +150,7 @@ Extract lot_size, zone, jurisdiction. Respond with JSON only.`;
               top_p: 0.9,
               return_images: false,
               return_related_questions: false,
-              search_recency_filter: 'month',
-              frequency_penalty: 1,
-              presence_penalty: 0
+              search_recency_filter: 'month'
             }),
           });
 
@@ -184,13 +182,25 @@ Extract lot_size, zone, jurisdiction. Respond with JSON only.`;
     try {
       openAIResponse = await makePerplexityRequest();
 
-      if (!openAIResponse.ok) {
+          if (!openAIResponse.ok) {
         const errorText = await openAIResponse.text();
         console.error('❌ Perplexity API Error:', {
           status: openAIResponse.status,
           statusText: openAIResponse.statusText,
-          error: errorText
+          error: errorText,
+          model: modelUsed
         });
+        
+        // Enhanced error parsing for better debugging
+        let parsedError;
+        try {
+          parsedError = JSON.parse(errorText);
+          if (parsedError.error?.message?.includes('Invalid model')) {
+            console.error(`🚨 MODEL ERROR: Model '${modelUsed}' is not valid. Check Perplexity documentation for available models.`);
+          }
+        } catch (e) {
+          console.warn('Could not parse error response as JSON');
+        }
         
         logAPIMetrics(`${modelUsed}-failed`, false, [], projectAddress, null, Date.now());
         throw new Error(`Perplexity API error: ${openAIResponse.status} - ${errorText}`);
@@ -223,21 +233,21 @@ Extract lot_size, zone, jurisdiction. Respond with JSON only.`;
               'Authorization': `Bearer ${perplexityApiKey}`,
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-              model: modelUsed,
-              messages: [
-                { 
-                  role: 'system', 
-                  content: 'Extract property data. Return only JSON: {"lot_size": "value or null", "zone": "value or null", "jurisdiction": "value or null"}' 
-                },
-                { role: 'user', content: `Address: ${projectAddress}` }
-              ],
-              max_tokens: 200,
-              temperature: 0.2,
-              top_p: 0.9,
-              return_images: false,
-              return_related_questions: false
-            }),
+              body: JSON.stringify({
+                model: modelUsed,
+                messages: [
+                  { 
+                    role: 'system', 
+                    content: 'Extract property data. Return only JSON: {"lot_size": "value or null", "zone": "value or null", "jurisdiction": "value or null"}' 
+                  },
+                  { role: 'user', content: `Address: ${projectAddress}` }
+                ],
+                max_tokens: 200,
+                temperature: 0.2,
+                top_p: 0.9,
+                return_images: false,
+                return_related_questions: false
+              }),
           });
           
           if (salvageResponse.ok) {
