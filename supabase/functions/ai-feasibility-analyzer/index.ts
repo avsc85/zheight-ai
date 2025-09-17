@@ -102,21 +102,21 @@ serve(async (req) => {
 🎯 OUTPUT FORMAT (STRICT):
 Respond with ONLY valid JSON in this exact structure:
 {
-  "Lot_Size": "exact size with units (e.g., '8,000 sq ft', '0.23 acres') or null",
-  "Zone": "specific zoning code (e.g., 'R-1-6000', 'R-2-A', 'RS-7') or null",
-  "Jurisdiction": "exact municipal name (e.g., 'City of Palo Alto', 'Santa Clara County') or null"
+  "lot_size": "exact size with units (e.g., '8,000 sq ft', '0.23 acres') or null",
+  "zone": "specific zoning code (e.g., 'R-1-6000', 'R-2-A', 'RS-7') or null",
+  "jurisdiction": "exact municipal name (e.g., 'City of Palo Alto', 'Santa Clara County') or null"
 }
 
 ⚠️ CRITICAL RULES:
 - Never return empty strings - use null for unknown values
-- Include units for Lot_Size (sq ft, acres, etc.)
+- Include units for lot_size (sq ft, acres, etc.)
 - Use official zoning codes, not descriptions
 - Return the building/planning department jurisdiction, not just city name
 - If you cannot find reliable data, return null rather than guessing
 
 📋 EXAMPLES:
-- "1234 Forest Ave, Palo Alto, CA" → {"Lot_Size": "6,534 sq ft", "Zone": "R-1", "Jurisdiction": "City of Palo Alto"}
-- "567 Main St, Unincorporated Santa Clara County" → {"Lot_Size": "0.5 acres", "Zone": "A1", "Jurisdiction": "Santa Clara County"}`;
+- "1234 Forest Ave, Palo Alto, CA" → {"lot_size": "6,534 sq ft", "zone": "R-1", "jurisdiction": "City of Palo Alto"}
+- "567 Main St, Unincorporated Santa Clara County" → {"lot_size": "0.5 acres", "zone": "A1", "jurisdiction": "Santa Clara County"}`;
 
     const userMessage = `🏡 PROPERTY RESEARCH REQUEST
 
@@ -126,9 +126,9 @@ ADDITIONAL CONTEXT: ${sanitizedPrompt}
 
 TASK: Using your knowledge of US property databases, tax records, and zoning systems, extract the following information for this specific address:
 
-1. Lot_Size: Find the parcel size from tax assessor records or property databases
-2. Zone: Identify the current zoning designation from municipal zoning maps
-3. Jurisdiction: Determine which city/county building department has authority
+1. lot_size: Find the parcel size from tax assessor records or property databases
+2. zone: Identify the current zoning designation from municipal zoning maps
+3. jurisdiction: Determine which city/county building department has authority
 
 Focus on official records and be specific with measurements and codes. If you cannot find reliable information for any field, return null for that field.`;
 
@@ -173,17 +173,17 @@ Focus on official records and be specific with measurements and codes. If you ca
             schema: {
               type: "object",
               properties: {
-                Lot_Size: { 
+                lot_size: { 
                   type: ["string", "null"]
                 },
-                Zone: { 
+                zone: { 
                   type: ["string", "null"]
                 },
-                Jurisdiction: { 
+                jurisdiction: { 
                   type: ["string", "null"]
                 }
               },
-              required: ["Lot_Size", "Zone", "Jurisdiction"],
+              required: ["lot_size", "zone", "jurisdiction"],
               additionalProperties: false
             }
           }
@@ -248,14 +248,12 @@ Focus on official records and be specific with measurements and codes. If you ca
       return trimmed === '' || trimmed.toLowerCase() === 'unknown' ? null : trimmed;
     };
 
-    // Map GPT-5 response fields to database fields
-    const mappedData = {
-      lot_size: normalizeField(extractedData.Lot_Size),
-      zone: normalizeField(extractedData.Zone), 
-      jurisdiction: normalizeField(extractedData.Jurisdiction)
+    // Normalize extracted data fields
+    extractedData = {
+      lot_size: normalizeField(extractedData.lot_size),
+      zone: normalizeField(extractedData.zone), 
+      jurisdiction: normalizeField(extractedData.jurisdiction)
     };
-    
-    extractedData = mappedData;
 
     console.log(`🔧 ${modelUsed} extracted and normalized data:`, extractedData);
 
@@ -263,14 +261,14 @@ Focus on official records and be specific with measurements and codes. If you ca
     const extractedFieldsList = [];
     const missingFields = [];
     
-    if (extractedData.lot_size) extractedFieldsList.push('Lot_Size');
-    else missingFields.push('Lot_Size');
+    if (extractedData.lot_size) extractedFieldsList.push('lot_size');
+    else missingFields.push('lot_size');
     
-    if (extractedData.zone) extractedFieldsList.push('Zone'); 
-    else missingFields.push('Zone');
+    if (extractedData.zone) extractedFieldsList.push('zone'); 
+    else missingFields.push('zone');
     
-    if (extractedData.jurisdiction) extractedFieldsList.push('Jurisdiction');
-    else missingFields.push('Jurisdiction');
+    if (extractedData.jurisdiction) extractedFieldsList.push('jurisdiction');
+    else missingFields.push('jurisdiction');
 
     console.log('📈 Extraction analytics:', {
       model: modelUsed,
