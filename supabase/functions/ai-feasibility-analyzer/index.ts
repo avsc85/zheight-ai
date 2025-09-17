@@ -132,12 +132,12 @@ TASK: Using your knowledge of US property databases, tax records, and zoning sys
 
 Focus on official records and be specific with measurements and codes. If you cannot find reliable information for any field, return null for that field.`;
 
-    // Phase 1: Try GPT-5 with improved JSON schema, then fallback to GPT-4.1
+    // Use only GPT-5 for property analysis
     let response;
     let extractedData;
     modelUsed = 'gpt-5-2025-08-07';
 
-    console.log('🚀 Attempting GPT-5 with improved JSON schema');
+    console.log('🚀 Using GPT-5 for property analysis');
     console.log('📤 FULL PROMPT TO GPT-5:', { 
       systemPrompt: systemPrompt.substring(0, 200) + '...', 
       userMessage: userMessage.substring(0, 200) + '...',
@@ -145,209 +145,106 @@ Focus on official records and be specific with measurements and codes. If you ca
       promptLength: sanitizedPrompt.length
     });
 
-    try {
-      // Phase 1: GPT-5 with improved oneOf schema format
-      response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${openAIApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-5-2025-08-07',
-          messages: [
-            { 
-              role: 'system', 
-              content: systemPrompt
-            },
-            { 
-              role: 'user', 
-              content: userMessage
-            }
-          ],
-          max_completion_tokens: 500,
-          response_format: { 
-            type: "json_schema",
-            json_schema: {
-              name: "property_extraction",
-              strict: true,
-              schema: {
-                type: "object",
-                properties: {
-                  lot_size: { 
-                    oneOf: [
-                      { type: "string" },
-                      { type: "null" }
-                    ]
-                  },
-                  zone: { 
-                    oneOf: [
-                      { type: "string" },
-                      { type: "null" }
-                    ]
-                  },
-                  jurisdiction: { 
-                    oneOf: [
-                      { type: "string" },
-                      { type: "null" }
-                    ]
-                  }
+    // GPT-5 with improved oneOf schema format
+    response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openAIApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-5-2025-08-07',
+        messages: [
+          { 
+            role: 'system', 
+            content: systemPrompt
+          },
+          { 
+            role: 'user', 
+            content: userMessage
+          }
+        ],
+        max_completion_tokens: 500,
+        response_format: { 
+          type: "json_schema",
+          json_schema: {
+            name: "property_extraction",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: {
+                lot_size: { 
+                  oneOf: [
+                    { type: "string" },
+                    { type: "null" }
+                  ]
                 },
-                required: ["lot_size", "zone", "jurisdiction"],
-                additionalProperties: false
-              }
+                zone: { 
+                  oneOf: [
+                    { type: "string" },
+                    { type: "null" }
+                  ]
+                },
+                jurisdiction: { 
+                  oneOf: [
+                    { type: "string" },
+                    { type: "null" }
+                  ]
+                }
+              },
+              required: ["lot_size", "zone", "jurisdiction"],
+              additionalProperties: false
             }
           }
-        }),
+        }
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ GPT-5 API Error:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorText.substring(0, 500)
       });
+      logAPIMetrics('gpt-5-failed', false, [], null, projectAddress);
+      throw new Error(`GPT-5 API error: ${response.status} - ${errorText.substring(0, 200)}`);
+    }
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ GPT-5 API Error:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorText.substring(0, 500)
-        });
-        throw new Error(`GPT-5 API error: ${response.status} - ${errorText.substring(0, 200)}`);
-      }
+    const data = await response.json();
+    console.log('✅ GPT-5 API response data:', {
+      id: data.id,
+      model: data.model,
+      usage: data.usage,
+      choices: data.choices?.length,
+      hasContent: !!data.choices?.[0]?.message?.content,
+      finishReason: data.choices?.[0]?.finish_reason
+    });
 
-      const data = await response.json();
-      console.log('✅ GPT-5 API response data:', {
-        id: data.id,
-        model: data.model,
-        usage: data.usage,
-        choices: data.choices?.length,
-        hasContent: !!data.choices?.[0]?.message?.content,
-        finishReason: data.choices?.[0]?.finish_reason
-      });
+    const messageContent = data.choices[0].message.content;
+    console.log('📄 Raw GPT-5 response content:', JSON.stringify(messageContent?.substring(0, 500)));
 
-      const messageContent = data.choices[0].message.content;
-      console.log('📄 Raw GPT-5 response content:', JSON.stringify(messageContent?.substring(0, 500)));
+    // Check if GPT-5 returned empty or invalid content
+    if (!messageContent || messageContent.trim() === '') {
+      logAPIMetrics(modelUsed, false, [], data, projectAddress);
+      throw new Error('GPT-5 returned empty content');
+    }
 
-      // Check if GPT-5 returned empty or invalid content
-      if (!messageContent || messageContent.trim() === '') {
-        throw new Error('GPT-5 returned empty content');
-      }
-
-      try {
-        extractedData = JSON.parse(messageContent);
-        console.log('✅ GPT-5 parsed data:', extractedData);
-        
-        // Log successful GPT-5 usage
-        extractedFields = Object.keys(extractedData).filter(key => extractedData[key] !== null);
-        logAPIMetrics(modelUsed, true, extractedFields, data, projectAddress);
-        
-      } catch (parseError) {
-        console.error('❌ GPT-5 JSON parsing failed:', {
-          error: parseError.message,
-          content: messageContent?.substring(0, 200)
-        });
-        throw new Error(`GPT-5 JSON parsing failed: ${parseError.message}`);
-      }
-
-    } catch (gpt5Error) {
-      console.warn('⚠️ GPT-5 failed, attempting fallback to GPT-4.1:', gpt5Error.message);
+    try {
+      extractedData = JSON.parse(messageContent);
+      console.log('✅ GPT-5 parsed data:', extractedData);
       
-      // Phase 1: Fallback to GPT-4.1 with enhanced prompt but simpler JSON
-      modelUsed = 'gpt-4.1-2025-04-14 (fallback)';
+      // Log successful GPT-5 usage
+      extractedFields = Object.keys(extractedData).filter(key => extractedData[key] !== null);
+      logAPIMetrics(modelUsed, true, extractedFields, data, projectAddress);
       
-      const fallbackPrompt = `🏡 US Property Research Task
-
-ADDRESS TO ANALYZE: ${projectAddress}
-
-USER CONTEXT: ${sanitizedPrompt}
-
-INSTRUCTIONS:
-You are a property research specialist. Extract the following information from this US address using your knowledge of property databases, tax records, and zoning systems:
-
-1. LOT SIZE: Find parcel size from tax assessor records (include units like "sq ft" or "acres")
-2. ZONING: Identify current zoning code from municipal zoning maps (e.g., "R-1", "R-2-A")  
-3. JURISDICTION: Determine which city/county building department has authority
-
-REQUIRED OUTPUT FORMAT (JSON only):
-{
-  "lot_size": "size with units like '8,000 sq ft' or '0.5 acres', or null if unknown",
-  "zone": "zoning code like 'R-1', 'R-2', 'C-1', or null if unknown", 
-  "jurisdiction": "city or county name like 'Palo Alto' or 'Santa Clara County', or null if unknown"
-}
-
-CRITICAL: Return ONLY valid JSON. Use null (not empty strings) for unknown values. Be specific with measurements and official zoning codes.`;
-
-      console.log('🔄 Attempting GPT-4.1 fallback');
-      console.log('📤 FALLBACK PROMPT:', fallbackPrompt.substring(0, 300) + '...');
-
-      response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${openAIApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4.1-2025-04-14',
-          messages: [
-            { 
-              role: 'user', 
-              content: fallbackPrompt
-            }
-          ],
-          max_tokens: 300,
-          temperature: 0.1,
-          response_format: { type: "json_object" }
-        }),
+    } catch (parseError) {
+      console.error('❌ GPT-5 JSON parsing failed:', {
+        error: parseError.message,
+        content: messageContent?.substring(0, 200)
       });
-
-      if (!response.ok) {
-        const error = await response.text();
-        console.error('❌ GPT-4.1 fallback API error:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: error.substring(0, 500)
-        });
-        
-        // Log failed attempt
-        logAPIMetrics('both-models-failed', false, [], null, projectAddress);
-        
-        throw new Error(`Both GPT-5 and GPT-4.1 failed. GPT-4.1 error: ${response.status} - ${error.substring(0, 200)}`);
-      }
-
-      const fallbackData = await response.json();
-      
-      console.log('✅ GPT-4.1 fallback response data:', {
-        id: fallbackData.id,
-        model: fallbackData.model,
-        usage: fallbackData.usage,
-        choices: fallbackData.choices?.length,
-        hasContent: !!fallbackData.choices?.[0]?.message?.content,
-        finishReason: fallbackData.choices?.[0]?.finish_reason
-      });
-
-      const fallbackContent = fallbackData.choices[0].message.content;
-      console.log('📄 Raw GPT-4.1 fallback content:', JSON.stringify(fallbackContent?.substring(0, 500)));
-
-      if (!fallbackContent || fallbackContent.trim() === '') {
-        logAPIMetrics(modelUsed, false, [], fallbackData, projectAddress);
-        throw new Error('Both models returned empty content');
-      }
-
-      try {
-        extractedData = JSON.parse(fallbackContent);
-        console.log('✅ GPT-4.1 fallback parsed data:', extractedData);
-        
-        // Log successful fallback usage
-        extractedFields = Object.keys(extractedData).filter(key => extractedData[key] !== null);
-        logAPIMetrics(modelUsed, true, extractedFields, fallbackData, projectAddress);
-        
-      } catch (parseError) {
-        console.error('❌ GPT-4.1 JSON parsing error:', {
-          error: parseError.message,
-          rawContent: fallbackContent?.substring(0, 200)
-        });
-        
-        // Last resort: return null structure
-        extractedData = { lot_size: null, zone: null, jurisdiction: null };
-        extractedFields = [];
-        logAPIMetrics(modelUsed, false, extractedFields, fallbackData, projectAddress);
-      }
+      logAPIMetrics(modelUsed, false, [], data, projectAddress);
+      throw new Error(`GPT-5 JSON parsing failed: ${parseError.message}`);
     }
 
     console.log(`🎯 Successfully extracted data using model: ${modelUsed}`);
