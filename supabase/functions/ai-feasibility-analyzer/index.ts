@@ -60,7 +60,7 @@ serve(async (req) => {
   }
 
   const processingStartTime = Date.now();
-  let modelUsed = 'gpt-5-mini-2025-08-07';
+  let modelUsed = 'gpt-5-2025-08-07';
 
   try {
     const { projectAddress, prompt } = await req.json();
@@ -86,9 +86,7 @@ serve(async (req) => {
     console.log('🏠 Processing feasibility analysis for address:', projectAddress);
     console.log('📝 User prompt:', prompt);
 
-    const modelUsed = 'gpt-5-mini-2025-08-07';
-    console.log(`🚀 Using GPT-5 Mini for property analysis`);
-
+    console.log(`🚀 Using ${modelUsed} for property analysis`);
     // 🎯 Enhanced System Prompt for US Property Research - Directed to use authoritative sources
     const systemPrompt = `You are a US property research AI specializing in property data extraction. Extract lot_size, zone, and jurisdiction data from authoritative sources like Zillow.com, Redfin.com, county assessor websites, and municipal planning departments.
 
@@ -117,7 +115,7 @@ CRITICAL REQUIREMENTS:
 CONTEXT: ${prompt}
 Extract lot_size, zone, jurisdiction. Respond with JSON only.`;
 
-    console.log('📤 GPT-5 Mini Request:', {
+    console.log('📤 OpenAI Request:', {
       systemPrompt: systemPrompt.substring(0, 100) + '...',
       userMessage: userMessage.substring(0, 100) + '...',
       addressLength: projectAddress.length,
@@ -200,21 +198,21 @@ Extract lot_size, zone, jurisdiction. Respond with JSON only.`;
     try {
       openAIResponse = await makeOpenAIRequest();
 
-      if (!openAIResponse.ok) {
-        const errorText = await openAIResponse.text();
-        console.error('❌ GPT-5 Mini API Error:', {
-          status: openAIResponse.status,
-          statusText: openAIResponse.statusText,
-          error: errorText
-        });
-        
-        logAPIMetrics(`${modelUsed}-failed`, false, [], projectAddress, null, Date.now());
-        throw new Error(`GPT-5 Mini API error: ${openAIResponse.status} - ${errorText}`);
-      }
+          if (!openAIResponse.ok) {
+            const errorText = await openAIResponse.text();
+            console.error('❌ OpenAI API Error:', {
+              status: openAIResponse.status,
+              statusText: openAIResponse.statusText,
+              error: errorText
+            });
+            
+            logAPIMetrics(`${modelUsed}-failed`, false, [], projectAddress, null, Date.now());
+            throw new Error(`OpenAI API error (${modelUsed}): ${openAIResponse.status} - ${errorText}`);
+          }
 
       const result = await openAIResponse.json();
       
-      console.log('✅ GPT-5 Mini API response data:', {
+      console.log('✅ OpenAI API response data:', {
         id: result.id,
         model: result.model,
         usage: result.usage,
@@ -224,12 +222,12 @@ Extract lot_size, zone, jurisdiction. Respond with JSON only.`;
       });
 
       const content = result.choices?.[0]?.message?.content;
-      console.log('📄 Raw GPT-5 Mini response content:', JSON.stringify(content));
+      console.log('📄 Raw OpenAI response content:', JSON.stringify(content));
 
       // Check for token exhaustion and attempt salvage
       const finishReason = result.choices?.[0]?.finish_reason;
       if (!content || finishReason === 'length') {
-        console.log('⚠️ GPT-5 Mini returned empty/truncated content, attempting salvage call...');
+        console.log('⚠️ Model returned empty/truncated content, attempting salvage call...');
         
         // Second-chance salvage call with ultra-compact prompt
         try {
@@ -287,21 +285,21 @@ Extract lot_size, zone, jurisdiction. Respond with JSON only.`;
         } catch (salvageError) {
           console.error('❌ Salvage call failed:', salvageError);
           logAPIMetrics(`${modelUsed}-error`, false, [], 'error-occurred', null, Date.now());
-          throw new Error('GPT-5 Mini returned empty content and salvage failed');
+          throw new Error(`${modelUsed} returned empty content and salvage failed`);
         }
       } else {
         try {
           extractedData = JSON.parse(content);
-          console.log('✅ Successfully parsed JSON from GPT-5 Mini:', extractedData);
+          console.log('✅ Successfully parsed JSON from model:', extractedData);
         } catch (parseError) {
           console.error('❌ JSON parsing error:', parseError, 'Content:', content);
           logAPIMetrics(`${modelUsed}-parse-error`, false, [], projectAddress, result.usage, Date.now());
-          throw new Error(`Failed to parse GPT-5 Mini response as JSON: ${parseError}`);
+          throw new Error(`Failed to parse ${modelUsed} response as JSON: ${parseError}`);
         }
       }
 
     } catch (error) {
-      console.error(`💥 Error calling GPT-5 Mini:`, error);
+      console.error(`💥 Error calling ${modelUsed}:`, error);
       logAPIMetrics(`${modelUsed}-error`, false, [], 'error-occurred', null, Date.now());
       throw error;
     }
@@ -654,10 +652,10 @@ Extract lot_size, zone, jurisdiction. Respond with JSON only.`;
       error: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
       processingTimeMs,
-      modelUsed: 'gpt-5-mini-2025-08-07'
+      modelUsed: modelUsed
     });
 
-    logAPIMetrics('gpt-5-mini-2025-08-07-error', false, [], 'error-occurred', null, Date.now());
+    logAPIMetrics(`${modelUsed}-error`, false, [], 'error-occurred', null, Date.now());
 
     // Return 500 only for unexpected errors, not validation failures
     return new Response(JSON.stringify({ 
