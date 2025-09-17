@@ -89,22 +89,29 @@ serve(async (req) => {
     const modelUsed = 'gpt-5-mini-2025-08-07';
     console.log(`🚀 Using GPT-5 Mini for property analysis`);
 
-    // 🎯 Compact System Prompt for US Property Research - Focused on JSON Output
-    const systemPrompt = `You are a US property research AI. Extract property data from official records and respond with ONLY valid JSON.
+    // 🎯 Enhanced System Prompt for US Property Research - Directed to use authoritative sources
+    const systemPrompt = `You are a US property research AI specializing in property data extraction. Extract lot_size, zone, and jurisdiction data from authoritative sources like Zillow.com, Redfin.com, county assessor websites, and municipal planning departments.
+
+SEARCH STRATEGY:
+1. Search Zillow.com and Redfin.com for the address to find lot size and basic zoning
+2. Look up county assessor/parcel records for lot size verification  
+3. Check municipal planning/zoning websites for official zoning codes
+4. Find the building permit/planning department responsible for the address
 
 REQUIRED JSON FORMAT:
 {
-  "lot_size": "size with units (e.g., '8,000 sq ft') or null",
-  "zone": "zoning code (e.g., 'R-1') or null", 
-  "jurisdiction": "building dept jurisdiction (e.g., 'City of Palo Alto') or null"
+  "lot_size": "size with units (e.g., '8,000 sq ft', '0.25 acres') or null",
+  "zone": "official zoning code (e.g., 'R-1', 'RS-6000') or null", 
+  "jurisdiction": "building/planning dept (e.g., 'City of Palo Alto', 'Los Angeles County') or null"
 }
 
-RULES:
-- Use null for unknown values (never empty strings)
-- Include units for lot_size
-- Use official zoning codes only
-- Return planning/building jurisdiction name
-- Respond with ONLY the JSON object, no other text`;
+CRITICAL REQUIREMENTS:
+- NEVER return empty strings, use null for unknown values
+- Always include units for lot_size (sq ft preferred)
+- Use OFFICIAL zoning codes from municipal sources
+- Return the specific jurisdiction responsible for building permits
+- Be persistent in finding data across multiple authoritative sources
+- Respond with ONLY the JSON object, no explanatory text`;
 
     const userMessage = `ADDRESS: ${projectAddress}
 CONTEXT: ${prompt}
@@ -138,7 +145,7 @@ Extract lot_size, zone, jurisdiction. Respond with JSON only.`;
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: userMessage }
               ],
-              max_completion_tokens: 1000, // Increased from 500
+              max_completion_tokens: 10000, // Increased for sufficiency as requested
               response_format: {
                 type: "json_schema",
                 json_schema: {
@@ -347,18 +354,192 @@ Extract lot_size, zone, jurisdiction. Respond with JSON only.`;
       address: projectAddress
     });
 
-    // Enhanced validation - return 422 with helpful info for partial failures
+    // Deterministic fallback logic for missing fields
+    if (extractedFieldsList.length < 3) {
+      console.log('🔄 Attempting targeted fallbacks for missing fields:', missingFields);
+      
+      // Fallback for missing lot_size
+      if (!extractedData.lot_size && (extractedData.jurisdiction || extractedData.zone)) {
+        console.log('📐 Attempting lot_size fallback...');
+        try {
+          const lotSizeFallback = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${openAIApiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: modelUsed,
+              messages: [
+                { 
+                  role: 'system', 
+                  content: 'Find the exact lot size for this address. Check Zillow.com, Redfin.com, county assessor records. Return only JSON: {"lot_size": "value with units or null"}' 
+                },
+                { role: 'user', content: `Find lot size for: ${projectAddress}. Check multiple sources including Zillow, Redfin, county assessor.` }
+              ],
+              max_completion_tokens: 500,
+              response_format: {
+                type: "json_schema",
+                json_schema: {
+                  name: "lot_size_fallback",
+                  strict: true,
+                  schema: {
+                    type: "object",
+                    properties: {
+                      lot_size: { type: ["string", "null"] }
+                    },
+                    required: ["lot_size"],
+                    additionalProperties: false
+                  }
+                }
+              }
+            }),
+          });
+          
+          if (lotSizeFallback.ok) {
+            const lotSizeResult = await lotSizeFallback.json();
+            const lotSizeContent = lotSizeResult.choices?.[0]?.message?.content;
+            if (lotSizeContent) {
+              const lotSizeData = JSON.parse(lotSizeContent);
+              if (lotSizeData.lot_size && normalizeField(lotSizeData.lot_size)) {
+                extractedData.lot_size = normalizeField(lotSizeData.lot_size);
+                extractedFieldsList.push('lot_size');
+                missingFields.splice(missingFields.indexOf('lot_size'), 1);
+                console.log('✅ Lot size fallback successful:', extractedData.lot_size);
+              }
+            }
+          }
+        } catch (fallbackError) {
+          console.warn('⚠️ Lot size fallback failed:', fallbackError);
+        }
+      }
+      
+      // Fallback for missing zone
+      if (!extractedData.zone && extractedData.jurisdiction) {
+        console.log('🏘️ Attempting zone fallback...');
+        try {
+          const zoneFallback = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${openAIApiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: modelUsed,
+              messages: [
+                { 
+                  role: 'system', 
+                  content: 'Find the official zoning designation for this address. Check municipal zoning maps and planning department websites. Return only JSON: {"zone": "official zoning code or null"}' 
+                },
+                { role: 'user', content: `Find zoning for: ${projectAddress} in ${extractedData.jurisdiction}. Check official municipal zoning maps.` }
+              ],
+              max_completion_tokens: 500,
+              response_format: {
+                type: "json_schema",
+                json_schema: {
+                  name: "zone_fallback",
+                  strict: true,
+                  schema: {
+                    type: "object",
+                    properties: {
+                      zone: { type: ["string", "null"] }
+                    },
+                    required: ["zone"],
+                    additionalProperties: false
+                  }
+                }
+              }
+            }),
+          });
+          
+          if (zoneFallback.ok) {
+            const zoneResult = await zoneFallback.json();
+            const zoneContent = zoneResult.choices?.[0]?.message?.content;
+            if (zoneContent) {
+              const zoneData = JSON.parse(zoneContent);
+              if (zoneData.zone && normalizeField(zoneData.zone)) {
+                extractedData.zone = normalizeField(zoneData.zone);
+                extractedFieldsList.push('zone');
+                missingFields.splice(missingFields.indexOf('zone'), 1);
+                console.log('✅ Zone fallback successful:', extractedData.zone);
+              }
+            }
+          }
+        } catch (fallbackError) {
+          console.warn('⚠️ Zone fallback failed:', fallbackError);
+        }
+      }
+      
+      // Fallback for missing jurisdiction
+      if (!extractedData.jurisdiction) {
+        console.log('🏛️ Attempting jurisdiction fallback...');
+        try {
+          const jurisdictionFallback = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${openAIApiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: modelUsed,
+              messages: [
+                { 
+                  role: 'system', 
+                  content: 'Find which city or county building/planning department handles permits for this address. Return only JSON: {"jurisdiction": "department name or null"}' 
+                },
+                { role: 'user', content: `Find building permit jurisdiction for: ${projectAddress}. Which city/county department handles building permits here?` }
+              ],
+              max_completion_tokens: 500,
+              response_format: {
+                type: "json_schema",
+                json_schema: {
+                  name: "jurisdiction_fallback",
+                  strict: true,
+                  schema: {
+                    type: "object",
+                    properties: {
+                      jurisdiction: { type: ["string", "null"] }
+                    },
+                    required: ["jurisdiction"],
+                    additionalProperties: false
+                  }
+                }
+              }
+            }),
+          });
+          
+          if (jurisdictionFallback.ok) {
+            const jurisdictionResult = await jurisdictionFallback.json();
+            const jurisdictionContent = jurisdictionResult.choices?.[0]?.message?.content;
+            if (jurisdictionContent) {
+              const jurisdictionData = JSON.parse(jurisdictionContent);
+              if (jurisdictionData.jurisdiction && normalizeField(jurisdictionData.jurisdiction)) {
+                extractedData.jurisdiction = normalizeField(jurisdictionData.jurisdiction);
+                extractedFieldsList.push('jurisdiction');
+                missingFields.splice(missingFields.indexOf('jurisdiction'), 1);
+                console.log('✅ Jurisdiction fallback successful:', extractedData.jurisdiction);
+              }
+            }
+          }
+        } catch (fallbackError) {
+          console.warn('⚠️ Jurisdiction fallback failed:', fallbackError);
+        }
+      }
+    }
+
+    // Final validation - return 422 with helpful info for complete failures
     if (extractedFieldsList.length === 0) {
       logAPIMetrics(`${modelUsed}-validation-failed`, false, [], projectAddress, null, Date.now());
       
       return new Response(JSON.stringify({
-        error: `No valid data could be extracted for address: "${projectAddress}"`,
+        error: `No valid data could be extracted for address: "${projectAddress}" after multiple attempts`,
         missingFields: ['lot_size', 'zone', 'jurisdiction'],
         suggestions: [
-          'Verify the address exists in public records',
+          'Verify the address exists in public records (try Zillow/Redfin)',
           'Check address formatting (e.g., "123 Main St, City, State ZIP")',
           'Ensure it\'s a valid US property address',
-          'Try with additional context (unit numbers, etc.)'
+          'Try with additional context (unit numbers, etc.)',
+          'Check if the property is newly constructed or subdivided'
         ],
         partialData: null
       }), {
