@@ -60,7 +60,7 @@ serve(async (req) => {
   }
 
   const processingStartTime = Date.now();
-  let modelUsed = 'gpt-5-mini-2025-08-07';
+  let modelUsed = 'llama-3.1-sonar-small-128k-online';
 
   try {
     const { projectAddress, prompt } = await req.json();
@@ -78,16 +78,16 @@ serve(async (req) => {
       });
     }
 
-    const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
-    if (!openAIApiKey) {
-      throw new Error('OpenAI API key not configured');
+    const perplexityApiKey = Deno.env.get('PERPLEXITY_API_KEY');
+    if (!perplexityApiKey) {
+      throw new Error('Perplexity API key not configured');
     }
 
     console.log('🏠 Processing feasibility analysis for address:', projectAddress);
     console.log('📝 User prompt:', prompt);
 
-    const modelUsed = 'gpt-5-mini-2025-08-07';
-    console.log(`🚀 Using GPT-5 Mini for property analysis`);
+    const modelUsed = 'llama-3.1-sonar-small-128k-online';
+    console.log(`🚀 Using Perplexity for property analysis`);
 
     // 🎯 Enhanced System Prompt for US Property Research - Directed to use authoritative sources
     const systemPrompt = `You are a US property research AI specializing in property data extraction. Extract lot_size, zone, and jurisdiction data from authoritative sources like Zillow.com, Redfin.com, county assessor websites, and municipal planning departments.
@@ -117,7 +117,7 @@ CRITICAL REQUIREMENTS:
 CONTEXT: ${prompt}
 Extract lot_size, zone, jurisdiction. Respond with JSON only.`;
 
-    console.log('📤 GPT-5 Mini Request:', {
+    console.log('📤 Perplexity Request:', {
       systemPrompt: systemPrompt.substring(0, 100) + '...',
       userMessage: userMessage.substring(0, 100) + '...',
       addressLength: projectAddress.length,
@@ -128,15 +128,15 @@ Extract lot_size, zone, jurisdiction. Respond with JSON only.`;
     let openAIResponse: Response;
     
     // Robust retry logic with exponential backoff
-    const makeOpenAIRequest = async (isRetry = false, attempt = 0): Promise<Response> => {
+    const makePerplexityRequest = async (isRetry = false, attempt = 0): Promise<Response> => {
       const maxRetries = 3;
       
       for (let retryAttempt = 0; retryAttempt <= maxRetries; retryAttempt++) {
         try {
-          const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          const response = await fetch('https://api.perplexity.ai/chat/completions', {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${openAIApiKey}`,
+              'Authorization': `Bearer ${perplexityApiKey}`,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
@@ -145,30 +145,14 @@ Extract lot_size, zone, jurisdiction. Respond with JSON only.`;
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: userMessage }
               ],
-              max_completion_tokens: 10000, // Increased for sufficiency as requested
-              response_format: {
-                type: "json_schema",
-                json_schema: {
-                  name: "property_research_response",
-                  strict: true,
-                  schema: {
-                    type: "object",
-                    properties: {
-                      lot_size: { 
-                        type: ["string", "null"]
-                      },
-                      zone: { 
-                        type: ["string", "null"]
-                      },
-                      jurisdiction: { 
-                        type: ["string", "null"]
-                      }
-                    },
-                    required: ["lot_size", "zone", "jurisdiction"],
-                    additionalProperties: false
-                  }
-                }
-              }
+              max_tokens: 1000,
+              temperature: 0.2,
+              top_p: 0.9,
+              return_images: false,
+              return_related_questions: false,
+              search_recency_filter: 'month',
+              frequency_penalty: 1,
+              presence_penalty: 0
             }),
           });
 
@@ -176,7 +160,7 @@ Extract lot_size, zone, jurisdiction. Respond with JSON only.`;
           if (response.status === 503 || (response.status >= 500 && response.status !== 500)) {
             if (retryAttempt < maxRetries) {
               const delay = getRetryDelay(retryAttempt);
-              console.log(`🔄 OpenAI ${response.status} error, retrying in ${Math.round(delay)}ms (attempt ${retryAttempt + 1}/${maxRetries + 1})`);
+              console.log(`🔄 Perplexity ${response.status} error, retrying in ${Math.round(delay)}ms (attempt ${retryAttempt + 1}/${maxRetries + 1})`);
               await sleep(delay);
               continue;
             }
@@ -198,23 +182,23 @@ Extract lot_size, zone, jurisdiction. Respond with JSON only.`;
     };
     
     try {
-      openAIResponse = await makeOpenAIRequest();
+      openAIResponse = await makePerplexityRequest();
 
       if (!openAIResponse.ok) {
         const errorText = await openAIResponse.text();
-        console.error('❌ GPT-5 Mini API Error:', {
+        console.error('❌ Perplexity API Error:', {
           status: openAIResponse.status,
           statusText: openAIResponse.statusText,
           error: errorText
         });
         
         logAPIMetrics(`${modelUsed}-failed`, false, [], projectAddress, null, Date.now());
-        throw new Error(`GPT-5 Mini API error: ${openAIResponse.status} - ${errorText}`);
+        throw new Error(`Perplexity API error: ${openAIResponse.status} - ${errorText}`);
       }
 
       const result = await openAIResponse.json();
       
-      console.log('✅ GPT-5 Mini API response data:', {
+      console.log('✅ Perplexity API response data:', {
         id: result.id,
         model: result.model,
         usage: result.usage,
@@ -224,19 +208,19 @@ Extract lot_size, zone, jurisdiction. Respond with JSON only.`;
       });
 
       const content = result.choices?.[0]?.message?.content;
-      console.log('📄 Raw GPT-5 Mini response content:', JSON.stringify(content));
+      console.log('📄 Raw Perplexity response content:', JSON.stringify(content));
 
       // Check for token exhaustion and attempt salvage
       const finishReason = result.choices?.[0]?.finish_reason;
       if (!content || finishReason === 'length') {
-        console.log('⚠️ GPT-5 Mini returned empty/truncated content, attempting salvage call...');
+        console.log('⚠️ Perplexity returned empty/truncated content, attempting salvage call...');
         
         // Second-chance salvage call with ultra-compact prompt
         try {
-          const salvageResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+          const salvageResponse = await fetch('https://api.perplexity.ai/chat/completions', {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${openAIApiKey}`,
+              'Authorization': `Bearer ${perplexityApiKey}`,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
@@ -248,24 +232,11 @@ Extract lot_size, zone, jurisdiction. Respond with JSON only.`;
                 },
                 { role: 'user', content: `Address: ${projectAddress}` }
               ],
-              max_completion_tokens: 200,
-              response_format: {
-                type: "json_schema",
-                json_schema: {
-                  name: "salvage_response",
-                  strict: true,
-                  schema: {
-                    type: "object",
-                    properties: {
-                      lot_size: { type: ["string", "null"] },
-                      zone: { type: ["string", "null"] },
-                      jurisdiction: { type: ["string", "null"] }
-                    },
-                    required: ["lot_size", "zone", "jurisdiction"],
-                    additionalProperties: false
-                  }
-                }
-              }
+              max_tokens: 200,
+              temperature: 0.2,
+              top_p: 0.9,
+              return_images: false,
+              return_related_questions: false
             }),
           });
           
@@ -287,21 +258,21 @@ Extract lot_size, zone, jurisdiction. Respond with JSON only.`;
         } catch (salvageError) {
           console.error('❌ Salvage call failed:', salvageError);
           logAPIMetrics(`${modelUsed}-error`, false, [], 'error-occurred', null, Date.now());
-          throw new Error('GPT-5 Mini returned empty content and salvage failed');
+          throw new Error('Perplexity returned empty content and salvage failed');
         }
       } else {
         try {
           extractedData = JSON.parse(content);
-          console.log('✅ Successfully parsed JSON from GPT-5 Mini:', extractedData);
+          console.log('✅ Successfully parsed JSON from Perplexity:', extractedData);
         } catch (parseError) {
           console.error('❌ JSON parsing error:', parseError, 'Content:', content);
           logAPIMetrics(`${modelUsed}-parse-error`, false, [], projectAddress, result.usage, Date.now());
-          throw new Error(`Failed to parse GPT-5 Mini response as JSON: ${parseError}`);
+          throw new Error(`Failed to parse Perplexity response as JSON: ${parseError}`);
         }
       }
 
     } catch (error) {
-      console.error(`💥 Error calling GPT-5 Mini:`, error);
+      console.error(`💥 Error calling Perplexity:`, error);
       logAPIMetrics(`${modelUsed}-error`, false, [], 'error-occurred', null, Date.now());
       throw error;
     }
@@ -362,10 +333,10 @@ Extract lot_size, zone, jurisdiction. Respond with JSON only.`;
       if (!extractedData.lot_size && (extractedData.jurisdiction || extractedData.zone)) {
         console.log('📐 Attempting lot_size fallback...');
         try {
-          const lotSizeFallback = await fetch('https://api.openai.com/v1/chat/completions', {
+          const lotSizeFallback = await fetch('https://api.perplexity.ai/chat/completions', {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${openAIApiKey}`,
+              'Authorization': `Bearer ${perplexityApiKey}`,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
@@ -377,22 +348,11 @@ Extract lot_size, zone, jurisdiction. Respond with JSON only.`;
                 },
                 { role: 'user', content: `Find lot size for: ${projectAddress}. Check multiple sources including Zillow, Redfin, county assessor.` }
               ],
-              max_completion_tokens: 500,
-              response_format: {
-                type: "json_schema",
-                json_schema: {
-                  name: "lot_size_fallback",
-                  strict: true,
-                  schema: {
-                    type: "object",
-                    properties: {
-                      lot_size: { type: ["string", "null"] }
-                    },
-                    required: ["lot_size"],
-                    additionalProperties: false
-                  }
-                }
-              }
+              max_tokens: 500,
+              temperature: 0.2,
+              top_p: 0.9,
+              return_images: false,
+              return_related_questions: false
             }),
           });
           
@@ -418,10 +378,10 @@ Extract lot_size, zone, jurisdiction. Respond with JSON only.`;
       if (!extractedData.zone && extractedData.jurisdiction) {
         console.log('🏘️ Attempting zone fallback...');
         try {
-          const zoneFallback = await fetch('https://api.openai.com/v1/chat/completions', {
+          const zoneFallback = await fetch('https://api.perplexity.ai/chat/completions', {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${openAIApiKey}`,
+              'Authorization': `Bearer ${perplexityApiKey}`,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
@@ -433,22 +393,11 @@ Extract lot_size, zone, jurisdiction. Respond with JSON only.`;
                 },
                 { role: 'user', content: `Find zoning for: ${projectAddress} in ${extractedData.jurisdiction}. Check official municipal zoning maps.` }
               ],
-              max_completion_tokens: 500,
-              response_format: {
-                type: "json_schema",
-                json_schema: {
-                  name: "zone_fallback",
-                  strict: true,
-                  schema: {
-                    type: "object",
-                    properties: {
-                      zone: { type: ["string", "null"] }
-                    },
-                    required: ["zone"],
-                    additionalProperties: false
-                  }
-                }
-              }
+              max_tokens: 500,
+              temperature: 0.2,
+              top_p: 0.9,
+              return_images: false,
+              return_related_questions: false
             }),
           });
           
@@ -474,10 +423,10 @@ Extract lot_size, zone, jurisdiction. Respond with JSON only.`;
       if (!extractedData.jurisdiction) {
         console.log('🏛️ Attempting jurisdiction fallback...');
         try {
-          const jurisdictionFallback = await fetch('https://api.openai.com/v1/chat/completions', {
+          const jurisdictionFallback = await fetch('https://api.perplexity.ai/chat/completions', {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${openAIApiKey}`,
+              'Authorization': `Bearer ${perplexityApiKey}`,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
@@ -489,22 +438,11 @@ Extract lot_size, zone, jurisdiction. Respond with JSON only.`;
                 },
                 { role: 'user', content: `Find building permit jurisdiction for: ${projectAddress}. Which city/county department handles building permits here?` }
               ],
-              max_completion_tokens: 500,
-              response_format: {
-                type: "json_schema",
-                json_schema: {
-                  name: "jurisdiction_fallback",
-                  strict: true,
-                  schema: {
-                    type: "object",
-                    properties: {
-                      jurisdiction: { type: ["string", "null"] }
-                    },
-                    required: ["jurisdiction"],
-                    additionalProperties: false
-                  }
-                }
-              }
+              max_tokens: 500,
+              temperature: 0.2,
+              top_p: 0.9,
+              return_images: false,
+              return_related_questions: false
             }),
           });
           
