@@ -556,24 +556,24 @@ Find the missing fields and return complete JSON with all three fields.`;
 
     // Validation and field completion tracking
     const extractedFieldsList = [];
-    const missingFields = [];
+    const finalMissingFields = [];
     const suggestions = [];
     
     if (extractedData.lot_size) extractedFieldsList.push('lot_size');
     else {
-      missingFields.push('lot_size');
+      finalMissingFields.push('lot_size');
       suggestions.push('Verify the address exists in public tax records');
     }
     
     if (extractedData.zone) extractedFieldsList.push('zone'); 
     else {
-      missingFields.push('zone');
+      finalMissingFields.push('zone');
       suggestions.push('Check municipal zoning maps or planning department website');
     }
     
     if (extractedData.jurisdiction) extractedFieldsList.push('jurisdiction');
     else {
-      missingFields.push('jurisdiction');
+      finalMissingFields.push('jurisdiction');
       suggestions.push('Confirm the city/county responsible for building permits');
     }
 
@@ -582,7 +582,7 @@ Find the missing fields and return complete JSON with all three fields.`;
       finalSuccess: extractedFieldsList.length === 3,
       extractionRate: `${extractedFieldsList.length}/3`,
       extractedFields: extractedFieldsList,
-      missingFields: missingFields,
+      missingFields: finalMissingFields,
       sourceLinks: sourceLinks,
       address: projectAddress
     });
@@ -669,12 +669,12 @@ Find the missing fields and return complete JSON with all three fields.`;
         successRate: `${Math.round((extractedFieldsList.length / 3) * 100)}%`,
         ordinancesFound: ordinances.length,
         addressValidation: addressValidation.isValid ? 'PASSED' : 'FAILED',
-        warningsFound: missingFields.length > 0,
+        warningsFound: finalMissingFields.length > 0,
         webSearchSuccess: sourceLinks.length > 0,
         sourceLinks: sourceLinks
       },
-      warnings: missingFields.length > 0 ? {
-        missingFields,
+      warnings: finalMissingFields.length > 0 ? {
+        missingFields: finalMissingFields,
         suggestions
       } : undefined
     };
