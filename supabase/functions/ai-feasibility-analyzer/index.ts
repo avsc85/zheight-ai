@@ -60,7 +60,7 @@ serve(async (req) => {
   }
 
   const processingStartTime = Date.now();
-  let modelUsed = 'sonar-small';
+  let modelUsed = 'sonar-pro';
 
   try {
     const { projectAddress, prompt } = await req.json();
@@ -602,10 +602,10 @@ Extract lot_size, zone, jurisdiction. Respond with JSON only.`;
       error: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
       processingTimeMs,
-      modelUsed: 'gpt-5-mini-2025-08-07'
+      modelUsed: modelUsed
     });
 
-    logAPIMetrics('gpt-5-mini-2025-08-07-error', false, [], 'error-occurred', null, Date.now());
+    logAPIMetrics(`${modelUsed}-error`, false, [], 'error-occurred', null, Date.now());
 
     // Return 500 only for unexpected errors, not validation failures
     return new Response(JSON.stringify({ 
