@@ -60,7 +60,7 @@ serve(async (req) => {
   }
 
   const processingStartTime = Date.now();
-  let modelUsed = 'sonar-reasoning';
+  let modelUsed = 'llama-3.1-sonar-large-128k-online';
 
   try {
     const { projectAddress, prompt } = await req.json();
@@ -156,10 +156,8 @@ Extract lot_size, zone, jurisdiction. Respond with JSON only.`;
               ],
               max_tokens: 1000,
               temperature: 0.2,
-              top_p: 0.9,
               return_images: false,
-              return_related_questions: false,
-              search_recency_filter: 'month'
+              return_related_questions: false
             }),
           });
 
@@ -253,7 +251,6 @@ Extract lot_size, zone, jurisdiction. Respond with JSON only.`;
                 ],
                 max_tokens: 200,
                 temperature: 0.2,
-                top_p: 0.9,
                 return_images: false,
                 return_related_questions: false
               }),
@@ -281,12 +278,52 @@ Extract lot_size, zone, jurisdiction. Respond with JSON only.`;
         }
       } else {
         try {
-          extractedData = JSON.parse(content);
+          // Enhanced JSON extraction to handle thinking models and code blocks
+          let jsonContent = content;
+          
+          // Check if response contains thinking tags or code blocks
+          if (content.includes('<think>') || content.includes('```json')) {
+            console.log('🧠 Detected thinking format or code block, extracting JSON...');
+            
+            // Extract JSON from code blocks first
+            const jsonBlockMatch = content.match(/```json\s*(\{[\s\S]*?\})\s*```/);
+            if (jsonBlockMatch) {
+              jsonContent = jsonBlockMatch[1];
+            } else {
+              // Try to extract JSON after thinking tags
+              const afterThinking = content.split('</think>')[1];
+              if (afterThinking) {
+                // Look for JSON object
+                const jsonMatch = afterThinking.match(/\{[\s\S]*?\}/);
+                if (jsonMatch) {
+                  jsonContent = jsonMatch[0];
+                }
+              }
+            }
+            
+            console.log('📤 Extracted JSON content:', jsonContent);
+          }
+          
+          extractedData = JSON.parse(jsonContent);
           console.log('✅ Successfully parsed JSON from Perplexity:', extractedData);
         } catch (parseError) {
-          console.error('❌ JSON parsing error:', parseError, 'Content:', content);
-          logAPIMetrics(`${modelUsed}-parse-error`, false, [], projectAddress, result.usage, Date.now());
-          throw new Error(`Failed to parse Perplexity response as JSON: ${parseError}`);
+          console.error('❌ JSON parsing error:', parseError, 'Original content:', content);
+          
+          // Last resort: try to extract any JSON-like structure
+          try {
+            const jsonMatch = content.match(/\{[^{}]*"lot_size"[^{}]*"zone"[^{}]*"jurisdiction"[^{}]*\}/);
+            if (jsonMatch) {
+              console.log('🚑 Attempting last resort JSON extraction...');
+              extractedData = JSON.parse(jsonMatch[0]);
+              console.log('✅ Last resort extraction successful:', extractedData);
+            } else {
+              throw parseError;
+            }
+          } catch (lastResortError) {
+            console.error('❌ Last resort JSON extraction failed:', lastResortError);
+            logAPIMetrics(`${modelUsed}-parse-error`, false, [], projectAddress, result.usage, Date.now());
+            throw new Error(`Failed to parse Perplexity response as JSON: ${parseError}`);
+          }
         }
       }
 
