@@ -60,7 +60,7 @@ serve(async (req) => {
   }
 
   const processingStartTime = Date.now();
-  let modelUsed = 'sonar-pro';
+  let modelUsed = 'sonar-reasoning';
 
   try {
     const { projectAddress, prompt } = await req.json();
@@ -89,28 +89,37 @@ serve(async (req) => {
     // Validate Perplexity API connectivity and model availability
     console.log(`🚀 Using Perplexity Sonar model: ${modelUsed}`);
 
-    // 🎯 Enhanced System Prompt for US Property Research - Directed to use authoritative sources
-    const systemPrompt = `You are a US property research AI specializing in property data extraction. Extract lot_size, zone, and jurisdiction data from authoritative sources like Zillow.com, Redfin.com, county assessor websites, and municipal planning departments.
+    // 🎯 Enhanced System Prompt for US Property Research - Prioritize Official Records for Lot Size Accuracy
+    const systemPrompt = `You are a US property research AI specializing in property data extraction. Extract lot_size, zone, and jurisdiction data with MAXIMUM ACCURACY, prioritizing official government records.
+
+LOT SIZE ACCURACY PROTOCOL (CRITICAL):
+1. FIRST: Search county assessor/parcel records (most accurate for lot size)
+2. SECOND: Cross-reference with city/municipal property records
+3. THIRD: Verify with multiple real estate sources (Zillow, Redfin, Realtor.com)
+4. FOURTH: If discrepancies exist, prefer government records over real estate sites
+5. ALWAYS: Include the source used in your reasoning (internally, not in JSON)
 
 SEARCH STRATEGY:
-1. Search Zillow.com and Redfin.com for the address to find lot size and basic zoning
-2. Look up county assessor/parcel records for lot size verification  
-3. Check municipal planning/zoning websites for official zoning codes
-4. Find the building permit/planning department responsible for the address
+1. Start with "[County Name] assessor parcel search" + address
+2. Search "[City Name] property records" + address  
+3. Cross-verify with Zillow.com, Redfin.com, and Realtor.com
+4. Check municipal planning/zoning websites for official zoning codes
+5. Find the building permit/planning department responsible for the address
 
 REQUIRED JSON FORMAT:
 {
-  "lot_size": "size with units (e.g., '8,000 sq ft', '0.25 acres') or null",
+  "lot_size": "exact size with units (e.g., '8,276 sq ft', '0.19 acres') or null",
   "zone": "official zoning code (e.g., 'R-1', 'RS-6000') or null", 
   "jurisdiction": "building/planning dept (e.g., 'City of Palo Alto', 'Los Angeles County') or null"
 }
 
 CRITICAL REQUIREMENTS:
 - NEVER return empty strings, use null for unknown values
-- Always include units for lot_size (sq ft preferred)
+- Always include units for lot_size (prefer sq ft over acres)
+- Use the MOST ACCURATE lot size from official records
 - Use OFFICIAL zoning codes from municipal sources
 - Return the specific jurisdiction responsible for building permits
-- Be persistent in finding data across multiple authoritative sources
+- Prioritize consistency and accuracy over speed
 - Respond with ONLY the JSON object, no explanatory text`;
 
     const userMessage = `ADDRESS: ${projectAddress}
