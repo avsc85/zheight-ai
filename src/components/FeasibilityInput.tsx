@@ -18,7 +18,7 @@ interface FeasibilityInputProps {
 export function FeasibilityInput({ onAnalysisComplete, onAnalysisStart, onAnalysisEnd, isLoading }: FeasibilityInputProps) {
   const [projectAddress, setProjectAddress] = useState('');
   const [aiPrompt, setAiPrompt] = useState(
-    'Extract the lot size, zoning designation, and jurisdiction (city/county) from this residential property address. Provide accurate information based on public records and zoning data.'
+    'Find the exact Lot size in square feet, Planning and Building Jurisdictions and residential Zone as per the jurisdiction for the datafield - project_address, return the results in strict JSON as per the datafields and format below: \n{ "lot_size": "Value" \n"jurisdiction": "Value"\n"zone": "Value"\n}'
   );
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
 
@@ -179,7 +179,7 @@ export function FeasibilityInput({ onAnalysisComplete, onAnalysisStart, onAnalys
           </Button>
           <Button 
             variant="ghost"
-            onClick={() => setAiPrompt('Extract the lot size, zoning designation, and jurisdiction (city/county) from this residential property address. Provide accurate information based on public records and zoning data.')}
+            onClick={() => setAiPrompt('Find the exact Lot size in square feet, Planning and Building Jurisdictions and residential Zone as per the jurisdiction for the datafield - project_address, return the results in strict JSON as per the datafields and format below: \n{ "lot_size": "Value" \n"jurisdiction": "Value"\n"zone": "Value"\n}')}
             disabled={isLoading}
             size="sm"
           >
