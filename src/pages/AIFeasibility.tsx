@@ -120,6 +120,7 @@ export default function AIFeasibility() {
                 created_at: '',
                 updated_at: ''
               }}
+              ordinances={ordinances}
               onUpdate={handleFeasibilityUpdate}
             />
           </div>

@@ -5,20 +5,45 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { FeasibilityAnalysis } from '@/pages/AIFeasibility';
+import { FeasibilityAnalysis, JurisdictionOrdinance } from '@/pages/AIFeasibility';
 
 interface FeasibilityResultsProps {
   analysis: FeasibilityAnalysis;
   onUpdate: (updatedAnalysis: FeasibilityAnalysis) => void;
+  ordinances?: JurisdictionOrdinance[];
 }
 
-export function FeasibilityResults({ analysis, onUpdate }: FeasibilityResultsProps) {
+export function FeasibilityResults({ analysis, onUpdate, ordinances = [] }: FeasibilityResultsProps) {
   const [editedAnalysis, setEditedAnalysis] = useState<FeasibilityAnalysis>(analysis);
   const [isSaving, setIsSaving] = useState(false);
+  const [lastUpdatedByName, setLastUpdatedByName] = useState<string>('');
 
   useEffect(() => {
     setEditedAnalysis(analysis);
   }, [analysis]);
+
+  // Fetch last updated by user name from matched ordinance
+  useEffect(() => {
+    const fetchLastUpdatedByName = async () => {
+      if (ordinances.length > 0 && ordinances[0].last_updated_by) {
+        try {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('name')
+            .eq('user_id', ordinances[0].last_updated_by)
+            .single();
+          
+          if (profile?.name) {
+            setLastUpdatedByName(profile.name);
+          }
+        } catch (error) {
+          console.error('Error fetching user profile:', error);
+        }
+      }
+    };
+
+    fetchLastUpdatedByName();
+  }, [ordinances]);
 
   const handleFieldChange = (field: keyof FeasibilityAnalysis, value: string) => {
     setEditedAnalysis(prev => ({
@@ -103,18 +128,8 @@ export function FeasibilityResults({ analysis, onUpdate }: FeasibilityResultsPro
           <Label htmlFor="source-link">Source Link</Label>
           <Input
             id="source-link"
-            value={editedAnalysis.source_link || ''}
-            onChange={(e) => handleFieldChange('source_link', e.target.value)}
-            placeholder="No data available"
-          />
-        </div>
-        
-        <div className="space-y-2">
-          <Label htmlFor="city-dept-link">City Depart. Link</Label>
-          <Input
-            id="city-dept-link"
-            value={editedAnalysis.city_dept_link || ''}
-            onChange={(e) => handleFieldChange('city_dept_link', e.target.value)}
+            value={ordinances.length > 0 ? (ordinances[0].code_reference || '') : ''}
+            readOnly
             placeholder="No data available"
           />
         </div>
@@ -123,7 +138,7 @@ export function FeasibilityResults({ analysis, onUpdate }: FeasibilityResultsPro
           <Label htmlFor="last-updated-by">Last Updated By</Label>
           <Input
             id="last-updated-by"
-            value="Name of the User who last updated the Source Link dataField"
+            value={lastUpdatedByName || ''}
             readOnly
             placeholder="No data available"
           />
