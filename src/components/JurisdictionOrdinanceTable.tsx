@@ -15,27 +15,27 @@ export function JurisdictionOrdinanceTable({ ordinances, onUpdate }: Jurisdictio
   const currentOrdinance = ordinances.length > 0 ? ordinances[0] : null;
 
   const ordinanceFields = [
-    { key: 'jurisdiction', label: 'Jurisdiction' },
-    { key: 'zone', label: 'Zone' },
-    { key: 'code_reference', label: 'Code Reference' },
-    { key: 'definition_lot_coverage', label: 'Definition Lot Coverage' },
-    { key: 'lot_coverage', label: 'Lot Coverage' },
-    { key: 'definition_floor_area', label: 'Definition Floor Area' },
-    { key: 'floor_area_ratio', label: 'Floor Area Ratio' },
-    { key: 'min_setback_front_ft', label: 'Min Setback Front Ft' },
-    { key: 'min_setback_side_ft', label: 'Min Setback Side Ft' },
-    { key: 'min_setback_rear_ft', label: 'Min Setback Rear Ft' },
-    { key: 'min_setback_corner_ft', label: 'Min Setback Corner Ft' },
-    { key: 'max_height_ft', label: 'Max Height Ft' },
-    { key: 'exemption_max_height', label: 'Exemption Max Height' },
-    { key: 'daylight_plan_rear', label: 'Daylight Plan Rear' },
-    { key: 'daylight_plan_side', label: 'Daylight Plan Side' },
-    { key: 'exemption_substandard_lot', label: 'Exemption Substandard Lot' },
-    { key: 'exemption_side_setback_encroachment', label: 'Exemption Side Setback Encroachment' },
-    { key: 'exemption_front_setback_encroachment', label: 'Exemption Front Setback Encroachment' },
-    { key: 'min_garage_length', label: 'Min Garage Length' },
-    { key: 'min_garage_width', label: 'Min Garage Width' },
-    { key: 'parking', label: 'Parking' },
+    { key: 'jurisdiction', label: 'jurisdiction' },
+    { key: 'zone', label: 'zone' },
+    { key: 'code_reference', label: 'code_reference' },
+    { key: 'definition_lot_coverage', label: 'definition_lot_coverage' },
+    { key: 'lot_coverage', label: 'lot_coverage' },
+    { key: 'definition_floor_area', label: 'definition_floor_area' },
+    { key: 'floor_area_ratio', label: 'floor_area_ratio' },
+    { key: 'min_setback_front_ft', label: 'min_setback_front_ft' },
+    { key: 'min_setback_side_ft', label: 'min_setback_side_ft' },
+    { key: 'min_setback_rear_ft', label: 'min_setback_rear_ft' },
+    { key: 'min_setback_corner_ft', label: 'min_setback_corner_ft' },
+    { key: 'max_height_ft', label: 'max_height_ft' },
+    { key: 'exemption_max_height', label: 'exemption_max_height' },
+    { key: 'daylight_plan_rear', label: 'daylight_plan_rear' },
+    { key: 'daylight_plan_side', label: 'daylight_plan_side' },
+    { key: 'exemption_substandard_lot', label: 'exemption_substandard_lot' },
+    { key: 'exemption_side_setback_encroachment', label: 'exemption_side_setback_encroachment' },
+    { key: 'exemption_front_setback_encroachment', label: 'exemption_front_setback_encroachment' },
+    { key: 'min_garage_length', label: 'min_garage_length' },
+    { key: 'min_garage_width', label: 'min_garage_width' },
+    { key: 'parking', label: 'parking' },
   ];
 
   const handleUpdate = () => {
@@ -67,7 +67,7 @@ export function JurisdictionOrdinanceTable({ ordinances, onUpdate }: Jurisdictio
                     <TableCell className="font-medium text-center align-top pt-4">{index + 1}</TableCell>
                     <TableCell className="align-top pt-4">
                       <div className="break-words text-sm leading-tight">
-                        {field.label.replace(/_/g, ' ')}
+                        {field.label}
                       </div>
                     </TableCell>
                     <TableCell className="align-top pt-2">
@@ -75,11 +75,11 @@ export function JurisdictionOrdinanceTable({ ordinances, onUpdate }: Jurisdictio
                         value={value || ''}
                         placeholder={currentOrdinance ? '' : 'No data available'}
                         readOnly
-                        className="w-full min-h-[40px] text-sm leading-tight resize-none"
+                        className="w-full min-h-[40px] text-sm leading-tight"
                         style={{ 
-                          whiteSpace: 'pre-wrap',
-                          wordWrap: 'break-word',
-                          overflow: 'visible'
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis'
                         }}
                       />
                     </TableCell>
