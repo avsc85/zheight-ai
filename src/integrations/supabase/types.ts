@@ -558,6 +558,28 @@ export type Database = {
         Args: { target_user_id: string }
         Returns: boolean
       }
+      admin_delete_user_complete: {
+        Args: { target_email?: string; target_user_id: string }
+        Returns: Json
+      }
+      detect_orphaned_auth_users: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          created_at: string
+          email: string
+          user_id: string
+        }[]
+      }
+      find_user_by_email_pattern: {
+        Args: { email_pattern: string }
+        Returns: {
+          active_status: boolean
+          email: string
+          name: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
