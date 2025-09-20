@@ -53,6 +53,8 @@ const UserManagement = () => {
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   const [updatingUsers, setUpdatingUsers] = useState<Set<string>>(new Set());
+  const [orphanedUsers, setOrphanedUsers] = useState<any[]>([]);
+  const [isLoadingOrphaned, setIsLoadingOrphaned] = useState(false);
 
   // Redirect if not authenticated or not admin
   useEffect(() => {
@@ -180,26 +182,136 @@ const UserManagement = () => {
     }
   };
 
-  const deleteUser = async (userId: string) => {
+  const deleteUser = async (userId: string, userEmail: string) => {
     try {
-      // Call the secure admin function to delete user
-      const { error } = await supabase.rpc('admin_delete_user', {
+      setUpdatingUsers(prev => new Set([...prev, userId]));
+      
+      // First delete from public schema using existing function
+      const { error: publicError } = await supabase.rpc('admin_delete_user', {
         target_user_id: userId
       });
 
-      if (error) throw error;
+      if (publicError) throw publicError;
 
-      // Remove from local state
+      // Then delete from auth using edge function
+      try {
+        const { data, error: authError } = await supabase.functions.invoke('delete-auth-user', {
+          body: { email: userEmail, userId }
+        });
+
+        if (authError) {
+          console.warn('Auth deletion failed:', authError);
+          toast({
+            title: "Partial deletion completed",
+            description: "User data removed but auth account may still exist. Check orphaned users.",
+            variant: "destructive",
+          });
+        } else if (!data.success) {
+          console.warn('Auth deletion unsuccessful:', data.error);
+          toast({
+            title: "Partial deletion completed", 
+            description: `User data removed but auth deletion failed: ${data.error}`,
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "User deleted completely",
+            description: "User account and all associated data has been removed from all systems.",
+          });
+        }
+      } catch (authErr) {
+        console.warn('Auth deletion exception:', authErr);
+        toast({
+          title: "Partial deletion completed",
+          description: "User data removed but auth deletion encountered an error.",
+          variant: "destructive",
+        });
+      }
+
+      // Remove from local state regardless of auth deletion result
       setUsers(prev => prev.filter(user => user.id !== userId));
 
-      toast({
-        title: "User deleted",
-        description: "User account and all associated data has been removed.",
-      });
     } catch (error: any) {
       console.error('Error deleting user:', error);
       toast({
         title: "Failed to delete user",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setUpdatingUsers(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(userId);
+        return newSet;
+      });
+    }
+  };
+
+  const checkOrphanedUsers = async () => {
+    try {
+      setIsLoadingOrphaned(true);
+      
+      const { data, error } = await supabase.functions.invoke('check-orphaned-users');
+      
+      if (error) {
+        console.error('Error checking orphaned users:', error);
+        toast({
+          title: "Failed to check orphaned users",
+          description: error.message || "Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (data.success) {
+        setOrphanedUsers(data.orphanedAuthUsers || []);
+        
+        if (data.orphanedAuthCount > 0 || data.orphanedProfileCount > 0) {
+          toast({
+            title: "Orphaned users detected",
+            description: `Found ${data.orphanedAuthCount} orphaned auth users and ${data.orphanedProfileCount} orphaned profiles.`,
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "No orphaned users found",
+            description: "All users are properly synchronized.",
+          });
+        }
+      }
+    } catch (error: any) {
+      console.error('Error checking orphaned users:', error);
+      toast({
+        title: "Failed to check orphaned users",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingOrphaned(false);
+    }
+  };
+
+  const cleanupOrphanedUser = async (orphanedUser: any) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('delete-auth-user', {
+        body: { email: orphanedUser.email, userId: orphanedUser.id }
+      });
+
+      if (error) throw error;
+
+      if (data.success) {
+        setOrphanedUsers(prev => prev.filter(u => u.id !== orphanedUser.id));
+        toast({
+          title: "Orphaned user cleaned up",
+          description: `Removed orphaned auth user: ${orphanedUser.email}`,
+        });
+      } else {
+        throw new Error(data.error || 'Cleanup failed');
+      }
+    } catch (error: any) {
+      console.error('Error cleaning up orphaned user:', error);
+      toast({
+        title: "Failed to cleanup orphaned user",
         description: error.message || "Please try again.",
         variant: "destructive",
       });
@@ -264,6 +376,14 @@ const UserManagement = () => {
                 <h2 className="text-lg font-semibold text-foreground">All Users</h2>
               </div>
             <div className="flex items-center gap-2">
+              <Button 
+                onClick={checkOrphanedUsers} 
+                variant="outline" 
+                size="sm"
+                disabled={isLoadingOrphaned}
+              >
+                {isLoadingOrphaned ? "Checking..." : "Check Orphaned"}
+              </Button>
               <Button 
                 onClick={fetchUsers} 
                 variant="outline" 
@@ -391,8 +511,9 @@ const UserManagement = () => {
                             <AlertDialogFooter>
                               <AlertDialogCancel>Cancel</AlertDialogCancel>
                               <AlertDialogAction 
-                                onClick={() => deleteUser(user.id)}
+                                onClick={() => deleteUser(user.id, user.email)}
                                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                disabled={updatingUsers.has(user.id)}
                               >
                                 Delete User
                               </AlertDialogAction>
@@ -410,6 +531,80 @@ const UserManagement = () => {
               <div className="text-center py-12">
                 <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                 <p className="text-muted-foreground">No users found</p>
+              </div>
+            )}
+
+            {/* Orphaned Users Section */}
+            {orphanedUsers.length > 0 && (
+              <div className="mt-8 border-t pt-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-foreground">Orphaned Auth Users</h3>
+                    <p className="text-sm text-muted-foreground">
+                      These users exist in authentication but not in profiles. They may be blocking email reuse.
+                    </p>
+                  </div>
+                </div>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead>Last Sign In</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {orphanedUsers.map((orphan) => (
+                      <TableRow key={orphan.id} className="bg-destructive/5">
+                        <TableCell className="font-medium text-destructive">
+                          {orphan.email}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {new Date(orphan.created_at).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {orphan.last_sign_in_at 
+                            ? new Date(orphan.last_sign_in_at).toLocaleDateString()
+                            : 'Never'
+                          }
+                        </TableCell>
+                        <TableCell>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-destructive hover:text-destructive"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                                Clean Up
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Clean Up Orphaned User</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to remove the orphaned auth user {orphan.email}? 
+                                  This will allow this email to be used for new registrations.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction 
+                                  onClick={() => cleanupOrphanedUser(orphan)}
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                >
+                                  Clean Up
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
             )}
           </Card>

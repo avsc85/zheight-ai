@@ -11,3 +11,9 @@ verify_jwt = false
 
 [functions.csv-upload-ordinances]
 verify_jwt = false
+
+[functions.delete-auth-user]
+verify_jwt = true
+
+[functions.check-orphaned-users]
+verify_jwt = true
