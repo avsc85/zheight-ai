@@ -7,7 +7,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Filter, Download, RefreshCw, Edit, Save, X } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Filter, Download, RefreshCw, Edit, Save, X, ArrowUpDown, ChevronUp, ChevronDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -31,6 +33,19 @@ interface ProjectTask {
   milestoneNumber: number;
 }
 
+type SortField = keyof ProjectTask;
+type SortDirection = 'asc' | 'desc' | null;
+
+interface ColumnFilters {
+  project: string;
+  taskActiveAssigned: string;
+  arAssignedName: string;
+  currentStatus: string;
+  dueDate: string;
+  priorityException: string;
+  taskType: string;
+}
+
 const getStatusBadge = (status: string) => {
   const variants: Record<string, string> = {
     "started": "bg-blue-100 text-blue-800",
@@ -52,6 +67,21 @@ const ProjectTracking = () => {
   const [loading, setLoading] = useState(true);
   const [editingNotes, setEditingNotes] = useState<string | null>(null);
   const [editedNotesValue, setEditedNotesValue] = useState("");
+  
+  // Sorting state
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(null);
+  
+  // Column filters
+  const [columnFilters, setColumnFilters] = useState<ColumnFilters>({
+    project: '',
+    taskActiveAssigned: '',
+    arAssignedName: '',
+    currentStatus: '',
+    dueDate: '',
+    priorityException: '',
+    taskType: ''
+  });
   const { toast } = useToast();
   const { user } = useAuth();
   const { role, isPM, isAR2, isAdmin } = useUserRole();
@@ -266,10 +296,189 @@ const ProjectTracking = () => {
     setEditedNotesValue(currentNotes);
   };
 
-  const filteredProjects = projects.filter(project =>
-    project.project.toLowerCase().includes(filterTerm.toLowerCase()) ||
-    project.taskActiveAssigned.toLowerCase().includes(filterTerm.toLowerCase()) ||
-    (project.arAssignedName && project.arAssignedName.toLowerCase().includes(filterTerm.toLowerCase()))
+  // Sorting function
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(
+        sortDirection === 'asc' ? 'desc' : sortDirection === 'desc' ? null : 'asc'
+      );
+      if (sortDirection === 'desc') {
+        setSortField(null);
+      }
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // Filter and sort projects
+  const filteredAndSortedProjects = (() => {
+    let filtered = projects.filter(project => {
+      // Global search filter
+      const globalMatch = !filterTerm || (
+        project.project.toLowerCase().includes(filterTerm.toLowerCase()) ||
+        project.taskActiveAssigned.toLowerCase().includes(filterTerm.toLowerCase()) ||
+        (project.arAssignedName && project.arAssignedName.toLowerCase().includes(filterTerm.toLowerCase()))
+      );
+
+      // Column filters
+      const columnMatch = 
+        (!columnFilters.project || project.project.toLowerCase().includes(columnFilters.project.toLowerCase())) &&
+        (!columnFilters.taskActiveAssigned || project.taskActiveAssigned.toLowerCase().includes(columnFilters.taskActiveAssigned.toLowerCase())) &&
+        (!columnFilters.arAssignedName || (project.arAssignedName && project.arAssignedName.toLowerCase().includes(columnFilters.arAssignedName.toLowerCase()))) &&
+        (!columnFilters.currentStatus || project.currentStatus === columnFilters.currentStatus) &&
+        (!columnFilters.dueDate || project.dueDate.includes(columnFilters.dueDate)) &&
+        (!columnFilters.priorityException || project.priorityException.toLowerCase().includes(columnFilters.priorityException.toLowerCase())) &&
+        (!columnFilters.taskType || project.taskType === columnFilters.taskType);
+
+      return globalMatch && columnMatch;
+    });
+
+    // Apply sorting
+    if (sortField && sortDirection) {
+      filtered.sort((a, b) => {
+        let aVal = a[sortField];
+        let bVal = b[sortField];
+
+        // Handle string comparison
+        if (typeof aVal === 'string' && typeof bVal === 'string') {
+          aVal = aVal.toLowerCase();
+          bVal = bVal.toLowerCase();
+        }
+
+        // Handle date comparison
+        if (sortField === 'lastStepTimestamp' || sortField === 'dueDate') {
+          const aDate = aVal ? new Date(aVal) : new Date(0);
+          const bDate = bVal ? new Date(bVal) : new Date(0);
+          return sortDirection === 'asc' ? 
+            aDate.getTime() - bDate.getTime() : 
+            bDate.getTime() - aDate.getTime();
+        }
+
+        // Handle milestone number
+        if (sortField === 'milestoneNumber') {
+          return sortDirection === 'asc' ? 
+            (a.milestoneNumber || 0) - (b.milestoneNumber || 0) : 
+            (b.milestoneNumber || 0) - (a.milestoneNumber || 0);
+        }
+
+        // Default string comparison
+        if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return filtered;
+  })();
+
+  // Get unique values for filter dropdowns
+  const getUniqueValues = (field: keyof ProjectTask): string[] => {
+    const values = projects
+      .map(p => p[field])
+      .filter(Boolean)
+      .filter(v => typeof v === 'string') as string[];
+    return [...new Set(values)].sort();
+  };
+
+  // Column filter update
+  const updateColumnFilter = (column: keyof ColumnFilters, value: string) => {
+    setColumnFilters(prev => ({ ...prev, [column]: value }));
+  };
+
+  // Clear all filters
+  const clearAllFilters = () => {
+    setColumnFilters({
+      project: '',
+      taskActiveAssigned: '',
+      arAssignedName: '',
+      currentStatus: '',
+      dueDate: '',
+      priorityException: '',
+      taskType: ''
+    });
+    setFilterTerm('');
+    setSortField(null);
+    setSortDirection(null);
+  };
+
+  // Sortable header component
+  const SortableHeader = ({ field, children, className }: { 
+    field: SortField; 
+    children: React.ReactNode; 
+    className?: string;
+  }) => (
+    <TableHead 
+      className={`cursor-pointer hover:bg-muted/50 select-none ${className}`}
+      onClick={() => handleSort(field)}
+    >
+      <div className="flex items-center gap-2">
+        {children}
+        {sortField === field ? (
+          sortDirection === 'asc' ? 
+            <ChevronUp className="h-4 w-4" /> : 
+            <ChevronDown className="h-4 w-4" />
+        ) : (
+          <ArrowUpDown className="h-4 w-4 opacity-50" />
+        )}
+      </div>
+    </TableHead>
+  );
+
+  // Filter popover component
+  const FilterPopover = ({ 
+    column, 
+    placeholder, 
+    options 
+  }: { 
+    column: keyof ColumnFilters; 
+    placeholder: string; 
+    options?: string[];
+  }) => (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="sm" className="h-6 w-6 p-0 hover:bg-muted">
+          <Filter className={`h-3 w-3 ${columnFilters[column] ? 'text-primary' : 'text-muted-foreground'}`} />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-48 p-3 bg-background border shadow-lg z-50" align="start">
+        {options ? (
+          <Select 
+            value={columnFilters[column]} 
+            onValueChange={(value) => updateColumnFilter(column, value)}
+          >
+            <SelectTrigger className="w-full bg-background">
+              <SelectValue placeholder={placeholder} />
+            </SelectTrigger>
+            <SelectContent className="bg-background border shadow-lg z-50">
+              <SelectItem value="">All</SelectItem>
+              {options.map(option => (
+                <SelectItem key={option} value={option}>{option}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <div className="space-y-2">
+            <Input
+              placeholder={placeholder}
+              value={columnFilters[column]}
+              onChange={(e) => updateColumnFilter(column, e.target.value)}
+              className="h-8 bg-background"
+            />
+            {columnFilters[column] && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => updateColumnFilter(column, '')}
+                className="h-6 w-full text-xs"
+              >
+                Clear
+              </Button>
+            )}
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 
   if (!isPM && !isAR2 && !isAdmin) {
@@ -317,14 +526,29 @@ const ProjectTracking = () => {
               {/* Filter Section */}
               <Card>
                 <CardContent className="p-4">
-                  <div className="flex items-center gap-2">
-                    <Filter className="h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Filter Project"
-                      value={filterTerm}
-                      onChange={(e) => setFilterTerm(e.target.value)}
-                      className="max-w-sm"
-                    />
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                    <div className="flex items-center gap-2 flex-1">
+                      <Filter className="h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Global search across projects, tasks, and assignees..."
+                        value={filterTerm}
+                        onChange={(e) => setFilterTerm(e.target.value)}
+                        className="max-w-md"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={clearAllFilters}
+                        className="text-xs"
+                      >
+                        Clear All Filters
+                      </Button>
+                      <Badge variant="outline" className="text-xs">
+                        {filteredAndSortedProjects.length} of {projects.length} tasks
+                      </Badge>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -341,23 +565,84 @@ const ProjectTracking = () => {
                   <Card>
                     <CardContent className="p-0">
                       <div className="overflow-x-auto">
-                        <Table>
-                           <TableHeader>
-                             <TableRow>
-                               <TableHead className="min-w-48">Project</TableHead>
-                               <TableHead className="min-w-48">Task Active Assigned</TableHead>
-                               <TableHead className="w-32">Task Type</TableHead>
-                               <TableHead className="w-32">AR Assigned</TableHead>
-                               <TableHead className="w-32">Current Status</TableHead>
-                               <TableHead className="w-32">Due Date</TableHead>
-                               <TableHead className="min-w-48">Priority Exception</TableHead>
-                               <TableHead className="w-40">Last Step Timestamp</TableHead>
+                         <Table>
+                            <TableHeader>
+                             <TableRow className="bg-muted/30">
+                               <SortableHeader field="project" className="min-w-48">
+                                 <div className="flex items-center gap-2">
+                                   Project
+                                   <FilterPopover 
+                                     column="project" 
+                                     placeholder="Filter projects..." 
+                                   />
+                                 </div>
+                               </SortableHeader>
+                               <SortableHeader field="taskActiveAssigned" className="min-w-48">
+                                 <div className="flex items-center gap-2">
+                                   Task Active Assigned
+                                   <FilterPopover 
+                                     column="taskActiveAssigned" 
+                                     placeholder="Filter tasks..." 
+                                   />
+                                 </div>
+                               </SortableHeader>
+                               <SortableHeader field="taskType" className="w-32">
+                                 <div className="flex items-center gap-2">
+                                   Task Type
+                                   <FilterPopover 
+                                     column="taskType" 
+                                     placeholder="Filter type..." 
+                                     options={['assigned', 'next_unassigned']}
+                                   />
+                                 </div>
+                               </SortableHeader>
+                               <SortableHeader field="arAssignedName" className="w-32">
+                                 <div className="flex items-center gap-2">
+                                   AR Assigned
+                                   <FilterPopover 
+                                     column="arAssignedName" 
+                                     placeholder="Filter assignees..." 
+                                     options={getUniqueValues('arAssignedName')}
+                                   />
+                                 </div>
+                               </SortableHeader>
+                               <SortableHeader field="currentStatus" className="w-32">
+                                 <div className="flex items-center gap-2">
+                                   Current Status
+                                   <FilterPopover 
+                                     column="currentStatus" 
+                                     placeholder="Filter status..." 
+                                     options={getUniqueValues('currentStatus')}
+                                   />
+                                 </div>
+                               </SortableHeader>
+                               <SortableHeader field="dueDate" className="w-32">
+                                 <div className="flex items-center gap-2">
+                                   Due Date
+                                   <FilterPopover 
+                                     column="dueDate" 
+                                     placeholder="Filter dates..." 
+                                   />
+                                 </div>
+                               </SortableHeader>
+                               <SortableHeader field="priorityException" className="min-w-48">
+                                 <div className="flex items-center gap-2">
+                                   Priority Exception
+                                   <FilterPopover 
+                                     column="priorityException" 
+                                     placeholder="Filter priorities..." 
+                                   />
+                                 </div>
+                               </SortableHeader>
+                               <SortableHeader field="lastStepTimestamp" className="w-40">
+                                 Last Step Timestamp
+                               </SortableHeader>
                                <TableHead className="min-w-64">AR Notes</TableHead>
                                <TableHead className="min-w-64">PM Notes</TableHead>
                              </TableRow>
-                           </TableHeader>
-                          <TableBody>
-                              {filteredProjects.map((project) => (
+                            </TableHeader>
+                           <TableBody>
+                               {filteredAndSortedProjects.map((project) => (
                                 <TableRow 
                                   key={project.id} 
                                   className={`hover:bg-muted/50 ${
