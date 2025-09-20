@@ -402,81 +402,111 @@ const ProjectTracking = () => {
     setSortDirection(null);
   };
 
-  // Sortable header component
-  const SortableHeader = ({ field, children, className }: { 
-    field: SortField; 
-    children: React.ReactNode; 
-    className?: string;
-  }) => (
-    <TableHead 
-      className={`cursor-pointer hover:bg-muted/50 select-none ${className}`}
-      onClick={() => handleSort(field)}
-    >
-      <div className="flex items-center gap-2">
-        {children}
-        {sortField === field ? (
-          sortDirection === 'asc' ? 
-            <ChevronUp className="h-4 w-4" /> : 
-            <ChevronDown className="h-4 w-4" />
-        ) : (
-          <ArrowUpDown className="h-4 w-4 opacity-50" />
-        )}
-      </div>
-    </TableHead>
-  );
-
-  // Filter popover component
-  const FilterPopover = ({ 
+  // Combined Filter and Sort component
+  const FilterSortPopover = ({ 
+    field,
     column, 
     placeholder, 
     options 
   }: { 
+    field: SortField;
     column: keyof ColumnFilters; 
     placeholder: string; 
     options?: string[];
   }) => (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-6 w-6 p-0 hover:bg-muted">
-          <Filter className={`h-3 w-3 ${columnFilters[column] ? 'text-primary' : 'text-muted-foreground'}`} />
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          className="h-6 w-6 p-0 hover:bg-muted" 
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Filter className={`h-3 w-3 ${columnFilters[column] || sortField === field ? 'text-primary' : 'text-muted-foreground'}`} />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-48 p-3 bg-background border shadow-lg z-50" align="start">
-        {options ? (
-          <Select 
-            value={columnFilters[column]} 
-            onValueChange={(value) => updateColumnFilter(column, value)}
-          >
-            <SelectTrigger className="w-full bg-background">
-              <SelectValue placeholder={placeholder} />
-            </SelectTrigger>
-            <SelectContent className="bg-background border shadow-lg z-50">
-              <SelectItem value="">All</SelectItem>
-              {options.map(option => (
-                <SelectItem key={option} value={option}>{option}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : (
+      <PopoverContent className="w-56 p-0 bg-background border shadow-lg z-50" align="start">
+        <div className="p-3 space-y-3">
+          {/* Sort Section */}
           <div className="space-y-2">
-            <Input
-              placeholder={placeholder}
-              value={columnFilters[column]}
-              onChange={(e) => updateColumnFilter(column, e.target.value)}
-              className="h-8 bg-background"
-            />
+            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Sort</div>
+            <div className="flex gap-1">
+              <Button
+                variant={sortField === field && sortDirection === 'asc' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => handleSort(field)}
+                className="flex-1 h-7 text-xs"
+              >
+                <ChevronUp className="h-3 w-3 mr-1" />
+                Asc
+              </Button>
+              <Button
+                variant={sortField === field && sortDirection === 'desc' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => {
+                  setSortField(field);
+                  setSortDirection('desc');
+                }}
+                className="flex-1 h-7 text-xs"
+              >
+                <ChevronDown className="h-3 w-3 mr-1" />
+                Desc
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSortField(null);
+                  setSortDirection(null);
+                }}
+                className="h-7 px-2 text-xs"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Separator */}
+          <div className="border-t" />
+
+          {/* Filter Section */}
+          <div className="space-y-2">
+            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Filter</div>
+            {options ? (
+              <Select 
+                value={columnFilters[column]} 
+                onValueChange={(value) => updateColumnFilter(column, value)}
+              >
+                <SelectTrigger className="w-full bg-background h-8">
+                  <SelectValue placeholder={placeholder} />
+                </SelectTrigger>
+                <SelectContent className="bg-background border shadow-lg z-50">
+                  <SelectItem value="">All</SelectItem>
+                  {options.map(option => (
+                    <SelectItem key={option} value={option}>{option}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                placeholder={placeholder}
+                value={columnFilters[column]}
+                onChange={(e) => updateColumnFilter(column, e.target.value)}
+                className="h-8 bg-background"
+              />
+            )}
             {columnFilters[column] && (
               <Button 
-                variant="ghost" 
+                variant="outline" 
                 size="sm" 
                 onClick={() => updateColumnFilter(column, '')}
                 className="h-6 w-full text-xs"
               >
-                Clear
+                Clear Filter
               </Button>
             )}
           </div>
-        )}
+        </div>
       </PopoverContent>
     </Popover>
   );
@@ -566,81 +596,95 @@ const ProjectTracking = () => {
                     <CardContent className="p-0">
                       <div className="overflow-x-auto">
                          <Table>
-                            <TableHeader>
-                             <TableRow className="bg-muted/30">
-                               <SortableHeader field="project" className="min-w-48">
-                                 <div className="flex items-center gap-2">
-                                   Project
-                                   <FilterPopover 
-                                     column="project" 
-                                     placeholder="Filter projects..." 
-                                   />
-                                 </div>
-                               </SortableHeader>
-                               <SortableHeader field="taskActiveAssigned" className="min-w-48">
-                                 <div className="flex items-center gap-2">
-                                   Task Active Assigned
-                                   <FilterPopover 
-                                     column="taskActiveAssigned" 
-                                     placeholder="Filter tasks..." 
-                                   />
-                                 </div>
-                               </SortableHeader>
-                               <SortableHeader field="taskType" className="w-32">
-                                 <div className="flex items-center gap-2">
-                                   Task Type
-                                   <FilterPopover 
-                                     column="taskType" 
-                                     placeholder="Filter type..." 
-                                     options={['assigned', 'next_unassigned']}
-                                   />
-                                 </div>
-                               </SortableHeader>
-                               <SortableHeader field="arAssignedName" className="w-32">
-                                 <div className="flex items-center gap-2">
-                                   AR Assigned
-                                   <FilterPopover 
-                                     column="arAssignedName" 
-                                     placeholder="Filter assignees..." 
-                                     options={getUniqueValues('arAssignedName')}
-                                   />
-                                 </div>
-                               </SortableHeader>
-                               <SortableHeader field="currentStatus" className="w-32">
-                                 <div className="flex items-center gap-2">
-                                   Current Status
-                                   <FilterPopover 
-                                     column="currentStatus" 
-                                     placeholder="Filter status..." 
-                                     options={getUniqueValues('currentStatus')}
-                                   />
-                                 </div>
-                               </SortableHeader>
-                               <SortableHeader field="dueDate" className="w-32">
-                                 <div className="flex items-center gap-2">
-                                   Due Date
-                                   <FilterPopover 
-                                     column="dueDate" 
-                                     placeholder="Filter dates..." 
-                                   />
-                                 </div>
-                               </SortableHeader>
-                               <SortableHeader field="priorityException" className="min-w-48">
-                                 <div className="flex items-center gap-2">
-                                   Priority Exception
-                                   <FilterPopover 
-                                     column="priorityException" 
-                                     placeholder="Filter priorities..." 
-                                   />
-                                 </div>
-                               </SortableHeader>
-                               <SortableHeader field="lastStepTimestamp" className="w-40">
-                                 Last Step Timestamp
-                               </SortableHeader>
-                               <TableHead className="min-w-64">AR Notes</TableHead>
-                               <TableHead className="min-w-64">PM Notes</TableHead>
-                             </TableRow>
-                            </TableHeader>
+                             <TableHeader>
+                              <TableRow className="bg-muted/30">
+                                <TableHead className="min-w-48">
+                                  <div className="flex items-center gap-2">
+                                    Project
+                                    <FilterSortPopover 
+                                      field="project"
+                                      column="project" 
+                                      placeholder="Filter projects..." 
+                                    />
+                                  </div>
+                                </TableHead>
+                                <TableHead className="min-w-48">
+                                  <div className="flex items-center gap-2">
+                                    Task Active Assigned
+                                    <FilterSortPopover 
+                                      field="taskActiveAssigned"
+                                      column="taskActiveAssigned" 
+                                      placeholder="Filter tasks..." 
+                                    />
+                                  </div>
+                                </TableHead>
+                                <TableHead className="w-32">
+                                  <div className="flex items-center gap-2">
+                                    Task Type
+                                    <FilterSortPopover 
+                                      field="taskType"
+                                      column="taskType" 
+                                      placeholder="Filter type..." 
+                                      options={['assigned', 'next_unassigned']}
+                                    />
+                                  </div>
+                                </TableHead>
+                                <TableHead className="w-32">
+                                  <div className="flex items-center gap-2">
+                                    AR Assigned
+                                    <FilterSortPopover 
+                                      field="arAssignedName"
+                                      column="arAssignedName" 
+                                      placeholder="Filter assignees..." 
+                                      options={getUniqueValues('arAssignedName')}
+                                    />
+                                  </div>
+                                </TableHead>
+                                <TableHead className="w-32">
+                                  <div className="flex items-center gap-2">
+                                    Current Status
+                                    <FilterSortPopover 
+                                      field="currentStatus"
+                                      column="currentStatus" 
+                                      placeholder="Filter status..." 
+                                      options={getUniqueValues('currentStatus')}
+                                    />
+                                  </div>
+                                </TableHead>
+                                <TableHead className="w-32">
+                                  <div className="flex items-center gap-2">
+                                    Due Date
+                                    <FilterSortPopover 
+                                      field="dueDate"
+                                      column="dueDate" 
+                                      placeholder="Filter dates..." 
+                                    />
+                                  </div>
+                                </TableHead>
+                                <TableHead className="min-w-48">
+                                  <div className="flex items-center gap-2">
+                                    Priority Exception
+                                    <FilterSortPopover 
+                                      field="priorityException"
+                                      column="priorityException" 
+                                      placeholder="Filter priorities..." 
+                                    />
+                                  </div>
+                                </TableHead>
+                                <TableHead className="w-40">
+                                  <div className="flex items-center gap-2">
+                                    Last Step Timestamp
+                                    <FilterSortPopover 
+                                      field="lastStepTimestamp"
+                                      column="dueDate" 
+                                      placeholder="Filter timestamps..." 
+                                    />
+                                  </div>
+                                </TableHead>
+                                <TableHead className="min-w-64">AR Notes</TableHead>
+                                <TableHead className="min-w-64">PM Notes</TableHead>
+                              </TableRow>
+                             </TableHeader>
                            <TableBody>
                                {filteredAndSortedProjects.map((project) => (
                                 <TableRow 
