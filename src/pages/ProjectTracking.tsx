@@ -474,14 +474,14 @@ const ProjectTracking = () => {
             <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Filter</div>
             {options ? (
               <Select 
-                value={columnFilters[column]} 
-                onValueChange={(value) => updateColumnFilter(column, value)}
+                value={columnFilters[column] || "all"} 
+                onValueChange={(value) => updateColumnFilter(column, value === "all" ? "" : value)}
               >
                 <SelectTrigger className="w-full bg-background h-8">
                   <SelectValue placeholder={placeholder} />
                 </SelectTrigger>
                 <SelectContent className="bg-background border shadow-lg z-50">
-                  <SelectItem value="">All</SelectItem>
+                  <SelectItem value="all">All</SelectItem>
                   {options.map(option => (
                     <SelectItem key={option} value={option}>{option}</SelectItem>
                   ))}
