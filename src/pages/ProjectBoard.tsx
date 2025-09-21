@@ -46,6 +46,7 @@ interface Task {
   arAssigned: string;
   projectId: string;
   completionDate?: string;
+  milestoneNumber: number;
 }
 
 const DroppableColumn = ({ children, id, className }: { children: React.ReactNode; id: string; className?: string }) => {
@@ -456,7 +457,8 @@ const ProjectBoard = () => {
         timeAllocated: 0, // This would come from time tracking
         arAssigned: task.assigned_ar_id,
         projectId: task.project_id,
-        completionDate: task.completion_date
+        completionDate: task.completion_date,
+        milestoneNumber: task.milestone_number || 0
       }));
       
       console.log('Formatted tasks:', formattedTasks);
@@ -638,6 +640,33 @@ const ProjectBoard = () => {
     return filteredTasks;
   };
 
+  // Sort tasks by due date, milestone, and project name
+  const sortTasks = (tasks: Task[]) => {
+    return tasks.sort((a, b) => {
+      // Parse dates for comparison, handle "No deadline" case
+      const getDateValue = (deadline: string) => {
+        if (deadline === 'No deadline' || !deadline) return new Date('9999-12-31'); // Far future date
+        return new Date(deadline);
+      };
+      
+      const dateA = getDateValue(a.deadline);
+      const dateB = getDateValue(b.deadline);
+      
+      // Primary sort: by due date (sooner dates first)
+      if (dateA.getTime() !== dateB.getTime()) {
+        return dateA.getTime() - dateB.getTime();
+      }
+      
+      // Secondary sort: by milestone number within same project
+      if (a.projectId === b.projectId && a.milestoneNumber !== b.milestoneNumber) {
+        return a.milestoneNumber - b.milestoneNumber;
+      }
+      
+      // Tertiary sort: alphabetically by project name for different projects
+      return a.project.localeCompare(b.project);
+    });
+  };
+
   const userTasks = getFilteredTasks();
 
   // Helper function to check if task was completed this week
@@ -756,8 +785,8 @@ const ProjectBoard = () => {
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                 {Object.entries(columns).map(([status, { title, color }]) => {
                   const columnTasks = status === 'completed' 
-                    ? userTasks.filter(task => isCompletedThisWeek(task))
-                    : userTasks.filter(task => task.status === status);
+                    ? sortTasks(userTasks.filter(task => isCompletedThisWeek(task)))
+                    : sortTasks(userTasks.filter(task => task.status === status));
                   
                   return (
                     <DroppableColumn key={status} id={status} className="space-y-4">
