@@ -77,56 +77,16 @@ const UserManagement = () => {
     try {
       setIsLoadingUsers(true);
       
-      // Get all profiles with their user roles
-      const { data: profilesData, error: profilesError } = await supabase
-        .from('profiles')
-        .select(`
-          user_id,
-          name,
-          company,
-          created_at,
-          active_status
-        `);
-
-      if (profilesError) throw profilesError;
-
-      // Get all user roles
-      const { data: rolesData, error: rolesError } = await supabase
-        .from('user_roles')
-        .select('user_id, role');
-
-      if (rolesError) throw rolesError;
-
-      // Get auth users data (we'll need this for email and last_sign_in_at)
-      let authUsers: any[] = [];
-      try {
-        const { data: authData, error: authError } = await supabase.auth.admin.listUsers();
-        if (!authError) {
-          authUsers = authData.users || [];
-        }
-      } catch (error) {
-        console.error('Error fetching auth users:', error);
-        // Continue without auth data
+      // Use edge function to get users with auth data
+      const { data, error } = await supabase.functions.invoke('get-users-with-auth');
+      
+      if (error) throw error;
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to fetch users');
       }
 
-      // Combine the data
-      const usersWithRoles: UserWithRole[] = profilesData.map(profile => {
-        const userRole = rolesData.find(role => role.user_id === profile.user_id);
-        const authUser = authUsers.find((u: any) => u.id === profile.user_id);
-        
-        return {
-          id: profile.user_id,
-          email: authUser?.email || 'Unknown',
-          full_name: profile.name,
-          company: profile.company,
-          role: (userRole?.role as 'user' | 'admin' | 'pm' | 'ar1_planning' | 'ar2_field') || 'user',
-          created_at: profile.created_at,
-          last_sign_in_at: authUser?.last_sign_in_at || null,
-          active_status: profile.active_status
-        };
-      });
-
-      setUsers(usersWithRoles);
+      setUsers(data.users);
     } catch (error: any) {
       console.error('Error fetching users:', error);
       toast({

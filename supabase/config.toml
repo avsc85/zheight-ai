@@ -20,3 +20,6 @@ verify_jwt = true
 
 [functions.invite-user]
 verify_jwt = true
+
+[functions.get-users-with-auth]
+verify_jwt = true
