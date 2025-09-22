@@ -446,7 +446,7 @@ const UserManagement = () => {
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {user.last_sign_in_at 
-                          ? new Date(user.last_sign_in_at).toLocaleDateString()
+                          ? new Date(user.last_sign_in_at).toLocaleString()
                           : 'Never'
                         }
                       </TableCell>
