@@ -17,3 +17,6 @@ verify_jwt = true
 
 [functions.check-orphaned-users]
 verify_jwt = true
+
+[functions.invite-user]
+verify_jwt = true

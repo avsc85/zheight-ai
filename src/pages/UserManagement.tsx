@@ -1,3 +1,4 @@
+import { InviteUserForm } from "@/components/InviteUserForm";
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Header } from "@/components/Header";
@@ -376,7 +377,8 @@ const UserManagement = () => {
                 <h2 className="text-lg font-semibold text-foreground">All Users</h2>
               </div>
             <div className="flex items-center gap-2">
-              <Button 
+              <InviteUserForm onInviteSent={fetchUsers} />
+              <Button
                 onClick={checkOrphanedUsers} 
                 variant="outline" 
                 size="sm"
