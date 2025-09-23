@@ -399,7 +399,7 @@ export type Database = {
           completion_date: string | null
           created_at: string
           due_date: string | null
-          hours: string | null
+          hours: number | null
           last_step_timestamp: string | null
           milestone_number: number
           notes_tasks: string | null
@@ -420,7 +420,7 @@ export type Database = {
           completion_date?: string | null
           created_at?: string
           due_date?: string | null
-          hours?: string | null
+          hours?: number | null
           last_step_timestamp?: string | null
           milestone_number: number
           notes_tasks?: string | null
@@ -441,7 +441,7 @@ export type Database = {
           completion_date?: string | null
           created_at?: string
           due_date?: string | null
-          hours?: string | null
+          hours?: number | null
           last_step_timestamp?: string | null
           milestone_number?: number
           notes_tasks?: string | null
@@ -600,6 +600,10 @@ export type Database = {
       admin_delete_user_complete: {
         Args: { target_email?: string; target_user_id: string }
         Returns: Json
+      }
+      calculate_time_percentage: {
+        Args: { task_hours: number; total_project_hours: number }
+        Returns: number
       }
       cleanup_expired_invitations: {
         Args: Record<PropertyKey, never>
