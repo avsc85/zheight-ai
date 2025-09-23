@@ -842,12 +842,12 @@ const ProjectSetup = () => {
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead className="w-16">Milestone #</TableHead>
+                            <TableHead className="w-12">#</TableHead>
                             <TableHead className="min-w-48">Task Name</TableHead>
                             <TableHead className="w-32">AR Assigned</TableHead>
                             <TableHead className="w-32">Assigned/Skip</TableHead>
                             <TableHead className="w-32">Due Date</TableHead>
-                            <TableHead className="min-w-48">Priority Exception</TableHead>
+                            <TableHead className="min-w-36">Priority</TableHead>
                             <TableHead className="w-24">% Time</TableHead>
                             <TableHead className="w-24">Hours</TableHead>
                             <TableHead className="min-w-32">Notes</TableHead>
