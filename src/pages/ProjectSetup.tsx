@@ -27,15 +27,15 @@ import { useAuth } from "@/hooks/useAuth";
 
 // Default task template
 const defaultTasks = [
-  { id: 1, task_name: "Floor Plan + Site Map", assigned_ar_id: null, assigned_skip_flag: "Y", due_date: "", priority_exception: "Prioritize over everything", time_percentage: 18, notes_tasks: "" },
-  { id: 2, task_name: "Proposed Floor Plan", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", priority_exception: "", time_percentage: 6, notes_tasks: "" },
-  { id: 3, task_name: "Elevations", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", priority_exception: "", time_percentage: 14, notes_tasks: "" },
-  { id: 4, task_name: "Finalization PF w/t Customer", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", priority_exception: "", time_percentage: 18, notes_tasks: "" },
-  { id: 5, task_name: "Full Set Completion Planning", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", priority_exception: "", time_percentage: 18, notes_tasks: "" },
-  { id: 6, task_name: "MEP / T-24 / Struc/Finalization", assigned_ar_id: null, assigned_skip_flag: "Skip", due_date: "", priority_exception: "", time_percentage: 4, notes_tasks: "" },
-  { id: 7, task_name: "Final Submission Set", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", priority_exception: "", time_percentage: 6, notes_tasks: "" },
-  { id: 8, task_name: "Revision 1", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", priority_exception: "", time_percentage: 8, notes_tasks: "" },
-  { id: 9, task_name: "Revision 2", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", priority_exception: "", time_percentage: 8, notes_tasks: "" }
+  { id: 1, task_name: "Floor Plan + Site Map", assigned_ar_id: null, assigned_skip_flag: "Y", due_date: "", priority_exception: "Prioritize over everything", hours: 6, notes_tasks: "" },
+  { id: 2, task_name: "Proposed Floor Plan", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", priority_exception: "", hours: 2, notes_tasks: "" },
+  { id: 3, task_name: "Elevations", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", priority_exception: "", hours: 5, notes_tasks: "" },
+  { id: 4, task_name: "Finalization PF w/t Customer", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", priority_exception: "", hours: 6, notes_tasks: "" },
+  { id: 5, task_name: "Full Set Completion Planning", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", priority_exception: "", hours: 6, notes_tasks: "" },
+  { id: 6, task_name: "MEP / T-24 / Struc/Finalization", assigned_ar_id: null, assigned_skip_flag: "Skip", due_date: "", priority_exception: "", hours: 1, notes_tasks: "" },
+  { id: 7, task_name: "Final Submission Set", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", priority_exception: "", hours: 2, notes_tasks: "" },
+  { id: 8, task_name: "Revision 1", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", priority_exception: "", hours: 3, notes_tasks: "" },
+  { id: 9, task_name: "Revision 2", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", priority_exception: "", hours: 3, notes_tasks: "" }
 ];
 
 interface AR {
@@ -44,7 +44,7 @@ interface AR {
   role: string;
 }
 
-const SortableRow = ({ task, index, handleTaskChange, deleteTask, arUsers, hoursAllocated }: any) => {
+const SortableRow = ({ task, index, handleTaskChange, deleteTask, arUsers }: any) => {
   const {
     attributes,
     listeners,
@@ -56,10 +56,6 @@ const SortableRow = ({ task, index, handleTaskChange, deleteTask, arUsers, hours
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-  };
-
-  const calculateHours = (percentage: number) => {
-    return Math.round((hoursAllocated * percentage) / 100);
   };
 
   return (
@@ -132,17 +128,13 @@ const SortableRow = ({ task, index, handleTaskChange, deleteTask, arUsers, hours
           </TableCell>
           <TableCell>
             <Input
-              value={task.time_percentage}
-              onChange={(e) => handleTaskChange(task.id, "time_percentage", parseInt(e.target.value) || 0)}
-              className="h-8 w-16"
+              value={task.hours}
+              onChange={(e) => handleTaskChange(task.id, "hours", parseInt(e.target.value) || 0)}
+              className="h-8 w-20"
               placeholder="0"
               type="number"
+              min="0"
             />
-          </TableCell>
-          <TableCell>
-            <Badge variant="secondary" className="text-xs">
-              {calculateHours(task.time_percentage)}h
-            </Badge>
           </TableCell>
           <TableCell>
             <Input
@@ -342,7 +334,7 @@ const ProjectSetup = () => {
       assigned_skip_flag: "N",
       due_date: "",
       priority_exception: "",
-      time_percentage: 0,
+      hours: 0,
       notes_tasks: ""
     };
     
@@ -465,7 +457,7 @@ const ProjectSetup = () => {
           assigned_skip_flag: task.assigned_skip_flag || "N",
           due_date: task.due_date || "",
           priority_exception: task.priority_exception || "",
-          time_percentage: task.time_percentage || 0,
+          hours: task.hours || 0,
           notes_tasks: task.notes_tasks || ""
         };
       });
@@ -566,7 +558,7 @@ const ProjectSetup = () => {
           assigned_skip_flag: task.assigned_skip_flag,
           due_date: task.due_date || null,
           priority_exception: task.priority_exception,
-          time_percentage: task.time_percentage,
+          hours: task.hours,
           notes_tasks: task.notes_tasks,
           task_status: 'in_queue'
         }));
@@ -611,7 +603,7 @@ const ProjectSetup = () => {
           assigned_skip_flag: task.assigned_skip_flag,
           due_date: task.due_date || null,
           priority_exception: task.priority_exception,
-          time_percentage: task.time_percentage,
+          hours: task.hours,
           notes_tasks: task.notes_tasks,
           task_status: 'in_queue'
         }));
@@ -848,7 +840,6 @@ const ProjectSetup = () => {
                             <TableHead className="w-32">Assigned/Skip</TableHead>
                             <TableHead className="w-32">Due Date</TableHead>
                             <TableHead className="min-w-36">Priority</TableHead>
-                            <TableHead className="w-24">% Time</TableHead>
                             <TableHead className="w-24">Hours</TableHead>
                             <TableHead className="min-w-32">Notes</TableHead>
                             <TableHead className="w-16">Actions</TableHead>
@@ -867,7 +858,6 @@ const ProjectSetup = () => {
                                 handleTaskChange={handleTaskChange}
                                 deleteTask={deleteTask}
                                 arUsers={arUsers}
-                                hoursAllocated={projectData.hours_allocated}
                               />
                             ))}
                           </TableBody>
