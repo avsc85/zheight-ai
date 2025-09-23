@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MapPin, Clock, Edit, Save, X, GripVertical } from "lucide-react";
+import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -195,7 +196,12 @@ const TaskCard = ({ task, onUpdateNotes, onUpdateStatus, currentUserId, userRole
           <div className="flex items-start gap-2">
             <MapPin className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
             <div>
-              <p className="font-medium text-sm text-foreground">{task.project}</p>
+              <Link 
+                to={`/project-mgmt/setup/${task.projectId}`}
+                className="font-medium text-sm text-foreground hover:text-primary hover:underline transition-colors"
+              >
+                {task.project}
+              </Link>
               <p className="text-sm text-muted-foreground">{task.task}</p>
             </div>
           </div>
