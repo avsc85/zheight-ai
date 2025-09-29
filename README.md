@@ -1,8 +1,8 @@
-# Welcome to your Lovable project
+# Welcome to AI Plan Checker Project
 
 ## Project info
 
-**URL**: https://lovable.dev/projects/48b6204c-34ba-4c2d-bc72-5b94fb53dfe7
+**URL**: zheight.tech
 
 ## How can I edit this code?
 
