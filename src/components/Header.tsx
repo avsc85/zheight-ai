@@ -1,6 +1,7 @@
-import { Building2, Bot, User, LogOut, Users, FolderKanban } from "lucide-react";
+import { Bot, User, LogOut, Users, FolderKanban } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
+import zHeightLogo from "@/assets/zheight-logo.png";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -29,9 +30,7 @@ export const Header = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-8">
             <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-              <div className="w-10 h-10 bg-gradient-primary rounded-lg flex items-center justify-center shadow-primary">
-                <Building2 className="w-6 h-6 text-primary-foreground" />
-              </div>
+              <img src={zHeightLogo} alt="zHeight Logo" className="h-10 w-auto" />
               <div>
                 <h1 className="text-xl font-bold text-foreground">zHeight Internal AI Applications</h1>
                 <p className="text-sm text-muted-foreground">Building Code Compliance & Project Management</p>
