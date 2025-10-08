@@ -59,14 +59,14 @@ export const PlanChecker = ({ onIssuesUpdate }: PlanCheckerProps) => {
 
     try {
       toast({
-        title: "Starting analysis",
-        description: "Analyzing plans against compliance checklist...",
+        title: "Starting AI analysis",
+        description: "Extracting project information from plans...",
       });
 
-      // Simulate progress updates
+      // Simulate progress updates with more detailed steps
       const progressInterval = setInterval(() => {
-        setProgress(prev => Math.min(prev + 10, 90));
-      }, 2000);
+        setProgress(prev => Math.min(prev + 5, 90));
+      }, 3000);
 
       // Prepare form data for the edge function
       const formData = new FormData();
@@ -99,9 +99,14 @@ export const PlanChecker = ({ onIssuesUpdate }: PlanCheckerProps) => {
         setAnalysisSessionId(analysisResults.analysis_session_id);
         onIssuesUpdate?.(analysisResults.issues);
         
+        const summary = analysisResults.analysis_summary;
+        const cityInfo = analysisResults.city_detected !== 'Not detected' 
+          ? ` for ${analysisResults.city_detected}` 
+          : '';
+        
         toast({
-          title: "Analysis complete",
-          description: `Found ${analysisResults.issues.length} compliance issues`,
+          title: "AI Analysis Complete",
+          description: `Analyzed ${summary?.total_checked || analysisResults.issues.length} checklist items${cityInfo}. Found ${analysisResults.issues.length} compliance issues.`,
           variant: analysisResults.issues.length > 0 ? "destructive" : "default"
         });
       } else {
