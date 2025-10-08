@@ -1,23 +1,47 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.56.0';
-import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Helper function to convert PDF file to base64 data URL
-async function pdfToBase64(file: File): Promise<string> {
-  const arrayBuffer = await file.arrayBuffer();
-  const bytes = new Uint8Array(arrayBuffer);
-  const base64 = base64Encode(bytes);
-  return `data:application/pdf;base64,${base64}`;
+// Upload PDF to storage and generate a signed URL for AI processing
+async function uploadPDFToStorage(
+  file: File, 
+  userId: string, 
+  supabase: any
+): Promise<string> {
+  const fileName = `${userId}/${Date.now()}_${file.name}`;
+  
+  const { data: uploadData, error: uploadError } = await supabase.storage
+    .from('plan-files')
+    .upload(fileName, file, {
+      contentType: 'application/pdf',
+      upsert: false
+    });
+
+  if (uploadError) {
+    console.error('Storage upload error:', uploadError);
+    throw new Error(`Failed to upload PDF: ${uploadError.message}`);
+  }
+
+  // Generate a signed URL valid for 1 hour
+  const { data: signedData, error: signedError } = await supabase.storage
+    .from('plan-files')
+    .createSignedUrl(fileName, 3600);
+
+  if (signedError || !signedData) {
+    throw new Error('Failed to generate signed URL');
+  }
+
+  console.log('PDF uploaded to storage:', fileName);
+  return signedData.signedUrl;
 }
 
 // Extract city from PDF first page using Lovable AI
-async function extractCityFromPDF(pdfBase64: string, lovableApiKey: string): Promise<string | null> {
-  console.log('Extracting city from PDF...');
+async function extractCityFromPDF(pdfUrl: string, lovableApiKey: string): Promise<string | null> {
+  console.log('Extracting city from PDF via URL...');
   
   try {
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -39,7 +63,7 @@ async function extractCityFromPDF(pdfBase64: string, lovableApiKey: string): Pro
               {
                 type: 'image_url',
                 image_url: {
-                  url: pdfBase64
+                  url: pdfUrl
                 }
               }
             ]
@@ -70,7 +94,7 @@ async function extractCityFromPDF(pdfBase64: string, lovableApiKey: string): Pro
 
 // Analyze plan against checklist items using Lovable AI
 async function analyzePlanCompliance(
-  pdfBase64: string,
+  pdfUrl: string,
   checklistItems: any[],
   lovableApiKey: string
 ): Promise<any[]> {
@@ -134,7 +158,7 @@ If no issue is found, set has_issue to false and provide brief rationale.`;
                   {
                     type: 'image_url',
                     image_url: {
-                      url: pdfBase64
+                      url: pdfUrl
                     }
                   }
                 ]
@@ -268,10 +292,10 @@ serve(async (req) => {
     // Generate analysis session ID
     const analysisSessionId = crypto.randomUUID();
 
-    // Step 1: Extract city from first PDF
+    // Step 1: Upload PDF to storage and get signed URL
     const firstFile = files[0];
-    const pdfBase64 = await pdfToBase64(firstFile);
-    const extractedCity = await extractCityFromPDF(pdfBase64, lovableApiKey);
+    const pdfUrl = await uploadPDFToStorage(firstFile, user.id, supabase);
+    const extractedCity = await extractCityFromPDF(pdfUrl, lovableApiKey);
     
     console.log('City detection result:', extractedCity || 'Not detected');
 
@@ -316,8 +340,8 @@ serve(async (req) => {
 
     console.log(`Selected ${selectedItems.length} checklist items for analysis`);
 
-    // Step 3: AI-powered compliance analysis
-    const detectedIssues = await analyzePlanCompliance(pdfBase64, selectedItems, lovableApiKey);
+    // Step 3: AI-powered compliance analysis using signed URL
+    const detectedIssues = await analyzePlanCompliance(pdfUrl, selectedItems, lovableApiKey);
 
     console.log(`AI analysis complete. Found ${detectedIssues.length} issues`);
 
