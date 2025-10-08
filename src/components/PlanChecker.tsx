@@ -5,8 +5,7 @@ import { Progress } from "@/components/ui/progress";
 import { Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { AnalysisResults } from "./AnalysisResults";
 
 interface ArchitecturalIssueReport {
   id: string;
@@ -15,8 +14,8 @@ interface ArchitecturalIssueReport {
   plan_sheet_name: string;
   issue_description: string;
   location_in_sheet: string;
-  issue_type: "Missing" | "Non-compliant" | "Inconsistent";
-  compliance_source: "California Code" | "Local";
+  issue_type: "Missing" | "Non-compliant" | "Inconsistent" | "Zoning" | "Landscape";
+  compliance_source: string;
   specific_code_identifier: string;
   short_code_requirement: string;
   long_code_requirement: string;
@@ -159,6 +158,10 @@ export const PlanChecker = ({ onIssuesUpdate }: PlanCheckerProps) => {
         onFilesUploaded={handleFilesUploaded}
         maxFiles={15}
       />
+
+      {issues.length > 0 && (
+        <AnalysisResults issues={issues} />
+      )}
     </div>
   );
 };

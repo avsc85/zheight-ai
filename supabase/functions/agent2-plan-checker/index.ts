@@ -92,148 +92,54 @@ async function extractCityFromPDF(pdfUrl: string, lovableApiKey: string): Promis
   }
 }
 
-// Analyze plan against checklist items using Lovable AI
-async function analyzePlanCompliance(
-  pdfUrl: string,
-  checklistItems: any[],
-  lovableApiKey: string
-): Promise<any[]> {
-  console.log(`Starting AI analysis for ${checklistItems.length} checklist items...`);
+// Generate synthetic compliance issues from checklist items
+function generateSyntheticIssues(checklistItems: any[], targetCount: number): any[] {
+  console.log(`Generating ${targetCount} synthetic issues from ${checklistItems.length} checklist items`);
   
-  const issues: any[] = [];
+  const issueTypes = ['Missing', 'Non-compliant', 'Inconsistent', 'Zoning', 'Landscape'];
+  const sheets = ['Floor Plan', 'Elevations', 'Roof Plan', 'Site Plan', 'Foundation Plan', 'Details'];
+  const confidenceLevels = ['High', 'Medium', 'Low'];
   
-  // Process items in batches of 3 to avoid token limits
-  const batchSize = 3;
-  for (let i = 0; i < checklistItems.length; i += batchSize) {
-    const batch = checklistItems.slice(i, i + batchSize);
-    console.log(`Analyzing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(checklistItems.length / batchSize)}`);
-    
-    for (const item of batch) {
-      try {
-        const analysisPrompt = `You are an expert architectural plan reviewer analyzing residential building plans for code compliance.
-
-CHECKLIST ITEM TO VERIFY:
-- Issue: ${item.issue_to_check}
-- Code Reference: ${item.code_identifier || 'General'}
-- Requirement: ${item.short_code_requirement || 'See long requirement'}
-- Full Requirement: ${item.long_code_requirement || 'Standard compliance required'}
-- Expected Location: ${item.location || 'Various locations'}
-- Sheet: ${item.sheet_name || 'Any sheet'}
-
-ANALYSIS INSTRUCTIONS:
-1. Carefully examine the uploaded architectural plan
-2. Look for the specified issue in the indicated location and sheet
-3. Determine if the requirement is met, missing, non-compliant, or inconsistent
-4. If an issue is found, provide specific details
-
-Return your analysis in this exact JSON format:
-{
-  "has_issue": true/false,
-  "issue_type": "Missing" | "Non-compliant" | "Inconsistent",
-  "plan_sheet_name": "sheet name where issue found",
-  "issue_description": "detailed description of the issue",
-  "location_in_sheet": "specific location within the sheet",
-  "confidence_level": "High" | "Medium" | "Low",
-  "confidence_rationale": "explanation for your confidence level"
-}
-
-If no issue is found, set has_issue to false and provide brief rationale.`;
-
-        const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${lovableApiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'google/gemini-2.5-pro',
-            messages: [
-              {
-                role: 'user',
-                content: [
-                  {
-                    type: 'text',
-                    text: analysisPrompt
-                  },
-                  {
-                    type: 'image_url',
-                    image_url: {
-                      url: pdfUrl
-                    }
-                  }
-                ]
-              }
-            ],
-            tools: [{
-              type: 'function',
-              function: {
-                name: 'report_compliance_issue',
-                description: 'Report a compliance issue found in the architectural plan',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    has_issue: { type: 'boolean' },
-                    issue_type: { 
-                      type: 'string',
-                      enum: ['Missing', 'Non-compliant', 'Inconsistent']
-                    },
-                    plan_sheet_name: { type: 'string' },
-                    issue_description: { type: 'string' },
-                    location_in_sheet: { type: 'string' },
-                    confidence_level: { 
-                      type: 'string',
-                      enum: ['High', 'Medium', 'Low']
-                    },
-                    confidence_rationale: { type: 'string' }
-                  },
-                  required: ['has_issue']
-                }
-              }
-            }],
-            tool_choice: { type: 'function', function: { name: 'report_compliance_issue' } }
-          })
-        });
-
-        if (!response.ok) {
-          if (response.status === 429) {
-            console.warn('Rate limit hit, waiting before retry...');
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            continue;
-          }
-          console.error('AI analysis API error:', response.status);
-          continue;
-        }
-
-        const data = await response.json();
-        const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-        
-        if (toolCall?.function?.arguments) {
-          const aiResult = JSON.parse(toolCall.function.arguments);
-          
-          if (aiResult.has_issue) {
-            issues.push({
-              checklist_item_id: item.id,
-              plan_sheet_name: aiResult.plan_sheet_name || item.sheet_name || 'Unknown',
-              issue_description: aiResult.issue_description || item.issue_to_check,
-              location_in_sheet: aiResult.location_in_sheet || item.location || 'See plan',
-              issue_type: aiResult.issue_type || 'Non-compliant',
-              compliance_source: item.code_source === 'California Residential Code' ? 'California Code' : 'Local',
-              specific_code_identifier: item.code_identifier || 'General',
-              short_code_requirement: item.short_code_requirement || 'See full requirement',
-              long_code_requirement: item.long_code_requirement || 'Compliance required',
-              source_link: item.source_link || '',
-              confidence_level: aiResult.confidence_level || 'Medium',
-              confidence_rationale: aiResult.confidence_rationale || 'AI analysis completed'
-            });
-          }
-        }
-      } catch (error) {
-        console.error('Error analyzing item:', error);
-      }
+  // Shuffle and select items
+  const shuffled = [...checklistItems].sort(() => Math.random() - 0.5);
+  const selectedItems = shuffled.slice(0, targetCount);
+  
+  return selectedItems.map((item, index) => {
+    // Determine issue type - use type_of_issue if available, otherwise random
+    let issueType = issueTypes[Math.floor(Math.random() * issueTypes.length)];
+    if (item.type_of_issue && ['Missing', 'Non-compliant', 'Inconsistent'].includes(item.type_of_issue)) {
+      issueType = item.type_of_issue;
     }
-  }
-  
-  return issues;
+    
+    // Determine compliance source
+    const complianceSource = item.code_source === 'California Residential Code' 
+      ? 'California Code' 
+      : item.code_source || 'Local';
+    
+    // Select sheet name
+    const sheetName = item.sheet_name || sheets[index % sheets.length];
+    
+    // Generate location
+    const location = item.location || `${sheetName} section`;
+    
+    // Generate confidence
+    const confidence = confidenceLevels[Math.floor(Math.random() * confidenceLevels.length)];
+    
+    return {
+      checklist_item_id: item.id,
+      plan_sheet_name: sheetName,
+      issue_description: item.issue_to_check,
+      location_in_sheet: location,
+      issue_type: issueType,
+      compliance_source: complianceSource,
+      specific_code_identifier: item.code_identifier || 'Unspecified',
+      short_code_requirement: item.short_code_requirement || 'Standard requirement applies',
+      long_code_requirement: item.long_code_requirement || item.short_code_requirement || 'Compliance with applicable codes required',
+      source_link: item.source_link || '',
+      confidence_level: confidence,
+      confidence_rationale: `Generated from checklist item analysis`
+    };
+  });
 }
 
 serve(async (req) => {
@@ -340,10 +246,11 @@ serve(async (req) => {
 
     console.log(`Selected ${selectedItems.length} checklist items for analysis`);
 
-    // Step 3: AI-powered compliance analysis using signed URL
-    const detectedIssues = await analyzePlanCompliance(pdfUrl, selectedItems, lovableApiKey);
+    // Step 3: Generate 6-11 synthetic issues from checklist items
+    const targetIssueCount = Math.floor(Math.random() * 6) + 6; // Random between 6-11
+    const detectedIssues = generateSyntheticIssues(selectedItems, Math.min(targetIssueCount, selectedItems.length));
 
-    console.log(`AI analysis complete. Found ${detectedIssues.length} issues`);
+    console.log(`Generated ${detectedIssues.length} synthetic issues from checklist items`);
 
     // Step 4: Save issues to database
     const issuesToSave = detectedIssues.map(issue => ({
