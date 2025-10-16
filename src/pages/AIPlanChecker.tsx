@@ -60,9 +60,11 @@ const AIPlanChecker = () => {
         {/* Agent 2 Interface */}
         <div>
           <h2 className="text-2xl font-bold text-foreground mb-6">Agent 2: Plan Checker</h2>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start mb-8">
             <PlanChecker onIssuesUpdate={handleIssuesUpdate} />
-            <PromptEditor onPromptChange={handlePromptChange} agentType="agent2" />
+            <div className="h-full">
+              <PromptEditor onPromptChange={handlePromptChange} agentType="agent2" />
+            </div>
           </div>
           
           {/* Full-width Analysis Results */}

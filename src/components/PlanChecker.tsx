@@ -5,7 +5,7 @@ import { Progress } from "@/components/ui/progress";
 import { Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { AnalysisResults } from "./AnalysisResults";
+
 
 interface ArchitecturalIssueReport {
   id: string;
@@ -158,10 +158,6 @@ export const PlanChecker = ({ onIssuesUpdate }: PlanCheckerProps) => {
         onFilesUploaded={handleFilesUploaded}
         maxFiles={15}
       />
-
-      {issues.length > 0 && (
-        <AnalysisResults issues={issues} />
-      )}
     </div>
   );
 };
