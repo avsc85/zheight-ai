@@ -39,19 +39,19 @@ async function uploadPDFToStorage(
   return signedData.signedUrl;
 }
 
-// Extract city from PDF first page using Lovable AI
-async function extractCityFromPDF(pdfUrl: string, lovableApiKey: string): Promise<string | null> {
-  console.log('Extracting city from PDF via URL...');
+// Extract city from PDF first page using GPT-4 API
+async function extractCityFromPDF(pdfUrl: string, openaiApiKey: string): Promise<string | null> {
+  console.log('Extracting city from PDF via GPT-4...');
   
   try {
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${lovableApiKey}`,
+        'Authorization': `Bearer ${openaiApiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'gpt-4o',
         messages: [
           {
             role: 'user',
@@ -68,12 +68,14 @@ async function extractCityFromPDF(pdfUrl: string, lovableApiKey: string): Promis
               }
             ]
           }
-        ]
+        ],
+        max_tokens: 50
       })
     });
 
     if (!response.ok) {
-      console.error('City extraction API error:', response.status);
+      const errorText = await response.text();
+      console.error('City extraction API error:', response.status, errorText);
       return null;
     }
 
@@ -90,6 +92,25 @@ async function extractCityFromPDF(pdfUrl: string, lovableApiKey: string): Promis
     console.error('Error extracting city:', error);
     return null;
   }
+}
+
+// Generate a fixed issue count for a city (8-20) based on deterministic hash
+function getFixedIssueCountForCity(cityName: string): number {
+  // Create a simple hash from city name for consistent results
+  let hash = 0;
+  const normalizedCity = cityName.toUpperCase().trim();
+  
+  for (let i = 0; i < normalizedCity.length; i++) {
+    hash = ((hash << 5) - hash) + normalizedCity.charCodeAt(i);
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  
+  // Use hash to generate consistent number between 8-20
+  const range = 20 - 8 + 1; // 13 possible values
+  const fixedCount = 8 + (Math.abs(hash) % range);
+  
+  console.log(`City "${cityName}" will generate ${fixedCount} issues (fixed)`);
+  return fixedCount;
 }
 
 // Generate synthetic compliance issues from checklist items
@@ -154,10 +175,10 @@ serve(async (req) => {
     // Get environment variables
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY')!;
+    const openaiApiKey = Deno.env.get('OPENAI_API_KEY')!;
 
-    if (!lovableApiKey) {
-      throw new Error('LOVABLE_API_KEY not configured');
+    if (!openaiApiKey) {
+      throw new Error('OPENAI_API_KEY not configured');
     }
 
     // Initialize Supabase client
@@ -201,21 +222,20 @@ serve(async (req) => {
     // Step 1: Upload PDF to storage and get signed URL
     const firstFile = files[0];
     const pdfUrl = await uploadPDFToStorage(firstFile, user.id, supabase);
-    const extractedCity = await extractCityFromPDF(pdfUrl, lovableApiKey);
+    const extractedCity = await extractCityFromPDF(pdfUrl, openaiApiKey);
     
     console.log('City detection result:', extractedCity || 'Not detected');
 
-    // Step 2: Query checklist items based on city
-    let checklistQuery = supabase
-      .from('checklist_items')
-      .select('*')
-      .eq('user_id', user.id);
-
-    if (extractedCity) {
-      checklistQuery = checklistQuery.eq('city', extractedCity);
+    // Step 2: Query checklist items - STRICT city matching
+    if (!extractedCity) {
+      throw new Error('Could not extract city from PDF. Please ensure the project address is visible on the first page.');
     }
 
-    const { data: checklistItems, error: checklistError } = await checklistQuery;
+    const { data: checklistItems, error: checklistError } = await supabase
+      .from('checklist_items')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('city', extractedCity);
 
     if (checklistError) {
       console.error('Error fetching checklist items:', checklistError);
@@ -223,32 +243,25 @@ serve(async (req) => {
     }
 
     if (!checklistItems || checklistItems.length === 0) {
-      console.log('No checklist items found for city, using general items');
-      // Fallback: get general items without city filter
-      const { data: generalItems } = await supabase
-        .from('checklist_items')
-        .select('*')
-        .eq('user_id', user.id)
-        .limit(15);
-      
-      if (!generalItems || generalItems.length === 0) {
-        throw new Error('No checklist items available for analysis');
-      }
-      
-      checklistItems.push(...generalItems);
+      throw new Error(`No checklist items found for city "${extractedCity}". Please add checklist items for this city first.`);
     }
 
-    // Randomly select 10-20 items
-    const numItems = Math.floor(Math.random() * 11) + 10; // 10-20
+    console.log(`Found ${checklistItems.length} checklist items for city: ${extractedCity}`);
+
+    // Randomly select 15-25 items from available checklist
+    const numItemsToSelect = Math.floor(Math.random() * 11) + 15; // 15-25
     const selectedItems = checklistItems
       .sort(() => Math.random() - 0.5)
-      .slice(0, Math.min(numItems, checklistItems.length));
+      .slice(0, Math.min(numItemsToSelect, checklistItems.length));
 
     console.log(`Selected ${selectedItems.length} checklist items for analysis`);
 
-    // Step 3: Generate 6-11 synthetic issues from checklist items
-    const targetIssueCount = Math.floor(Math.random() * 6) + 6; // Random between 6-11
-    const detectedIssues = generateSyntheticIssues(selectedItems, Math.min(targetIssueCount, selectedItems.length));
+    // Step 3: Generate FIXED number of issues based on city (8-20)
+    const fixedIssueCount = getFixedIssueCountForCity(extractedCity);
+    const detectedIssues = generateSyntheticIssues(
+      selectedItems, 
+      Math.min(fixedIssueCount, selectedItems.length)
+    );
 
     console.log(`Generated ${detectedIssues.length} synthetic issues from checklist items`);
 

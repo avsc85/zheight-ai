@@ -66,6 +66,7 @@ export const AnalysisResults = ({ issues }: AnalysisResultsProps) => {
                 <TableHead className="font-medium text-xs">Code<br/>Reference</TableHead>
                 <TableHead className="font-medium text-xs min-w-[200px]">Short Requirement</TableHead>
                 <TableHead className="font-medium text-xs min-w-[250px]">Long Requirement</TableHead>
+                <TableHead className="font-medium text-xs">Source Link</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -98,6 +99,20 @@ export const AnalysisResults = ({ issues }: AnalysisResultsProps) => {
                   </TableCell>
                   <TableCell className="text-sm align-top py-4">
                     {issue.long_code_requirement}
+                  </TableCell>
+                  <TableCell className="text-sm align-top py-4">
+                    {issue.source_link ? (
+                      <a 
+                        href={issue.source_link} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline"
+                      >
+                        View Source
+                      </a>
+                    ) : (
+                      <span className="text-muted-foreground">N/A</span>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
