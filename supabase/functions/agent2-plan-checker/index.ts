@@ -40,44 +40,25 @@ async function uploadPDFToStorage(
   return signedData.signedUrl;
 }
 
-// Extract text from PDF using basic extraction
-async function extractTextFromPDF(pdfBytes: Uint8Array): Promise<string> {
-  try {
-    const pdfDoc = await PDFDocument.load(pdfBytes);
-    const firstPage = pdfDoc.getPage(0);
-    
-    // Get text content from annotations and form fields
-    const { width, height } = firstPage.getSize();
-    console.log(`PDF first page size: ${width}x${height}`);
-    
-    // For now, we'll use a simple heuristic approach
-    // In production, you'd use a proper PDF text extraction library
-    const textContent = `Page dimensions: ${width}x${height}`;
-    return textContent;
-  } catch (error) {
-    console.error('Error extracting PDF text:', error);
-    return '';
-  }
-}
-
-// Extract city from PDF using GPT-4 API with text extraction
-async function extractCityFromPDF(
-  file: File, 
+// Extract city from filename using GPT-4 and known city candidates
+async function extractCityFromFilenameWithCandidates(
+  fileName: string,
+  candidates: string[],
   openaiApiKey: string
 ): Promise<string | null> {
-  console.log('Extracting city from PDF via GPT-4...');
-  
+  console.log('Extracting city from filename with candidates via GPT-4...');
+
+  if (!candidates || candidates.length === 0) {
+    console.warn('No city candidates available for extraction');
+    return null;
+  }
+
   try {
-    // Read PDF file as array buffer
-    const arrayBuffer = await file.arrayBuffer();
-    const pdfBytes = new Uint8Array(arrayBuffer);
-    
-    // Convert to base64 for GPT-4 Vision
-    const base64Pdf = btoa(String.fromCharCode(...pdfBytes.slice(0, 50000))); // First 50KB for preview
-    
-    // Use GPT-4 with text prompt to extract city from filename and metadata
-    const fileName = file.name;
-    
+    const instruction = `Given this architectural plan filename: "${fileName}", choose the best matching city from the CANDIDATES list below.
+- Return EXACTLY one city string from the list.
+- If none match, return "UNKNOWN".
+CANDIDATES: ${candidates.join(', ')}`;
+
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -87,24 +68,11 @@ async function extractCityFromPDF(
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: [
-          {
-            role: 'system',
-            content: 'You are an expert at extracting city names from architectural plan filenames and metadata. Return ONLY the city name in proper case (e.g., "San Mateo", "Sunnyvale", "Palo Alto"). If you cannot determine the city with confidence, respond with "UNKNOWN".'
-          },
-          {
-            role: 'user',
-            content: `Extract the city name from this architectural plan filename: "${fileName}". 
-
-Common patterns:
-- City name often appears before or after the address
-- May be abbreviated (e.g., "SM" for San Mateo)
-- Look for California city names
-
-Return ONLY the city name or "UNKNOWN".`
-          }
+          { role: 'system', content: 'You return only the best matching city from the provided list or UNKNOWN. No extra words.' },
+          { role: 'user', content: instruction }
         ],
-        max_tokens: 50,
-        temperature: 0.1
+        max_tokens: 10,
+        temperature: 0.0
       })
     });
 
@@ -115,20 +83,22 @@ Return ONLY the city name or "UNKNOWN".`
     }
 
     const data = await response.json();
-    const cityText = data.choices?.[0]?.message?.content?.trim() || null;
-    
-    if (cityText && cityText !== 'UNKNOWN') {
+    const cityTextRaw = (data.choices?.[0]?.message?.content ?? '').trim();
+    const cityText = cityTextRaw.replace(/^"|"$/g, ''); // strip surrounding quotes if any
+
+    if (cityText && cityText !== 'UNKNOWN' && candidates.includes(cityText)) {
       console.log('Extracted city:', cityText);
       return cityText;
     }
-    
-    console.log('Could not extract city from filename');
+
+    console.log('GPT could not confidently match a city from candidates. Raw:', cityTextRaw);
     return null;
   } catch (error) {
     console.error('Error extracting city:', error);
     return null;
   }
 }
+
 
 // Generate a fixed issue count for a city (8-20) based on deterministic hash
 function getFixedIssueCountForCity(cityName: string): number {
@@ -258,7 +228,28 @@ serve(async (req) => {
     // Step 1: Upload PDF to storage for records and extract city
     const firstFile = files[0];
     const pdfUrl = await uploadPDFToStorage(firstFile, user.id, supabase);
-    const extractedCity = await extractCityFromPDF(firstFile, openaiApiKey);
+
+    // Gather candidate cities from user's checklist items
+    const { data: cityRows, error: cityErr } = await supabase
+      .from('checklist_items')
+      .select('city')
+      .eq('user_id', user.id);
+
+    if (cityErr) {
+      console.error('Error fetching city candidates:', cityErr);
+      throw new Error('Failed to load city candidates');
+    }
+
+    const candidates = Array.from(new Set((cityRows || [])
+      .map((r: any) => (r.city || '').trim())
+      .filter((c: string) => c.length > 0)));
+
+    if (candidates.length === 0) {
+      throw new Error('No checklist cities available. Please add checklist items with a city first.');
+    }
+
+    const extractedCityRaw = await extractCityFromFilenameWithCandidates(firstFile.name, candidates, openaiApiKey);
+    const extractedCity = extractedCityRaw || (candidates.length === 1 ? candidates[0] : null);
     
     console.log('City detection result:', extractedCity || 'Not detected');
 
