@@ -40,13 +40,13 @@ async function uploadPDFToStorage(
   return signedData.signedUrl;
 }
 
-// Extract city from filename using GPT-4 and known city candidates
-async function extractCityFromFilenameWithCandidates(
-  fileName: string,
+// Extract city from PDF page 1 using Lovable AI vision
+async function extractCityFromPDFPage(
+  pdfUrl: string,
   candidates: string[],
-  openaiApiKey: string
+  lovableApiKey: string
 ): Promise<string | null> {
-  console.log('Extracting city from filename with candidates via GPT-4...');
+  console.log('Extracting city from PDF page 1 via Lovable AI...');
 
   if (!candidates || candidates.length === 0) {
     console.warn('No city candidates available for extraction');
@@ -54,48 +54,87 @@ async function extractCityFromFilenameWithCandidates(
   }
 
   try {
-    const instruction = `Given this architectural plan filename: "${fileName}", choose the best matching city from the CANDIDATES list below.
-- Return EXACTLY one city string from the list.
-- If none match, return "UNKNOWN".
-CANDIDATES: ${candidates.join(', ')}`;
+    const prompt = `You are analyzing the first page of an architectural plan PDF. 
+Look for the PROJECT ADDRESS or PROJECT LOCATION at the top of the page.
+Extract ONLY the city name from the address.
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+Here are the possible cities to match against:
+${candidates.join(', ')}
+
+INSTRUCTIONS:
+- Return EXACTLY one city name from the list above
+- If you find a city that matches, return it exactly as shown in the list
+- If no city matches or you cannot find an address, return "UNKNOWN"
+- Return ONLY the city name, nothing else`;
+
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${openaiApiKey}`,
+        'Authorization': `Bearer ${lovableApiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'google/gemini-2.5-flash',
         messages: [
-          { role: 'system', content: 'You return only the best matching city from the provided list or UNKNOWN. No extra words.' },
-          { role: 'user', content: instruction }
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: prompt
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: pdfUrl
+                }
+              }
+            ]
+          }
         ],
-        max_tokens: 10,
+        max_tokens: 50,
         temperature: 0.0
       })
     });
 
     if (!response.ok) {
+      if (response.status === 429) {
+        console.error('Lovable AI rate limit exceeded');
+        throw new Error('Lovable AI rate limit exceeded. Please try again in a few minutes.');
+      }
+      if (response.status === 402) {
+        console.error('Lovable AI payment required');
+        throw new Error('Lovable AI credits exhausted. Please add credits to your workspace.');
+      }
       const errorText = await response.text();
-      console.error('City extraction API error:', response.status, errorText);
+      console.error('Lovable AI error:', response.status, errorText);
       return null;
     }
 
     const data = await response.json();
     const cityTextRaw = (data.choices?.[0]?.message?.content ?? '').trim();
-    const cityText = cityTextRaw.replace(/^"|"$/g, ''); // strip surrounding quotes if any
+    const cityText = cityTextRaw.replace(/^"|"$/g, '').trim();
 
-    if (cityText && cityText !== 'UNKNOWN' && candidates.includes(cityText)) {
-      console.log('Extracted city:', cityText);
-      return cityText;
+    console.log('Lovable AI raw response:', cityTextRaw);
+
+    // Validate against candidates with case-insensitive matching
+    if (cityText && cityText !== 'UNKNOWN') {
+      const matchedCity = candidates.find(
+        c => c.toLowerCase() === cityText.toLowerCase()
+      );
+      
+      if (matchedCity) {
+        console.log('Extracted city:', matchedCity);
+        return matchedCity;
+      }
     }
 
-    console.log('GPT could not confidently match a city from candidates. Raw:', cityTextRaw);
+    console.log('Could not match city from PDF. Raw response:', cityTextRaw);
     return null;
+    
   } catch (error) {
-    console.error('Error extracting city:', error);
-    return null;
+    console.error('Error extracting city from PDF:', error);
+    throw error;
   }
 }
 
@@ -181,10 +220,10 @@ serve(async (req) => {
     // Get environment variables
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const openaiApiKey = Deno.env.get('OPENAI_API_KEY')!;
+    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY')!;
 
-    if (!openaiApiKey) {
-      throw new Error('OPENAI_API_KEY not configured');
+    if (!lovableApiKey) {
+      throw new Error('LOVABLE_API_KEY not configured');
     }
 
     // Initialize Supabase client
@@ -248,14 +287,19 @@ serve(async (req) => {
       throw new Error('No checklist cities available. Please add checklist items with a city first.');
     }
 
-    const extractedCityRaw = await extractCityFromFilenameWithCandidates(firstFile.name, candidates, openaiApiKey);
+    const extractedCityRaw = await extractCityFromPDFPage(pdfUrl, candidates, lovableApiKey);
     const extractedCity = extractedCityRaw || (candidates.length === 1 ? candidates[0] : null);
     
     console.log('City detection result:', extractedCity || 'Not detected');
 
     // Step 2: Query checklist items - STRICT city matching
     if (!extractedCity) {
-      throw new Error('Could not extract city from PDF. Please ensure the project address is visible on the first page.');
+      throw new Error(
+        `Could not extract city from PDF. Please ensure:\n` +
+        `1. The project address is clearly visible on page 1\n` +
+        `2. The city name matches one of your checklist cities\n` +
+        `3. Available cities: ${candidates.join(', ')}`
+      );
     }
 
     const { data: checklistItems, error: checklistError } = await supabase
