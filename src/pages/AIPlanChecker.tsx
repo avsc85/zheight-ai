@@ -12,8 +12,8 @@ interface ArchitecturalIssueReport {
   plan_sheet_name: string;
   issue_description: string;
   location_in_sheet: string;
-  issue_type: "Missing" | "Non-compliant" | "Inconsistent";
-  compliance_source: "California Code" | "Local";
+  issue_type: string; // Dynamic type from database
+  compliance_source: string;
   specific_code_identifier: string;
   short_code_requirement: string;
   long_code_requirement: string;

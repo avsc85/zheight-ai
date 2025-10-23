@@ -8,7 +8,7 @@ interface ArchitecturalIssueReport {
   plan_sheet_name: string;
   issue_description: string;
   location_in_sheet: string;
-  issue_type: "Missing" | "Non-compliant" | "Inconsistent" | "Zoning" | "Landscape";
+  issue_type: string; // Dynamic type from database
   compliance_source: string;
   specific_code_identifier: string;
   short_code_requirement: string;
@@ -29,20 +29,44 @@ export const AnalysisResults = ({ issues }: AnalysisResultsProps) => {
   }
 
   const getIssueTypeColor = (type: string) => {
-    switch (type) {
-      case 'Missing':
-        return 'bg-red-50 text-red-700 border-red-200';
-      case 'Non-compliant':
-        return 'bg-orange-50 text-orange-700 border-orange-200';
-      case 'Inconsistent':
-        return 'bg-yellow-50 text-yellow-700 border-yellow-200';
-      case 'Zoning':
-        return 'bg-amber-50 text-amber-700 border-amber-200';
-      case 'Landscape':
-        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-      default:
-        return 'bg-gray-50 text-gray-700 border-gray-200';
+    const normalized = type?.toLowerCase().trim() || '';
+    
+    // Primary architectural issue types
+    if (normalized.includes('missing') || normalized === 'missing') {
+      return 'bg-red-50 text-red-700 border-red-200';
     }
+    if (normalized.includes('non-compliant') || normalized.includes('compliance')) {
+      return 'bg-orange-50 text-orange-700 border-orange-200';
+    }
+    if (normalized.includes('inconsistent')) {
+      return 'bg-yellow-50 text-yellow-700 border-yellow-200';
+    }
+    
+    // Specific discipline types
+    if (normalized.includes('structural')) {
+      return 'bg-blue-50 text-blue-700 border-blue-200';
+    }
+    if (normalized.includes('mechanical')) {
+      return 'bg-purple-50 text-purple-700 border-purple-200';
+    }
+    if (normalized.includes('electrical')) {
+      return 'bg-indigo-50 text-indigo-700 border-indigo-200';
+    }
+    if (normalized.includes('safety') || normalized.includes('egress')) {
+      return 'bg-red-50 text-red-700 border-red-200';
+    }
+    if (normalized.includes('energy') || normalized.includes('green')) {
+      return 'bg-green-50 text-green-700 border-green-200';
+    }
+    if (normalized.includes('environmental')) {
+      return 'bg-teal-50 text-teal-700 border-teal-200';
+    }
+    if (normalized.includes('planning') || normalized.includes('zoning')) {
+      return 'bg-amber-50 text-amber-700 border-amber-200';
+    }
+    
+    // Default for any other types
+    return 'bg-gray-50 text-gray-700 border-gray-200';
   };
 
   return (
