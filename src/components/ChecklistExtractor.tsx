@@ -90,10 +90,10 @@ export const ChecklistExtractor = () => {
       setProgress(100);
       setExtractedItems(data.data || []);
       
-      toast({
-        title: "Extraction complete",
-        description: `Successfully extracted and saved ${data.extractedCount || 0} compliance items`,
-      });
+        toast({
+          title: "Extraction complete",
+          description: `Successfully extracted ${data.totalSaved || 0} items (showing ${data.displayedCount || 0})${data.city ? ` for ${data.city}` : ''}`,
+        });
 
     } catch (error: any) {
       console.error('Extraction error:', error);

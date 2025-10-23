@@ -11,6 +11,76 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY')!;
 
+// Function to create a summarized output of 8-15 items
+async function createSummarizedOutput(
+  newlyExtractedItems: any[],
+  extractedCity: string | null,
+  userId: string,
+  supabase: any
+): Promise<any[]> {
+  const MIN_ITEMS = 8;
+  const MAX_ITEMS = 15;
+  
+  console.log(`Creating summarized output: ${newlyExtractedItems.length} new items, city: ${extractedCity || 'Not detected'}`);
+  
+  // Start with all newly extracted items
+  let summarizedItems = [...newlyExtractedItems];
+  
+  // If we already have 15 or more, return first 15
+  if (summarizedItems.length >= MAX_ITEMS) {
+    console.log(`Already have ${summarizedItems.length} items, returning first ${MAX_ITEMS}`);
+    return summarizedItems.slice(0, MAX_ITEMS);
+  }
+  
+  // If we have 8-14 items, return as-is
+  if (summarizedItems.length >= MIN_ITEMS) {
+    console.log(`Have ${summarizedItems.length} items (within 8-15 range), returning all`);
+    return summarizedItems;
+  }
+  
+  // If we have < 8 items, augment with existing items from database
+  if (extractedCity && extractedCity !== 'Not detected' && extractedCity.trim() !== '') {
+    const itemsNeeded = MAX_ITEMS - summarizedItems.length;
+    console.log(`Need ${itemsNeeded} more items to reach target range, querying database for city: ${extractedCity}`);
+    
+    // Query existing checklist items for this city
+    const { data: existingItems, error: queryError } = await supabase
+      .from('checklist_items')
+      .select('*')
+      .eq('user_id', userId)
+      .ilike('city', extractedCity)
+      .order('created_at', { ascending: false })
+      .limit(itemsNeeded);
+    
+    if (queryError) {
+      console.error('Error querying existing checklist items:', queryError);
+    } else if (existingItems && existingItems.length > 0) {
+      console.log(`Found ${existingItems.length} existing items for city: ${extractedCity}`);
+      
+      // Filter out duplicates (items with same issue_to_check)
+      const existingIssues = new Set(summarizedItems.map(item => item.issue_to_check?.toLowerCase().trim()));
+      const uniqueExistingItems = existingItems.filter(item => 
+        !existingIssues.has(item.issue_to_check?.toLowerCase().trim())
+      );
+      
+      console.log(`Adding ${uniqueExistingItems.length} unique existing items to summary`);
+      summarizedItems.push(...uniqueExistingItems);
+      
+      // Cap at MAX_ITEMS
+      if (summarizedItems.length > MAX_ITEMS) {
+        summarizedItems = summarizedItems.slice(0, MAX_ITEMS);
+      }
+    } else {
+      console.log(`No existing items found for city: ${extractedCity}`);
+    }
+  } else {
+    console.log('No valid city detected, cannot augment with existing items');
+  }
+  
+  console.log(`Final summarized output: ${summarizedItems.length} items`);
+  return summarizedItems;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -339,6 +409,28 @@ serve(async (req) => {
 
     console.log(`Extracted ${extractedItems.length} items from OpenAI response`);
 
+    // Extract the most common city from the extracted items
+    const cityFrequency: Record<string, number> = {};
+    extractedItems.forEach((item: any) => {
+      const city = item.city;
+      if (city && city !== 'Unspecified' && city.trim() !== '') {
+        cityFrequency[city] = (cityFrequency[city] || 0) + 1;
+      }
+    });
+
+    // Get the most common city (or null if none found)
+    let extractedCity: string | null = null;
+    let maxFrequency = 0;
+    for (const [city, frequency] of Object.entries(cityFrequency)) {
+      if (frequency > maxFrequency) {
+        maxFrequency = frequency;
+        extractedCity = city;
+      }
+    }
+
+    console.log(`Detected primary city: ${extractedCity || 'Not detected'}`);
+    console.log(`City frequency:`, cityFrequency);
+
     // Prepare data for database insertion
     const checklistItems = extractedItems.map((item: any) => ({
       user_id: user.id,
@@ -371,14 +463,27 @@ serve(async (req) => {
       throw new Error(`Database error: ${insertError.message}`);
     }
 
-    console.log(`Successfully inserted ${insertedData.length} checklist items`);
+    console.log(`Successfully inserted ${insertedData.length} checklist items into database`);
+
+    // Create summarized output of 8-15 items
+    const summarizedOutput = await createSummarizedOutput(
+      insertedData,
+      extractedCity,
+      user.id,
+      supabase
+    );
+
+    console.log(`Returning summarized output of ${summarizedOutput.length} items to frontend`);
 
     return new Response(
       JSON.stringify({
         success: true,
         message: `Successfully extracted and saved ${insertedData.length} checklist items`,
-        data: insertedData,
-        extractedCount: extractedItems.length
+        data: summarizedOutput, // Return summarized output instead of all items
+        extractedCount: extractedItems.length,
+        totalSaved: insertedData.length,
+        displayedCount: summarizedOutput.length,
+        city: extractedCity || 'Not detected'
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
