@@ -14,7 +14,7 @@ interface ArchitecturalIssueReport {
   plan_sheet_name: string;
   issue_description: string;
   location_in_sheet: string;
-  issue_type: "Missing" | "Non-compliant" | "Inconsistent" | "Zoning" | "Landscape";
+  issue_type: "Missing" | "Non-compliant" | "Inconsistent" | "Need Revision";
   compliance_source: string;
   specific_code_identifier: string;
   short_code_requirement: string;

@@ -205,7 +205,7 @@ async function extractCityFromPDFImage(imageDataUrl: string, openAIApiKey: strin
 function generateSyntheticIssues(checklistItems: any[], targetCount: number, cityName: string): any[] {
   console.log(`Generating ${targetCount} synthetic issues from ${checklistItems.length} checklist items`);
   
-  const issueTypes = ['Missing', 'Non-compliant', 'Inconsistent', 'Zoning', 'Landscape'];
+  const issueTypes = ['Missing', 'Non-compliant', 'Inconsistent', 'Need Revision'];
   const sheets = ['Floor Plan', 'Elevations', 'Roof Plan', 'Site Plan', 'Foundation Plan', 'Details'];
   const confidenceLevels = ['High', 'Medium', 'Low'];
   
@@ -232,7 +232,7 @@ function generateSyntheticIssues(checklistItems: any[], targetCount: number, cit
     
     // Determine issue type - use type_of_issue if available, otherwise seeded random
     let issueType = issueTypes[Math.floor(itemRandom() * issueTypes.length)];
-    if (item.type_of_issue && ['Missing', 'Non-compliant', 'Inconsistent'].includes(item.type_of_issue)) {
+    if (item.type_of_issue && ['Missing', 'Non-compliant', 'Inconsistent', 'Need Revision'].includes(item.type_of_issue)) {
       issueType = item.type_of_issue;
     }
     

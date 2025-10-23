@@ -12,7 +12,7 @@ interface ArchitecturalIssueReport {
   plan_sheet_name: string;
   issue_description: string;
   location_in_sheet: string;
-  issue_type: "Missing" | "Non-compliant" | "Inconsistent";
+  issue_type: "Missing" | "Non-compliant" | "Inconsistent" | "Need Revision";
   compliance_source: "California Code" | "Local";
   specific_code_identifier: string;
   short_code_requirement: string;
