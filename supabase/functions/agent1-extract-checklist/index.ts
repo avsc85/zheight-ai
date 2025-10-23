@@ -143,10 +143,10 @@ serve(async (req) => {
 
     // Check file sizes - reduced limits due to OpenAI file upload constraints
     const MAX_FILE_SIZE = 512 * 1024 * 1024; // 512MB limit for OpenAI file uploads
-    const MAX_TOTAL_FILES = 10; // Reasonable limit for processing
+    const MAX_TOTAL_FILES = 20; // Increased to support batch processing of multiple projects
     
     if (files.length > MAX_TOTAL_FILES) {
-      throw new Error(`Too many files. Maximum ${MAX_TOTAL_FILES} files allowed.`);
+      throw new Error(`Too many files. Maximum ${MAX_TOTAL_FILES} files allowed. You uploaded ${files.length} files.`);
     }
 
     for (const file of files) {

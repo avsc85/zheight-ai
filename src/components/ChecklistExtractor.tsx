@@ -50,6 +50,17 @@ export const ChecklistExtractor = () => {
       return;
     }
 
+    // Validate file count before sending to backend
+    const MAX_FILES = 20;
+    if (uploadedFiles.length > MAX_FILES) {
+      toast({
+        title: "Too Many Files",
+        description: `You've selected ${uploadedFiles.length} files, but the maximum is ${MAX_FILES}. Please remove ${uploadedFiles.length - MAX_FILES} file(s) and try again.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsProcessing(true);
     setProgress(0);
 
@@ -130,8 +141,16 @@ export const ChecklistExtractor = () => {
       let errorMessage = 'Extraction failed';
       let errorDescription = error.message || 'Failed to process documents';
       
-      // Provide specific guidance based on error type
-      if (errorDescription.includes('Unable to extract checklist items')) {
+      // Handle specific error types
+      if (errorDescription.includes('Too many files')) {
+        errorMessage = 'File Limit Exceeded';
+        const match = errorDescription.match(/Maximum (\d+) files/);
+        const maxFiles = match ? match[1] : '20';
+        errorDescription = `You've uploaded too many files. Please upload a maximum of ${maxFiles} files at a time.\n\nTip: For multiple projects, process them in separate batches.`;
+      } else if (errorDescription.includes('Failed to send the request')) {
+        errorMessage = 'Request Failed';
+        errorDescription = 'Unable to reach the extraction service. Please check your connection and try again.';
+      } else if (errorDescription.includes('Unable to extract checklist items')) {
         errorMessage = 'Document Processing Failed';
         errorDescription += '\n\nTroubleshooting tips:\n• Ensure PDFs contain searchable text (not just images)\n• Upload both architectural plans AND correction letters\n• Check that documents are not corrupted';
       } else if (errorDescription.includes('No checklist items could be extracted')) {
@@ -176,8 +195,19 @@ export const ChecklistExtractor = () => {
         description="Upload city correction letters and corresponding architectural plans (PDF files only, max 20MB per file, 25MB total)"
         acceptedTypes={["application/pdf"]}
         onFilesUploaded={handleFilesUploaded}
-        maxFiles={10}
+        maxFiles={20}
       />
+
+      {uploadedFiles.length > 0 && (
+        <div className="text-sm text-muted-foreground -mt-4">
+          {uploadedFiles.length} file{uploadedFiles.length !== 1 ? 's' : ''} uploaded
+          {uploadedFiles.length > 15 && (
+            <span className="text-yellow-600 ml-2">
+              ⚠️ Large batch - processing may take longer
+            </span>
+          )}
+        </div>
+      )}
 
       {extractedItems.length > 0 && (
         <Card className="p-6">
