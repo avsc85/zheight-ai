@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.56.0';
 import { PDFDocument } from 'https://cdn.skypack.dev/pdf-lib@1.17.1';
+import * as pdfjsLib from 'https://esm.sh/pdfjs-dist@4.0.379/legacy/build/pdf.mjs';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -40,13 +41,132 @@ async function uploadPDFToStorage(
   return signedData.signedUrl;
 }
 
-// Extract city from PDF page 1 using Lovable AI vision
-async function extractCityFromPDFPage(
+// Convert PDF page 1 to PNG image for vision processing
+async function convertPDFPageToImage(
   pdfUrl: string,
+  pageNumber: number = 1
+): Promise<Uint8Array> {
+  console.log(`Converting PDF page ${pageNumber} to image...`);
+  
+  try {
+    // Fetch the PDF
+    const pdfResponse = await fetch(pdfUrl);
+    if (!pdfResponse.ok) {
+      throw new Error(`Failed to fetch PDF: ${pdfResponse.status}`);
+    }
+    
+    const pdfArrayBuffer = await pdfResponse.arrayBuffer();
+    const pdfData = new Uint8Array(pdfArrayBuffer);
+    
+    // Load the PDF document
+    const loadingTask = pdfjsLib.getDocument({ data: pdfData });
+    const pdfDoc = await loadingTask.promise;
+    
+    // Get the specified page
+    const page = await pdfDoc.getPage(pageNumber);
+    
+    // Set scale for good quality (2x for high DPI)
+    const scale = 2.0;
+    const viewport = page.getViewport({ scale });
+    
+    // Create canvas context
+    const canvas = new OffscreenCanvas(viewport.width, viewport.height);
+    const context = canvas.getContext('2d');
+    
+    if (!context) {
+      throw new Error('Failed to get canvas context');
+    }
+    
+    // Render PDF page to canvas
+    await page.render({
+      canvasContext: context,
+      viewport: viewport,
+    }).promise;
+    
+    // Convert canvas to PNG blob
+    const blob = await canvas.convertToBlob({ type: 'image/png' });
+    const arrayBuffer = await blob.arrayBuffer();
+    
+    console.log('PDF page converted to PNG successfully');
+    return new Uint8Array(arrayBuffer);
+    
+  } catch (error) {
+    console.error('Error converting PDF to image:', error);
+    throw new Error(`PDF conversion failed: ${error.message}`);
+  }
+}
+
+// Upload image to temporary storage
+async function uploadImageToStorage(
+  imageData: Uint8Array,
+  userId: string,
+  supabase: any
+): Promise<string> {
+  const timestamp = Date.now();
+  const fileName = `page1_${userId}_${timestamp}.png`;
+  const filePath = `${userId}/${fileName}`;
+  
+  console.log('Uploading page image to storage:', filePath);
+  
+  // Upload to plan-page-images bucket
+  const { data, error } = await supabase.storage
+    .from('plan-page-images')
+    .upload(filePath, imageData, {
+      contentType: 'image/png',
+      upsert: false
+    });
+  
+  if (error) {
+    console.error('Storage upload error:', error);
+    throw new Error(`Failed to upload image: ${error.message}`);
+  }
+  
+  // Get signed URL (valid for 1 hour)
+  const { data: urlData, error: urlError } = await supabase.storage
+    .from('plan-page-images')
+    .createSignedUrl(filePath, 3600);
+  
+  if (urlError || !urlData?.signedUrl) {
+    throw new Error('Failed to create signed URL for image');
+  }
+  
+  console.log('Image uploaded successfully');
+  return urlData.signedUrl;
+}
+
+// Clean up temporary image from storage
+async function cleanupTempImage(
+  imageUrl: string,
+  supabase: any
+): Promise<void> {
+  try {
+    // Extract file path from signed URL
+    const urlObj = new URL(imageUrl);
+    const pathMatch = urlObj.pathname.match(/\/plan-page-images\/(.+)\?/);
+    
+    if (pathMatch) {
+      const filePath = pathMatch[1];
+      console.log('Cleaning up temporary image:', filePath);
+      
+      await supabase.storage
+        .from('plan-page-images')
+        .remove([filePath]);
+      
+      console.log('Temporary image cleaned up successfully');
+    }
+  } catch (error) {
+    console.warn('Failed to cleanup temp image:', error);
+    // Don't throw - cleanup failure shouldn't break the flow
+  }
+}
+
+// Extract city from image using Lovable AI vision
+async function extractCityFromPDFPage(
+  imageUrl: string,
   candidates: string[],
   lovableApiKey: string
 ): Promise<string | null> {
-  console.log('Extracting city from PDF page 1 via Lovable AI...');
+  console.log('Extracting city from image via Lovable AI vision...');
 
   if (!candidates || candidates.length === 0) {
     console.warn('No city candidates available for extraction');
@@ -86,7 +206,7 @@ INSTRUCTIONS:
               {
                 type: 'image_url',
                 image_url: {
-                  url: pdfUrl
+                  url: imageUrl
                 }
               }
             ]
@@ -264,11 +384,30 @@ serve(async (req) => {
     // Generate analysis session ID
     const analysisSessionId = crypto.randomUUID();
 
-    // Step 1: Upload PDF to storage for records and extract city
+    // Step 1: Upload PDF to storage for records
     const firstFile = files[0];
     const pdfUrl = await uploadPDFToStorage(firstFile, user.id, supabase);
+    console.log('PDF uploaded:', pdfUrl);
 
-    // Gather candidate cities from user's checklist items
+    // Step 2: Convert PDF page 1 to image
+    let imageUrl: string | null = null;
+    try {
+      const imageData = await convertPDFPageToImage(pdfUrl, 1);
+      imageUrl = await uploadImageToStorage(imageData, user.id, supabase);
+      console.log('Page 1 image URL:', imageUrl);
+    } catch (conversionError) {
+      console.error('PDF conversion failed:', conversionError);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Failed to convert PDF to image for vision analysis',
+          details: conversionError.message
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Step 3: Gather candidate cities from user's checklist items
     const { data: cityRows, error: cityErr } = await supabase
       .from('checklist_items')
       .select('city')
@@ -276,6 +415,7 @@ serve(async (req) => {
 
     if (cityErr) {
       console.error('Error fetching city candidates:', cityErr);
+      if (imageUrl) await cleanupTempImage(imageUrl, supabase);
       throw new Error('Failed to load city candidates');
     }
 
@@ -284,15 +424,22 @@ serve(async (req) => {
       .filter((c: string) => c.length > 0)));
 
     if (candidates.length === 0) {
+      if (imageUrl) await cleanupTempImage(imageUrl, supabase);
       throw new Error('No checklist cities available. Please add checklist items with a city first.');
     }
 
-    const extractedCityRaw = await extractCityFromPDFPage(pdfUrl, candidates, lovableApiKey);
-    const extractedCity = extractedCityRaw || (candidates.length === 1 ? candidates[0] : null);
+    // Step 4: Extract city from image using Lovable AI Vision
+    const extractedCityRaw = await extractCityFromPDFPage(imageUrl, candidates, lovableApiKey);
     
+    // Clean up temporary image
+    if (imageUrl) {
+      await cleanupTempImage(imageUrl, supabase);
+    }
+    
+    const extractedCity = extractedCityRaw || (candidates.length === 1 ? candidates[0] : null);
     console.log('City detection result:', extractedCity || 'Not detected');
 
-    // Step 2: Query checklist items - STRICT city matching
+    // Step 5: Query checklist items - STRICT city matching
     if (!extractedCity) {
       throw new Error(
         `Could not extract city from PDF. Please ensure:\n` +
@@ -327,7 +474,7 @@ serve(async (req) => {
 
     console.log(`Selected ${selectedItems.length} checklist items for analysis`);
 
-    // Step 3: Generate FIXED number of issues based on city (8-20)
+    // Step 6: Generate FIXED number of issues based on city (8-20)
     const fixedIssueCount = getFixedIssueCountForCity(extractedCity);
     const detectedIssues = generateSyntheticIssues(
       selectedItems, 
@@ -336,7 +483,7 @@ serve(async (req) => {
 
     console.log(`Generated ${detectedIssues.length} synthetic issues from checklist items`);
 
-    // Step 4: Save issues to database
+    // Step 7: Save issues to database
     const issuesToSave = detectedIssues.map(issue => ({
       id: crypto.randomUUID(),
       user_id: user.id,

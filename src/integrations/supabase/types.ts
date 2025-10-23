@@ -593,10 +593,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      admin_delete_user: {
-        Args: { target_user_id: string }
-        Returns: boolean
-      }
+      admin_delete_user: { Args: { target_user_id: string }; Returns: boolean }
       admin_delete_user_complete: {
         Args: { target_email?: string; target_user_id: string }
         Returns: Json
@@ -605,16 +602,13 @@ export type Database = {
         Args: { task_hours: number; total_project_hours: number }
         Returns: number
       }
-      cleanup_expired_invitations: {
-        Args: Record<PropertyKey, never>
-        Returns: undefined
-      }
+      cleanup_expired_invitations: { Args: never; Returns: undefined }
       delete_auth_user_by_email: {
         Args: { target_email: string }
         Returns: Json
       }
       detect_orphaned_auth_users: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
           created_at: string
           email: string
