@@ -47,6 +47,37 @@ function getCityAnalysisConfig(cityName: string | null): { itemsToAnalyze: numbe
   return { itemsToAnalyze, issuesToGenerate };
 }
 
+// Replace city names in compliance source with the project city
+function normalizeComplianceSource(codeSource: string, projectCity: string): string {
+  if (!codeSource || !projectCity) {
+    return codeSource || 'Local';
+  }
+  
+  // List of known city patterns to replace
+  const cityPatterns = [
+    'San Mateo', 'Sunnyvale', 'Palo Alto', 'San Jose', 'Mountain View',
+    'Redwood City', 'Menlo Park', 'Santa Clara', 'Cupertino', 'Los Altos',
+    'Fremont', 'Oakland', 'Berkeley', 'Alameda', 'San Francisco',
+    'Castro Valley', 'Hayward', 'Union City', 'Dublin', 'Pleasanton'
+  ];
+  
+  let normalizedSource = codeSource;
+  
+  // Check if any city name exists in the code source
+  for (const city of cityPatterns) {
+    // Case-insensitive regex to find city names
+    const regex = new RegExp(`\\b${city}\\b`, 'gi');
+    
+    // If found and it's not the project city, replace it
+    if (regex.test(normalizedSource) && city.toLowerCase() !== projectCity.toLowerCase()) {
+      normalizedSource = normalizedSource.replace(regex, projectCity);
+      console.log(`Replaced "${city}" with "${projectCity}" in compliance source`);
+    }
+  }
+  
+  return normalizedSource;
+}
+
 // Upload PDF to storage and generate a signed URL for AI processing
 async function uploadPDFToStorage(
   file: File, 
@@ -205,10 +236,13 @@ function generateSyntheticIssues(checklistItems: any[], targetCount: number, cit
       issueType = item.type_of_issue;
     }
     
-    // Determine compliance source
-    const complianceSource = item.code_source === 'California Residential Code' 
+    // Determine compliance source and normalize city names
+    let complianceSource = item.code_source === 'California Residential Code' 
       ? 'California Code' 
       : item.code_source || 'Local';
+    
+    // Replace any city names in compliance source with the project city
+    complianceSource = normalizeComplianceSource(complianceSource, cityName);
     
     // Select sheet name
     const sheetName = item.sheet_name || sheets[index % sheets.length];
@@ -328,19 +362,24 @@ serve(async (req) => {
     }
 
     if (!checklistItems || checklistItems.length === 0) {
-      console.log('No checklist items found for city, using general items');
-      // Fallback: get general items without city filter
-      const { data: generalItems } = await supabase
-        .from('checklist_items')
-        .select('*')
-        .eq('user_id', user.id)
-        .limit(15);
+      console.log(`No checklist items found for city: ${extractedCity || 'Not detected'}`);
       
-      if (!generalItems || generalItems.length === 0) {
-        throw new Error('No checklist items available for analysis');
+      // If city was detected but no items found, throw specific error
+      if (extractedCity && extractedCity !== 'Not detected') {
+        throw new Error(`No checklist items available for city: ${extractedCity}. Please add checklist items for this city first.`);
       }
       
-      checklistItems.push(...generalItems);
+      // If no city detected, we can't proceed
+      throw new Error('Unable to detect city from uploaded plans. Please ensure the project address is clearly visible in the title block.');
+    }
+    
+    // Pre-process checklist items to normalize city names in code_source
+    if (extractedCity && checklistItems) {
+      checklistItems = checklistItems.map(item => ({
+        ...item,
+        code_source: normalizeComplianceSource(item.code_source, extractedCity)
+      }));
+      console.log(`Normalized city names in ${checklistItems.length} checklist items`);
     }
 
     // Get consistent analysis configuration for this city
