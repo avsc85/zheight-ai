@@ -83,8 +83,36 @@ export const ChecklistExtractor = () => {
         throw error;
       }
 
-      if (!data.success) {
-        throw new Error(data.error || 'Extraction failed');
+      // Handle success: false responses (no items extracted)
+      if (data && !data.success) {
+        const errorMsg = data.error || 'Extraction failed';
+        const guidance = data.details?.guidance || '';
+        
+        toast({
+          title: "No Items Extracted",
+          description: `${errorMsg}\n\n${guidance}`,
+          variant: "destructive"
+        });
+        
+        setIsProcessing(false);
+        setProgress(0);
+        return;
+      }
+      
+      // Handle fallback responses (showing existing items)
+      if (data && data.fallback) {
+        setProgress(100);
+        setExtractedItems(data.data || []);
+        
+        toast({
+          title: "Showing Historical Items",
+          description: data.message || `No new items extracted. Showing ${data.displayedCount || 0} existing items.`,
+          variant: "default"
+        });
+        
+        setIsProcessing(false);
+        setProgress(0);
+        return;
       }
 
       setProgress(100);

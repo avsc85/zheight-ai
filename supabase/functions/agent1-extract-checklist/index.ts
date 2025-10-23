@@ -112,7 +112,17 @@ serve(async (req) => {
       throw new Error('No files provided');
     }
 
-    console.log(`Processing ${files.length} files for user ${user.id}`);
+    // Log comprehensive telemetry
+    const fileSizes = files.map(f => f.size);
+    const totalFileSize = fileSizes.reduce((sum, size) => sum + size, 0);
+    console.log(`=== EXTRACTION REQUEST TELEMETRY ===`);
+    console.log(`User ID: ${user.id}`);
+    console.log(`File count: ${files.length}`);
+    console.log(`File names: ${files.map(f => f.name).join(', ')}`);
+    console.log(`File sizes: ${files.map(f => `${f.name} (${(f.size / 1024 / 1024).toFixed(2)}MB)`).join(', ')}`);
+    console.log(`Total size: ${(totalFileSize / 1024 / 1024).toFixed(2)}MB`);
+    console.log(`Custom prompt provided: ${customPrompt ? 'Yes' : 'No'}`);
+    console.log(`====================================`);
 
     // Get the agent prompt (use custom if provided, otherwise get default)
     let systemPrompt = customPrompt;
@@ -200,6 +210,47 @@ serve(async (req) => {
     const vectorStore = await vectorStoreResponse.json();
     console.log(`Created vector store: ${vectorStore.id}`);
 
+    // Poll vector store file statuses until all files are indexed
+    console.log('Waiting for vector store file indexing...');
+    const indexingStartTime = Date.now();
+    let allFilesIndexed = false;
+    let indexingAttempts = 0;
+    const maxIndexingAttempts = 12; // 60 seconds max wait (5 sec intervals)
+    
+    while (!allFilesIndexed && indexingAttempts < maxIndexingAttempts) {
+      const filesResponse = await fetch(`https://api.openai.com/v1/vector_stores/${vectorStore.id}/files`, {
+        headers: {
+          'Authorization': `Bearer ${openAIApiKey}`,
+          'OpenAI-Beta': 'assistants=v2',
+        },
+      });
+      
+      if (filesResponse.ok) {
+        const filesData = await filesResponse.json();
+        const fileStatuses = filesData.data.map((f: any) => f.status);
+        const inProgressCount = fileStatuses.filter((s: string) => s === 'in_progress').length;
+        const completedCount = fileStatuses.filter((s: string) => s === 'completed').length;
+        
+        console.log(`Vector store indexing status: ${completedCount}/${uploadedFiles.length} completed, ${inProgressCount} in progress`);
+        
+        if (completedCount === uploadedFiles.length) {
+          allFilesIndexed = true;
+          const indexingDuration = Date.now() - indexingStartTime;
+          console.log(`All files indexed successfully in ${indexingDuration}ms`);
+        } else {
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          indexingAttempts++;
+        }
+      } else {
+        console.warn('Failed to check vector store file statuses, proceeding anyway');
+        break;
+      }
+    }
+    
+    if (!allFilesIndexed) {
+      console.warn(`Vector store indexing incomplete after ${indexingAttempts * 5}s, proceeding with assistant run`);
+    }
+
     // Create OpenAI assistant with the vector store
     console.log('Creating OpenAI assistant for document analysis...');
     
@@ -232,6 +283,13 @@ serve(async (req) => {
 
     const assistant = await assistantResponse.json();
     console.log(`Created assistant: ${assistant.id}`);
+    
+    // Log all OpenAI resource IDs for debugging
+    console.log(`=== OPENAI RESOURCES ===`);
+    console.log(`Vector Store ID: ${vectorStore.id}`);
+    console.log(`Assistant ID: ${assistant.id}`);
+    console.log(`Uploaded File IDs: ${uploadedFiles.join(', ')}`);
+    console.log(`========================`);
 
     // Create a thread with the uploaded files
     console.log('Creating thread with uploaded files...');
@@ -300,6 +358,7 @@ serve(async (req) => {
 
     const run = await runResponse.json();
     console.log(`Started run: ${run.id}`);
+    console.log(`Thread ID: ${thread.id} | Run ID: ${run.id}`);
 
     // Poll for completion
     let runStatus = run.status;
@@ -342,9 +401,17 @@ serve(async (req) => {
     });
 
     const messagesData = await messagesResponse.json();
-    const responseContent = messagesData.data[0].content[0].text.value;
-
-    console.log('OpenAI assistant response received:', responseContent);
+    
+    // Find the latest assistant message (not user message)
+    const assistantMessage = messagesData.data.find((msg: any) => msg.role === 'assistant');
+    if (!assistantMessage) {
+      console.error('No assistant message found in thread');
+      throw new Error('No response received from AI assistant');
+    }
+    
+    const responseContent = assistantMessage.content[0].text.value;
+    const responsePreview = responseContent.substring(0, 300);
+    console.log(`OpenAI assistant response received (role: ${assistantMessage.role}, preview): ${responsePreview}...`);
 
     // Clean up resources
     try {
@@ -421,12 +488,77 @@ serve(async (req) => {
       throw new Error('OpenAI response does not contain a valid items array');
     }
 
+    console.log(`Extracted ${extractedItems.length} items from OpenAI response`);
+    
+    // Handle case where no items extracted - try city heuristic fallback
     if (extractedItems.length === 0) {
       console.warn('OpenAI returned zero items from document analysis');
-      throw new Error('No checklist items could be extracted from the uploaded documents. Please ensure the PDFs contain clear architectural plans with correction letters or code summaries that include specific issues, locations, and code references.');
+      
+      // Try to extract city from filenames as a fallback
+      const fileNames = files.map(f => f.name).join(' ');
+      const cityPattern = /([A-Z][A-Z\s]+),\s*CA\s*\d{5}/g;
+      const cityMatches = fileNames.match(cityPattern);
+      let fallbackCity = null;
+      
+      if (cityMatches && cityMatches.length > 0) {
+        // Extract just the city name (before ", CA")
+        fallbackCity = cityMatches[0].split(',')[0].trim();
+        console.log(`Heuristic city extraction from filenames: ${fallbackCity}`);
+      }
+      
+      // Try to get existing items from DB for this city
+      if (fallbackCity) {
+        const { data: existingCityItems, error: cityQueryError } = await supabase
+          .from('checklist_items')
+          .select('*')
+          .eq('user_id', user.id)
+          .ilike('city', fallbackCity)
+          .order('created_at', { ascending: false })
+          .limit(15);
+        
+        if (!cityQueryError && existingCityItems && existingCityItems.length > 0) {
+          console.log(`Found ${existingCityItems.length} existing items for city ${fallbackCity}, returning as fallback`);
+          
+          return new Response(
+            JSON.stringify({
+              success: true,
+              fallback: true,
+              message: `No new items could be extracted from the uploaded documents. Showing ${existingCityItems.length} existing items for ${fallbackCity} from your history.`,
+              data: existingCityItems,
+              extractedCount: 0,
+              totalSaved: 0,
+              displayedCount: existingCityItems.length,
+              city: fallbackCity,
+              guidance: 'The uploaded PDFs may be image-based without searchable text, or may not contain recognizable architectural corrections. Please ensure your PDFs contain clear text and correction letter content.'
+            }),
+            {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            }
+          );
+        }
+      }
+      
+      // No items extracted and no fallback available
+      const fileDetails = files.map(f => `${f.name} (${(f.size / 1024 / 1024).toFixed(2)}MB)`).join(', ');
+      console.log(`No extraction possible. Files: ${fileDetails}`);
+      
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'No checklist items could be extracted from the uploaded documents.',
+          details: {
+            filesProcessed: files.length,
+            fileNames: files.map(f => f.name),
+            cityDetected: fallbackCity || 'None',
+            guidance: 'Please ensure your PDFs contain:\n• Searchable text (not just scanned images)\n• Clear architectural plans or correction letters\n• Specific building code issues with references\n• Annotations or markup indicating corrections needed'
+          }
+        }),
+        {
+          status: 200, // Return 200, not 500, for "no items" case
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
     }
-
-    console.log(`Extracted ${extractedItems.length} items from OpenAI response`);
 
     // Extract the most common city from the extracted items
     const cityFrequency: Record<string, number> = {};
@@ -482,7 +614,9 @@ serve(async (req) => {
       throw new Error(`Database error: ${insertError.message}`);
     }
 
-    console.log(`Successfully inserted ${insertedData.length} checklist items into database`);
+    const insertedIds = insertedData.map(item => item.id);
+    console.log(`Successfully inserted ${insertedData.length} checklist items into database (first ID: ${insertedIds[0]}, last ID: ${insertedIds[insertedIds.length - 1]})`);
+    console.log(`Total file size processed: ${files.reduce((sum, f) => sum + f.size, 0) / 1024 / 1024} MB`);
 
     // Create summarized output of 8-15 items
     const summarizedOutput = await createSummarizedOutput(
