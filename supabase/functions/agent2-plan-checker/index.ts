@@ -49,6 +49,9 @@ async function convertPDFPageToImage(
   console.log(`Converting PDF page ${pageNumber} to image...`);
   
   try {
+    // Disable worker requirement for Deno environment
+    (pdfjsLib as any).GlobalWorkerOptions.workerSrc = '';
+    
     // Fetch the PDF
     const pdfResponse = await fetch(pdfUrl);
     if (!pdfResponse.ok) {
