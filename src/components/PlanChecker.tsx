@@ -156,7 +156,7 @@ export const PlanChecker = ({ onIssuesUpdate }: PlanCheckerProps) => {
         description="Upload residential plan sets for compliance analysis"
         acceptedTypes={[".pdf", ".dwg", ".dxf", ".rvt"]}
         onFilesUploaded={handleFilesUploaded}
-        maxFiles={15}
+        maxFiles={50}
       />
     </div>
   );

@@ -26,7 +26,7 @@ export const DocumentUpload = ({
   description, 
   acceptedTypes, 
   onFilesUploaded,
-  maxFiles = 10 
+  maxFiles = 50 
 }: DocumentUploadProps) => {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const { toast } = useToast();
