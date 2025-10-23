@@ -1,6 +1,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.56.0';
+import { PDFDocument } from 'https://cdn.skypack.dev/pdf-lib@1.17.1';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -40,9 +41,43 @@ async function uploadPDFToStorage(
   return signedData.signedUrl;
 }
 
-// Extract city from PDF first page using OpenAI GPT-5
-async function extractCityFromPDF(pdfUrl: string, openAIApiKey: string): Promise<string | null> {
-  console.log('Extracting city from PDF via OpenAI GPT-5...');
+// Convert PDF first page to PNG image as base64 data URL
+async function convertPDFFirstPageToImage(pdfBytes: Uint8Array): Promise<string | null> {
+  try {
+    console.log('Converting PDF first page to image...');
+    
+    // Load the PDF
+    const pdfDoc = await PDFDocument.load(pdfBytes);
+    
+    if (pdfDoc.getPageCount() === 0) {
+      console.error('PDF has no pages');
+      return null;
+    }
+
+    // Create a new PDF with only the first page
+    const singlePagePdf = await PDFDocument.create();
+    const [firstPage] = await singlePagePdf.copyPages(pdfDoc, [0]);
+    singlePagePdf.addPage(firstPage);
+    
+    // Save as bytes
+    const singlePageBytes = await singlePagePdf.save();
+    
+    // Convert to base64 for GPT-5 Vision
+    // Note: GPT-5 Vision can handle PDF format directly, we just need it as base64
+    const base64 = btoa(String.fromCharCode(...singlePageBytes));
+    const dataUrl = `data:application/pdf;base64,${base64}`;
+    
+    console.log('PDF first page converted to data URL');
+    return dataUrl;
+  } catch (error) {
+    console.error('Error converting PDF to image:', error);
+    return null;
+  }
+}
+
+// Extract city from PDF first page image using OpenAI GPT-5 Vision
+async function extractCityFromPDFImage(imageDataUrl: string, openAIApiKey: string): Promise<string | null> {
+  console.log('Extracting city from PDF page image via OpenAI GPT-5 Vision...');
   
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -59,12 +94,13 @@ async function extractCityFromPDF(pdfUrl: string, openAIApiKey: string): Promise
             content: [
               {
                 type: 'text',
-                text: 'Extract the project city name from this architectural plan. Look for the title block, project information section, or address field on the first page. Return ONLY the city name in a standardized format (e.g., "San Mateo", "Sunnyvale"). If you cannot find a city, respond with "UNKNOWN".'
+                text: 'Extract the city name from the project address shown in the title block or project information section of this architectural plan. Common locations include the upper right corner, bottom right, or header area. Return ONLY the city name (e.g., "San Mateo", "Sunnyvale", "Palo Alto"). If multiple addresses exist, extract the PROJECT SITE city, not the architect\'s office city. If unclear or not found, respond with "UNKNOWN".'
               },
               {
                 type: 'image_url',
                 image_url: {
-                  url: pdfUrl
+                  url: imageDataUrl,
+                  detail: 'low'
                 }
               }
             ]
@@ -201,21 +237,32 @@ serve(async (req) => {
     // Generate analysis session ID
     const analysisSessionId = crypto.randomUUID();
 
-    // Step 1: Upload PDF to storage and get signed URL
+    // Step 1: Upload PDF to storage
     const firstFile = files[0];
-    const pdfUrl = await uploadPDFToStorage(firstFile, user.id, supabase);
-    const extractedCity = await extractCityFromPDF(pdfUrl, openAIApiKey);
+    await uploadPDFToStorage(firstFile, user.id, supabase);
+    
+    // Step 2: Convert first page to image and extract city
+    const pdfBytes = new Uint8Array(await firstFile.arrayBuffer());
+    const firstPageImage = await convertPDFFirstPageToImage(pdfBytes);
+    
+    let extractedCity: string | null = null;
+    if (firstPageImage) {
+      extractedCity = await extractCityFromPDFImage(firstPageImage, openAIApiKey);
+    } else {
+      console.log('Failed to convert PDF to image, skipping city extraction');
+    }
     
     console.log('City detection result:', extractedCity || 'Not detected');
 
-    // Step 2: Query checklist items based on city
+    // Step 3: Query checklist items based on city
     let checklistQuery = supabase
       .from('checklist_items')
       .select('*')
       .eq('user_id', user.id);
 
     if (extractedCity) {
-      checklistQuery = checklistQuery.eq('city', extractedCity);
+      const normalizedCity = extractedCity.trim();
+      checklistQuery = checklistQuery.ilike('city', normalizedCity);
     }
 
     const { data: checklistItems, error: checklistError } = await checklistQuery;
