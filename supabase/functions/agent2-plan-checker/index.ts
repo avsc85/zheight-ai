@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.56.0';
 import { PDFDocument } from 'https://cdn.skypack.dev/pdf-lib@1.17.1';
-import * as pdfjsLib from 'https://esm.sh/pdfjs-dist@4.0.379/legacy/build/pdf.mjs';
+import { getDocument } from 'https://esm.sh/pdfjs-serverless';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -49,9 +49,6 @@ async function convertPDFPageToImage(
   console.log(`Converting PDF page ${pageNumber} to image...`);
   
   try {
-    // Disable worker requirement for Deno environment
-    (pdfjsLib as any).GlobalWorkerOptions.workerSrc = '';
-    
     // Fetch the PDF
     const pdfResponse = await fetch(pdfUrl);
     if (!pdfResponse.ok) {
@@ -62,7 +59,7 @@ async function convertPDFPageToImage(
     const pdfData = new Uint8Array(pdfArrayBuffer);
     
     // Load the PDF document
-    const loadingTask = pdfjsLib.getDocument({ data: pdfData });
+    const loadingTask = getDocument({ data: pdfData });
     const pdfDoc = await loadingTask.promise;
     
     // Get the specified page
