@@ -27,34 +27,20 @@ function seededRandom(seed: string): () => number {
   };
 }
 
-// Generate a consistent seed from filename
-function getFilenameSeed(filename: string): string {
-  // Remove timestamp prefix if present (e.g., "1761236846247_41 Haven PL.pdf" -> "41 Haven PL.pdf")
-  const cleanFilename = filename.replace(/^\d+_/, '').trim();
-  
-  // Normalize: lowercase, remove file extension, trim whitespace
-  const normalized = cleanFilename
-    .toLowerCase()
-    .replace(/\.pdf$/i, '')
-    .replace(/\.dwg$/i, '')
-    .replace(/\.dxf$/i, '')
-    .replace(/\.rvt$/i, '')
-    .trim();
-  
-  return normalized;
-}
-
-// Get consistent analysis configuration based on city OR filename
-function getCityAnalysisConfig(seedValue: string | null): { itemsToAnalyze: number; issuesToGenerate: number } {
-  // Always use a seed now - no more Math.random()
-  if (!seedValue) {
-    seedValue = 'default-seed'; // Fallback to consistent default
+// Get consistent analysis configuration based on city
+function getCityAnalysisConfig(cityName: string | null): { itemsToAnalyze: number; issuesToGenerate: number } {
+  // If no city detected, use fallback with some randomness
+  if (!cityName || cityName === 'Not detected') {
+    return {
+      itemsToAnalyze: Math.floor(Math.random() * 16) + 24, // 24-39
+      issuesToGenerate: Math.floor(Math.random() * 10) + 7  // 7-16
+    };
   }
   
-  // Create seeded random generator for this seed
-  const cityRandom = seededRandom(seedValue.toLowerCase().trim());
+  // Create seeded random generator for this city
+  const cityRandom = seededRandom(cityName.toLowerCase().trim());
   
-  // Generate consistent counts for this seed
+  // Generate consistent counts for this city
   const itemsToAnalyze = Math.floor(cityRandom() * 16) + 24;  // 24-39 items
   const issuesToGenerate = Math.floor(cityRandom() * 10) + 7; // 7-16 issues
   
@@ -337,70 +323,11 @@ serve(async (req) => {
 
     console.log(`Processing ${files.length} plan file(s)`);
 
-    // Get filename seed for deterministic analysis
-    const firstFile = files[0];
-    const filenameSeed = getFilenameSeed(firstFile.name);
-    console.log(`Filename seed for deterministic analysis: ${filenameSeed}`);
-
-    // CACHE LOOKUP DISABLED - Uncomment below to enable caching
-    /*
-    // Step 0: Check if we've analyzed this file before
-    const { data: cachedAnalysis, error: cacheError } = await supabase
-      .from('analysis_cache')
-      .select('analysis_session_id, city_detected, checklist_items_analyzed, issues_count')
-      .eq('user_id', user.id)
-      .eq('filename_seed', filenameSeed)
-      .maybeSingle();
-
-    if (cachedAnalysis && !cacheError) {
-      console.log(`Found cached analysis for file: ${firstFile.name}`);
-      console.log(`Using existing session: ${cachedAnalysis.analysis_session_id}`);
-      
-      // Retrieve existing issues from database
-      const { data: existingIssues, error: issuesError } = await supabase
-        .from('architectural_issue_reports')
-        .select('*')
-        .eq('analysis_session_id', cachedAnalysis.analysis_session_id)
-        .order('created_at', { ascending: true });
-      
-      if (existingIssues && !issuesError) {
-        console.log(`Retrieved ${existingIssues.length} cached issues`);
-        
-        // Calculate summary from cached issues
-        const highConfCount = existingIssues.filter(i => i.confidence_level === 'High').length;
-        const medConfCount = existingIssues.filter(i => i.confidence_level === 'Medium').length;
-        const lowConfCount = existingIssues.filter(i => i.confidence_level === 'Low').length;
-        
-        // Return cached results
-        return new Response(JSON.stringify({
-          success: true,
-          cached: true,
-          data: {
-            analysis_session_id: cachedAnalysis.analysis_session_id,
-            city_detected: cachedAnalysis.city_detected || 'Not detected',
-            checklist_items_analyzed: cachedAnalysis.checklist_items_analyzed,
-            issues: existingIssues,
-            analysis_summary: {
-              total_checked: cachedAnalysis.checklist_items_analyzed,
-              issues_found: existingIssues.length,
-              high_confidence: highConfCount,
-              medium_confidence: medConfCount,
-              low_confidence: lowConfCount
-            }
-          }
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-    }
-
-    console.log(`No cached analysis found, performing fresh analysis for: ${firstFile.name}`);
-    */
-
     // Generate analysis session ID
     const analysisSessionId = crypto.randomUUID();
 
     // Step 1: Upload PDF to storage
+    const firstFile = files[0];
     await uploadPDFToStorage(firstFile, user.id, supabase);
     
     // Step 2: Convert first page to image and extract city
@@ -455,25 +382,29 @@ serve(async (req) => {
       console.log(`Normalized city names in ${checklistItems.length} checklist items`);
     }
 
-    // Get consistent analysis configuration - use filename as fallback seed
-    const seedSource = extractedCity || filenameSeed;
-    const { itemsToAnalyze, issuesToGenerate } = getCityAnalysisConfig(seedSource);
-
-    console.log(`Using seed for consistency: "${seedSource}"`);
+    // Get consistent analysis configuration for this city
+    const { itemsToAnalyze, issuesToGenerate } = getCityAnalysisConfig(extractedCity);
 
     // If we don't have enough items, use what we have
     const targetItemCount = Math.min(itemsToAnalyze, checklistItems.length);
 
-    // Use seeded shuffle for consistent selection - ALWAYS use a seed now
-    const cityRandom = seededRandom(seedSource.toLowerCase().trim());
-
-    // Fisher-Yates shuffle with seeded random
-    const itemsCopy = [...checklistItems];
-    for (let i = itemsCopy.length - 1; i > 0; i--) {
-      const j = Math.floor(cityRandom() * (i + 1));
-      [itemsCopy[i], itemsCopy[j]] = [itemsCopy[j], itemsCopy[i]];
+    // Use seeded shuffle for consistent selection per city
+    let selectedItems: any[];
+    if (extractedCity && extractedCity !== 'Not detected') {
+      const cityRandom = seededRandom(extractedCity.toLowerCase().trim());
+      // Fisher-Yates shuffle with seeded random
+      const itemsCopy = [...checklistItems];
+      for (let i = itemsCopy.length - 1; i > 0; i--) {
+        const j = Math.floor(cityRandom() * (i + 1));
+        [itemsCopy[i], itemsCopy[j]] = [itemsCopy[j], itemsCopy[i]];
+      }
+      selectedItems = itemsCopy.slice(0, targetItemCount);
+    } else {
+      // No city - use regular random shuffle
+      selectedItems = [...checklistItems]
+        .sort(() => Math.random() - 0.5)
+        .slice(0, targetItemCount);
     }
-    const selectedItems = itemsCopy.slice(0, targetItemCount);
 
     console.log(`Selected ${selectedItems.length} checklist items for analysis (target: ${itemsToAnalyze})`);
 
@@ -510,32 +441,6 @@ serve(async (req) => {
       } else {
         console.log(`Saved ${issuesToSave.length} issues to database`);
       }
-      
-      // CACHE INSERTION DISABLED - Uncomment below to enable caching
-      /*
-      // Save analysis metadata to cache for future lookups
-      const { error: cacheInsertError } = await supabase
-        .from('analysis_cache')
-        .upsert({
-          id: analysisSessionId,
-          user_id: user.id,
-          filename_seed: filenameSeed,
-          analysis_session_id: analysisSessionId,
-          city_detected: extractedCity || 'Not detected',
-          checklist_items_analyzed: selectedItems.length,
-          issues_count: issuesToSave.length,
-          updated_at: new Date().toISOString()
-        }, {
-          onConflict: 'user_id,filename_seed'
-        });
-      
-      if (cacheInsertError) {
-        console.error('Error caching analysis metadata:', cacheInsertError);
-        // Continue anyway - this doesn't affect the analysis results
-      } else {
-        console.log(`Cached analysis metadata for future lookups`);
-      }
-      */
     }
 
     // Prepare summary
@@ -546,7 +451,6 @@ serve(async (req) => {
     // Return structured response
     return new Response(JSON.stringify({
       success: true,
-      cached: false,
       data: {
         analysis_session_id: analysisSessionId,
         city_detected: extractedCity || 'Not detected',
