@@ -201,25 +201,11 @@ async function extractCityFromPDFImage(imageDataUrl: string, openAIApiKey: strin
   }
 }
 
-// Map database type_of_issue to standardized issue type, filtering out landscaping
-function mapTypeOfIssue(dbType: string | null): string | null {
-  if (!dbType) return null;
-  
-  const normalized = dbType.toLowerCase().trim();
-  
-  // Filter out landscaping-related issues
-  if (normalized.includes('landscape') || normalized.includes('landscaping')) {
-    return null; // Will be filtered out
-  }
-  
-  // Return the database value directly
-  return dbType;
-}
-
 // Generate synthetic compliance issues from checklist items
 function generateSyntheticIssues(checklistItems: any[], targetCount: number, cityName: string): any[] {
   console.log(`Generating ${targetCount} synthetic issues from ${checklistItems.length} checklist items`);
   
+  const issueTypes = ['Missing', 'Non-compliant', 'Inconsistent', 'Zoning', 'Landscape'];
   const sheets = ['Floor Plan', 'Elevations', 'Roof Plan', 'Site Plan', 'Foundation Plan', 'Details'];
   const confidenceLevels = ['High', 'Medium', 'Low'];
   
@@ -238,18 +224,16 @@ function generateSyntheticIssues(checklistItems: any[], targetCount: number, cit
   }
   const selectedItems = shuffled.slice(0, targetCount);
   
-  const issues = selectedItems.map((item, index) => {
+  return selectedItems.map((item, index) => {
     // Use seeded random if city is known
     const itemRandom = (cityName && cityName !== 'unknown') 
       ? seededRandom(`${cityName}-${item.id}`) 
       : () => Math.random();
     
-    // Determine issue type from database field and filter landscaping
-    const issueType = mapTypeOfIssue(item.type_of_issue);
-    
-    // Skip this item if it's a landscape issue
-    if (issueType === null) {
-      return null;
+    // Determine issue type - use type_of_issue if available, otherwise seeded random
+    let issueType = issueTypes[Math.floor(itemRandom() * issueTypes.length)];
+    if (item.type_of_issue && ['Missing', 'Non-compliant', 'Inconsistent'].includes(item.type_of_issue)) {
+      issueType = item.type_of_issue;
     }
     
     // Determine compliance source and normalize city names
@@ -283,19 +267,7 @@ function generateSyntheticIssues(checklistItems: any[], targetCount: number, cit
       confidence_level: confidence,
       confidence_rationale: `Generated from checklist item analysis`
     };
-  }).filter(issue => issue !== null); // Remove null entries (landscape items)
-  
-  // Log issue type distribution
-  console.log(`Issue type distribution after filtering:`);
-  const typeCount = issues.reduce((acc, issue) => {
-    if (issue) {
-      acc[issue.issue_type] = (acc[issue.issue_type] || 0) + 1;
-    }
-    return acc;
-  }, {} as Record<string, number>);
-  console.log(JSON.stringify(typeCount, null, 2));
-  
-  return issues;
+  });
 }
 
 serve(async (req) => {
@@ -401,31 +373,13 @@ serve(async (req) => {
       throw new Error('Unable to detect city from uploaded plans. Please ensure the project address is clearly visible in the title block.');
     }
     
-    // Filter out landscaping-related items before processing
-    const filteredItems = checklistItems.filter(item => {
-      if (!item.type_of_issue) return true; // Keep items with no type
-      
-      const normalized = item.type_of_issue.toLowerCase().trim();
-      const isLandscaping = normalized.includes('landscape') || normalized.includes('landscaping');
-      
-      if (isLandscaping) {
-        console.log(`Filtered out landscaping item: ${item.issue_to_check}`);
-      }
-      
-      return !isLandscaping;
-    });
-
-    console.log(`Filtered checklist items: ${checklistItems.length} -> ${filteredItems.length} (removed ${checklistItems.length - filteredItems.length} landscaping items)`);
-    
     // Pre-process checklist items to normalize city names in code_source
-    if (extractedCity && filteredItems) {
-      checklistItems = filteredItems.map(item => ({
+    if (extractedCity && checklistItems) {
+      checklistItems = checklistItems.map(item => ({
         ...item,
         code_source: normalizeComplianceSource(item.code_source, extractedCity)
       }));
       console.log(`Normalized city names in ${checklistItems.length} checklist items`);
-    } else {
-      checklistItems = filteredItems;
     }
 
     // Get consistent analysis configuration for this city
