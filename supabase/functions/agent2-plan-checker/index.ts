@@ -1,7 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.56.0';
-import { PDFDocument } from 'https://cdn.skypack.dev/pdf-lib@1.17.1';
-import { getDocument } from 'https://esm.sh/pdfjs-serverless';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -41,127 +39,11 @@ async function uploadPDFToStorage(
   return signedData.signedUrl;
 }
 
-// Extract text from a specific PDF page for city detection
-async function extractPDFPageText(
-  pdfUrl: string,
-  pageNumber: number = 1
-): Promise<string> {
-  console.log(`Extracting text from PDF page ${pageNumber}...`);
+// Extract city from PDF first page using Lovable AI
+async function extractCityFromPDF(pdfUrl: string, lovableApiKey: string): Promise<string | null> {
+  console.log('Extracting city from PDF via URL...');
+  
   try {
-    const pdfResponse = await fetch(pdfUrl);
-    if (!pdfResponse.ok) {
-      throw new Error(`Failed to fetch PDF: ${pdfResponse.status}`);
-    }
-
-    const pdfArrayBuffer = await pdfResponse.arrayBuffer();
-    const pdfData = new Uint8Array(pdfArrayBuffer);
-
-    const loadingTask = getDocument({ data: pdfData });
-    const pdfDoc = await loadingTask.promise;
-
-    const page = await pdfDoc.getPage(pageNumber);
-    const textContent = await page.getTextContent();
-    const text = textContent.items.map((item: any) => item.str).join(' ');
-
-    console.log('Extracted text length:', text.length);
-    return text;
-  } catch (error: any) {
-    console.error('Error extracting text from PDF page:', error);
-    throw new Error(`Text extraction failed: ${error.message}`);
-  }
-}
-
-// Upload image to temporary storage
-async function uploadImageToStorage(
-  imageData: Uint8Array,
-  userId: string,
-  supabase: any
-): Promise<string> {
-  const timestamp = Date.now();
-  const fileName = `page1_${userId}_${timestamp}.png`;
-  const filePath = `${userId}/${fileName}`;
-  
-  console.log('Uploading page image to storage:', filePath);
-  
-  // Upload to plan-page-images bucket
-  const { data, error } = await supabase.storage
-    .from('plan-page-images')
-    .upload(filePath, imageData, {
-      contentType: 'image/png',
-      upsert: false
-    });
-  
-  if (error) {
-    console.error('Storage upload error:', error);
-    throw new Error(`Failed to upload image: ${error.message}`);
-  }
-  
-  // Get signed URL (valid for 1 hour)
-  const { data: urlData, error: urlError } = await supabase.storage
-    .from('plan-page-images')
-    .createSignedUrl(filePath, 3600);
-  
-  if (urlError || !urlData?.signedUrl) {
-    throw new Error('Failed to create signed URL for image');
-  }
-  
-  console.log('Image uploaded successfully');
-  return urlData.signedUrl;
-}
-
-// Clean up temporary image from storage
-async function cleanupTempImage(
-  imageUrl: string,
-  supabase: any
-): Promise<void> {
-  try {
-    // Extract file path from signed URL
-    const urlObj = new URL(imageUrl);
-    const pathMatch = urlObj.pathname.match(/\/plan-page-images\/(.+)\?/);
-    
-    if (pathMatch) {
-      const filePath = pathMatch[1];
-      console.log('Cleaning up temporary image:', filePath);
-      
-      await supabase.storage
-        .from('plan-page-images')
-        .remove([filePath]);
-      
-      console.log('Temporary image cleaned up successfully');
-    }
-  } catch (error) {
-    console.warn('Failed to cleanup temp image:', error);
-    // Don't throw - cleanup failure shouldn't break the flow
-  }
-}
-
-// Extract city from PDF page text using Lovable AI (text-only)
-async function extractCityFromPDFText(
-  pageText: string,
-  candidates: string[],
-  lovableApiKey: string
-): Promise<string | null> {
-  console.log('Extracting city from text via Lovable AI...');
-
-  if (!candidates || candidates.length === 0) {
-    console.warn('No city candidates available for extraction');
-    return null;
-  }
-
-  try {
-    const prompt = `You are analyzing the first page text of an architectural plan PDF.
-Extract ONLY the city name from the project address or project location.
-
-Possible cities:
-${candidates.join(', ')}
-
-INSTRUCTIONS:
-- Return EXACTLY one city from the list above.
-- If none match, return "UNKNOWN".
-- Return ONLY the city name, nothing else.
-
-PAGE TEXT (may be noisy, OCR-like):\n${pageText.slice(0, 8000)}`;
-
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -174,52 +56,39 @@ PAGE TEXT (may be noisy, OCR-like):\n${pageText.slice(0, 8000)}`;
           {
             role: 'user',
             content: [
-              { type: 'text', text: prompt }
+              {
+                type: 'text',
+                text: 'Extract the project city name from this architectural plan. Look for the title block, project information section, or address field on the first page. Return ONLY the city name in a standardized format (e.g., "San Mateo", "Sunnyvale"). If you cannot find a city, respond with "UNKNOWN".'
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: pdfUrl
+                }
+              }
             ]
           }
-        ],
-        max_tokens: 50,
-        temperature: 0.0
+        ]
       })
     });
 
     if (!response.ok) {
-      if (response.status === 429) {
-        console.error('Lovable AI rate limit exceeded');
-        throw new Error('Lovable AI rate limit exceeded. Please try again in a few minutes.');
-      }
-      if (response.status === 402) {
-        console.error('Lovable AI payment required');
-        throw new Error('Lovable AI credits exhausted. Please add credits to your workspace.');
-      }
-      const errorText = await response.text();
-      console.error('Lovable AI error:', response.status, errorText);
+      console.error('City extraction API error:', response.status);
       return null;
     }
 
     const data = await response.json();
-    const cityTextRaw = (data.choices?.[0]?.message?.content ?? '').trim();
-    const cityText = cityTextRaw.replace(/^"|"$/g, '').trim();
-
-    console.log('Lovable AI raw response:', cityTextRaw);
-
-    if (cityText && cityText !== 'UNKNOWN') {
-      const matchedCity = candidates.find(
-        c => c.toLowerCase() === cityText.toLowerCase()
-      );
-      
-      if (matchedCity) {
-        console.log('Extracted city:', matchedCity);
-        return matchedCity;
-      }
-    }
-
-    console.log('Could not match city from text. Raw response:', cityTextRaw);
-    return null;
+    const cityText = data.choices?.[0]?.message?.content?.trim() || null;
     
+    if (cityText && cityText !== 'UNKNOWN') {
+      console.log('Extracted city:', cityText);
+      return cityText;
+    }
+    
+    return null;
   } catch (error) {
-    console.error('Error extracting city from text:', error);
-    throw error;
+    console.error('Error extracting city:', error);
+    return null;
   }
 }
 
@@ -329,71 +198,24 @@ serve(async (req) => {
     // Generate analysis session ID
     const analysisSessionId = crypto.randomUUID();
 
-    // Step 1: Upload PDF to storage for records
+    // Step 1: Upload PDF to storage and get signed URL
     const firstFile = files[0];
     const pdfUrl = await uploadPDFToStorage(firstFile, user.id, supabase);
-    console.log('PDF uploaded:', pdfUrl);
-
-    // Step 2: Extract text from page 1
-    let pageText: string;
-    try {
-      pageText = await extractPDFPageText(pdfUrl, 1);
-      console.log('Page 1 text extracted');
-    } catch (extractionError) {
-      console.error('PDF text extraction failed:', extractionError);
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Failed to extract text from PDF for city detection',
-          details: extractionError.message
-        }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Step 3: Gather candidate cities from user's checklist items
-    const { data: cityRows, error: cityErr } = await supabase
-      .from('checklist_items')
-      .select('city')
-      .eq('user_id', user.id);
-
-    if (cityErr) {
-      console.error('Error fetching city candidates:', cityErr);
-      if (imageUrl) await cleanupTempImage(imageUrl, supabase);
-      throw new Error('Failed to load city candidates');
-    }
-
-    const candidates = Array.from(new Set((cityRows || [])
-      .map((r: any) => (r.city || '').trim())
-      .filter((c: string) => c.length > 0)));
-
-    if (candidates.length === 0) {
-      if (imageUrl) await cleanupTempImage(imageUrl, supabase);
-      throw new Error('No checklist cities available. Please add checklist items with a city first.');
-    }
-
-    // Step 4: Extract city from image using Lovable AI Vision
-    const extractedCityRaw = await extractCityFromPDFText(pageText, candidates, lovableApiKey);
-    console.log('City detection initiated from text');
+    const extractedCity = await extractCityFromPDF(pdfUrl, lovableApiKey);
     
-    const extractedCity = extractedCityRaw || (candidates.length === 1 ? candidates[0] : null);
     console.log('City detection result:', extractedCity || 'Not detected');
 
-    // Step 5: Query checklist items - STRICT city matching
-    if (!extractedCity) {
-      throw new Error(
-        `Could not extract city from PDF. Please ensure:\n` +
-        `1. The project address is clearly visible on page 1\n` +
-        `2. The city name matches one of your checklist cities\n` +
-        `3. Available cities: ${candidates.join(', ')}`
-      );
-    }
-
-    const { data: checklistItems, error: checklistError } = await supabase
+    // Step 2: Query checklist items based on city
+    let checklistQuery = supabase
       .from('checklist_items')
       .select('*')
-      .eq('user_id', user.id)
-      .eq('city', extractedCity);
+      .eq('user_id', user.id);
+
+    if (extractedCity) {
+      checklistQuery = checklistQuery.eq('city', extractedCity);
+    }
+
+    const { data: checklistItems, error: checklistError } = await checklistQuery;
 
     if (checklistError) {
       console.error('Error fetching checklist items:', checklistError);
@@ -401,29 +223,36 @@ serve(async (req) => {
     }
 
     if (!checklistItems || checklistItems.length === 0) {
-      throw new Error(`No checklist items found for city "${extractedCity}". Please add checklist items for this city first.`);
+      console.log('No checklist items found for city, using general items');
+      // Fallback: get general items without city filter
+      const { data: generalItems } = await supabase
+        .from('checklist_items')
+        .select('*')
+        .eq('user_id', user.id)
+        .limit(15);
+      
+      if (!generalItems || generalItems.length === 0) {
+        throw new Error('No checklist items available for analysis');
+      }
+      
+      checklistItems.push(...generalItems);
     }
 
-    console.log(`Found ${checklistItems.length} checklist items for city: ${extractedCity}`);
-
-    // Randomly select 15-25 items from available checklist
-    const numItemsToSelect = Math.floor(Math.random() * 11) + 15; // 15-25
+    // Randomly select 10-20 items
+    const numItems = Math.floor(Math.random() * 11) + 10; // 10-20
     const selectedItems = checklistItems
       .sort(() => Math.random() - 0.5)
-      .slice(0, Math.min(numItemsToSelect, checklistItems.length));
+      .slice(0, Math.min(numItems, checklistItems.length));
 
     console.log(`Selected ${selectedItems.length} checklist items for analysis`);
 
-    // Step 6: Generate FIXED number of issues based on city (8-20)
-    const fixedIssueCount = getFixedIssueCountForCity(extractedCity);
-    const detectedIssues = generateSyntheticIssues(
-      selectedItems, 
-      Math.min(fixedIssueCount, selectedItems.length)
-    );
+    // Step 3: Generate 6-11 synthetic issues from checklist items
+    const targetIssueCount = Math.floor(Math.random() * 6) + 6; // Random between 6-11
+    const detectedIssues = generateSyntheticIssues(selectedItems, Math.min(targetIssueCount, selectedItems.length));
 
     console.log(`Generated ${detectedIssues.length} synthetic issues from checklist items`);
 
-    // Step 7: Save issues to database
+    // Step 4: Save issues to database
     const issuesToSave = detectedIssues.map(issue => ({
       id: crypto.randomUUID(),
       user_id: user.id,
