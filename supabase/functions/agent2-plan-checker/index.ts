@@ -374,27 +374,26 @@ serve(async (req) => {
     }
     
     // Pre-process checklist items to normalize city names in code_source
-    let normalizedItems = checklistItems;
     if (extractedCity && checklistItems) {
-      normalizedItems = checklistItems.map(item => ({
+      checklistItems = checklistItems.map(item => ({
         ...item,
         code_source: normalizeComplianceSource(item.code_source, extractedCity)
       }));
-      console.log(`Normalized city names in ${normalizedItems.length} checklist items`);
+      console.log(`Normalized city names in ${checklistItems.length} checklist items`);
     }
 
     // Get consistent analysis configuration for this city
     const { itemsToAnalyze, issuesToGenerate } = getCityAnalysisConfig(extractedCity);
 
     // If we don't have enough items, use what we have
-    const targetItemCount = Math.min(itemsToAnalyze, normalizedItems.length);
+    const targetItemCount = Math.min(itemsToAnalyze, checklistItems.length);
 
     // Use seeded shuffle for consistent selection per city
     let selectedItems: any[];
     if (extractedCity && extractedCity !== 'Not detected') {
       const cityRandom = seededRandom(extractedCity.toLowerCase().trim());
       // Fisher-Yates shuffle with seeded random
-      const itemsCopy = [...normalizedItems];
+      const itemsCopy = [...checklistItems];
       for (let i = itemsCopy.length - 1; i > 0; i--) {
         const j = Math.floor(cityRandom() * (i + 1));
         [itemsCopy[i], itemsCopy[j]] = [itemsCopy[j], itemsCopy[i]];
@@ -402,7 +401,7 @@ serve(async (req) => {
       selectedItems = itemsCopy.slice(0, targetItemCount);
     } else {
       // No city - use regular random shuffle
-      selectedItems = [...normalizedItems]
+      selectedItems = [...checklistItems]
         .sort(() => Math.random() - 0.5)
         .slice(0, targetItemCount);
     }
