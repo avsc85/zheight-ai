@@ -41,6 +41,16 @@ export const PlanChecker = ({ onIssuesUpdate }: PlanCheckerProps) => {
     setUploadedPlans(prev => [...prev, ...files]);
   };
 
+  const handleClearFiles = () => {
+    setUploadedPlans([]);
+    setIssues([]);
+    setAnalysisSessionId("");
+    toast({
+      title: "Files cleared",
+      description: "All uploaded files have been removed",
+    });
+  };
+
   const startAnalysis = async () => {
     if (uploadedPlans.length === 0) {
       toast({
@@ -157,6 +167,8 @@ export const PlanChecker = ({ onIssuesUpdate }: PlanCheckerProps) => {
         acceptedTypes={[".pdf", ".dwg", ".dxf", ".rvt"]}
         onFilesUploaded={handleFilesUploaded}
         maxFiles={50}
+        onClearFiles={handleClearFiles}
+        uploadedFileCount={uploadedPlans.length}
       />
     </div>
   );

@@ -19,6 +19,8 @@ interface DocumentUploadProps {
   acceptedTypes: string[];
   onFilesUploaded: (files: File[]) => void;
   maxFiles?: number;
+  onClearFiles?: () => void;
+  uploadedFileCount?: number;
 }
 
 export const DocumentUpload = ({ 
@@ -26,7 +28,9 @@ export const DocumentUpload = ({
   description, 
   acceptedTypes, 
   onFilesUploaded,
-  maxFiles = 50 
+  maxFiles = 50,
+  onClearFiles,
+  uploadedFileCount = 0
 }: DocumentUploadProps) => {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const { toast } = useToast();
@@ -79,9 +83,20 @@ export const DocumentUpload = ({
 
   return (
     <Card className="p-6">
-      <div className="mb-4">
-        <h3 className="text-lg font-semibold text-foreground mb-2">{title}</h3>
-        <p className="text-muted-foreground text-sm">{description}</p>
+      <div className="mb-4 flex justify-between items-start">
+        <div>
+          <h3 className="text-lg font-semibold text-foreground mb-2">{title}</h3>
+          <p className="text-muted-foreground text-sm">{description}</p>
+        </div>
+        {onClearFiles && uploadedFileCount > 0 && (
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={onClearFiles}
+          >
+            Clear All ({uploadedFileCount})
+          </Button>
+        )}
       </div>
 
       <div
