@@ -337,12 +337,14 @@ serve(async (req) => {
 
     console.log(`Processing ${files.length} plan file(s)`);
 
-    // Step 0: Check if we've analyzed this file before
+    // Get filename seed for deterministic analysis
     const firstFile = files[0];
     const filenameSeed = getFilenameSeed(firstFile.name);
-    console.log(`Filename seed: ${filenameSeed}`);
+    console.log(`Filename seed for deterministic analysis: ${filenameSeed}`);
 
-    // Look for cached analysis
+    // CACHE LOOKUP DISABLED - Uncomment below to enable caching
+    /*
+    // Step 0: Check if we've analyzed this file before
     const { data: cachedAnalysis, error: cacheError } = await supabase
       .from('analysis_cache')
       .select('analysis_session_id, city_detected, checklist_items_analyzed, issues_count')
@@ -393,6 +395,7 @@ serve(async (req) => {
     }
 
     console.log(`No cached analysis found, performing fresh analysis for: ${firstFile.name}`);
+    */
 
     // Generate analysis session ID
     const analysisSessionId = crypto.randomUUID();
@@ -508,6 +511,8 @@ serve(async (req) => {
         console.log(`Saved ${issuesToSave.length} issues to database`);
       }
       
+      // CACHE INSERTION DISABLED - Uncomment below to enable caching
+      /*
       // Save analysis metadata to cache for future lookups
       const { error: cacheInsertError } = await supabase
         .from('analysis_cache')
@@ -530,6 +535,7 @@ serve(async (req) => {
       } else {
         console.log(`Cached analysis metadata for future lookups`);
       }
+      */
     }
 
     // Prepare summary
