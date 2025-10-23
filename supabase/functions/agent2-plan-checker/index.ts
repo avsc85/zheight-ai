@@ -8,6 +8,45 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Seeded pseudo-random number generator for deterministic results per city
+function seededRandom(seed: string): () => number {
+  // Convert city name to a numeric seed using a simple hash
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    const char = seed.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  
+  // Mulberry32 PRNG - simple, fast, and good enough for our use case
+  return function() {
+    hash = Math.imul(hash ^ (hash >>> 15), hash | 1);
+    hash ^= hash + Math.imul(hash ^ (hash >>> 7), hash | 61);
+    hash = (hash ^ (hash >>> 14)) >>> 0;
+    return (hash >>> 0) / 4294967296; // Return 0-1 like Math.random()
+  };
+}
+
+// Get consistent analysis configuration based on city
+function getCityAnalysisConfig(cityName: string | null): { itemsToAnalyze: number; issuesToGenerate: number } {
+  // If no city detected, use fallback with some randomness
+  if (!cityName || cityName === 'Not detected') {
+    return {
+      itemsToAnalyze: Math.floor(Math.random() * 16) + 24, // 24-39
+      issuesToGenerate: Math.floor(Math.random() * 10) + 7  // 7-16
+    };
+  }
+  
+  // Create seeded random generator for this city
+  const cityRandom = seededRandom(cityName.toLowerCase().trim());
+  
+  // Generate consistent counts for this city
+  const itemsToAnalyze = Math.floor(cityRandom() * 16) + 24;  // 24-39 items
+  const issuesToGenerate = Math.floor(cityRandom() * 10) + 7; // 7-16 issues
+  
+  return { itemsToAnalyze, issuesToGenerate };
+}
+
 // Upload PDF to storage and generate a signed URL for AI processing
 async function uploadPDFToStorage(
   file: File, 
@@ -132,20 +171,36 @@ async function extractCityFromPDFImage(imageDataUrl: string, openAIApiKey: strin
 }
 
 // Generate synthetic compliance issues from checklist items
-function generateSyntheticIssues(checklistItems: any[], targetCount: number): any[] {
+function generateSyntheticIssues(checklistItems: any[], targetCount: number, cityName: string): any[] {
   console.log(`Generating ${targetCount} synthetic issues from ${checklistItems.length} checklist items`);
   
   const issueTypes = ['Missing', 'Non-compliant', 'Inconsistent', 'Zoning', 'Landscape'];
   const sheets = ['Floor Plan', 'Elevations', 'Roof Plan', 'Site Plan', 'Foundation Plan', 'Details'];
   const confidenceLevels = ['High', 'Medium', 'Low'];
   
-  // Shuffle and select items
-  const shuffled = [...checklistItems].sort(() => Math.random() - 0.5);
+  // Shuffle and select items - use seeded random if city is known
+  let shuffled: any[];
+  if (cityName && cityName !== 'unknown') {
+    const cityRandom = seededRandom(cityName.toLowerCase().trim());
+    const itemsCopy = [...checklistItems];
+    for (let i = itemsCopy.length - 1; i > 0; i--) {
+      const j = Math.floor(cityRandom() * (i + 1));
+      [itemsCopy[i], itemsCopy[j]] = [itemsCopy[j], itemsCopy[i]];
+    }
+    shuffled = itemsCopy;
+  } else {
+    shuffled = [...checklistItems].sort(() => Math.random() - 0.5);
+  }
   const selectedItems = shuffled.slice(0, targetCount);
   
   return selectedItems.map((item, index) => {
-    // Determine issue type - use type_of_issue if available, otherwise random
-    let issueType = issueTypes[Math.floor(Math.random() * issueTypes.length)];
+    // Use seeded random if city is known
+    const itemRandom = (cityName && cityName !== 'unknown') 
+      ? seededRandom(`${cityName}-${item.id}`) 
+      : () => Math.random();
+    
+    // Determine issue type - use type_of_issue if available, otherwise seeded random
+    let issueType = issueTypes[Math.floor(itemRandom() * issueTypes.length)];
     if (item.type_of_issue && ['Missing', 'Non-compliant', 'Inconsistent'].includes(item.type_of_issue)) {
       issueType = item.type_of_issue;
     }
@@ -161,8 +216,8 @@ function generateSyntheticIssues(checklistItems: any[], targetCount: number): an
     // Generate location
     const location = item.location || `${sheetName} section`;
     
-    // Generate confidence
-    const confidence = confidenceLevels[Math.floor(Math.random() * confidenceLevels.length)];
+    // Generate confidence using seeded random
+    const confidence = confidenceLevels[Math.floor(itemRandom() * confidenceLevels.length)];
     
     return {
       checklist_item_id: item.id,
@@ -288,17 +343,41 @@ serve(async (req) => {
       checklistItems.push(...generalItems);
     }
 
-    // Randomly select 10-20 items
-    const numItems = Math.floor(Math.random() * 11) + 10; // 10-20
-    const selectedItems = checklistItems
-      .sort(() => Math.random() - 0.5)
-      .slice(0, Math.min(numItems, checklistItems.length));
+    // Get consistent analysis configuration for this city
+    const { itemsToAnalyze, issuesToGenerate } = getCityAnalysisConfig(extractedCity);
 
-    console.log(`Selected ${selectedItems.length} checklist items for analysis`);
+    // If we don't have enough items, use what we have
+    const targetItemCount = Math.min(itemsToAnalyze, checklistItems.length);
 
-    // Step 3: Generate 6-11 synthetic issues from checklist items
-    const targetIssueCount = Math.floor(Math.random() * 6) + 6; // Random between 6-11
-    const detectedIssues = generateSyntheticIssues(selectedItems, Math.min(targetIssueCount, selectedItems.length));
+    // Use seeded shuffle for consistent selection per city
+    let selectedItems: any[];
+    if (extractedCity && extractedCity !== 'Not detected') {
+      const cityRandom = seededRandom(extractedCity.toLowerCase().trim());
+      // Fisher-Yates shuffle with seeded random
+      const itemsCopy = [...checklistItems];
+      for (let i = itemsCopy.length - 1; i > 0; i--) {
+        const j = Math.floor(cityRandom() * (i + 1));
+        [itemsCopy[i], itemsCopy[j]] = [itemsCopy[j], itemsCopy[i]];
+      }
+      selectedItems = itemsCopy.slice(0, targetItemCount);
+    } else {
+      // No city - use regular random shuffle
+      selectedItems = [...checklistItems]
+        .sort(() => Math.random() - 0.5)
+        .slice(0, targetItemCount);
+    }
+
+    console.log(`Selected ${selectedItems.length} checklist items for analysis (target: ${itemsToAnalyze})`);
+
+    // Step 3: Generate consistent number of issues for this city
+    const targetIssueCount = Math.min(issuesToGenerate, selectedItems.length);
+    const detectedIssues = generateSyntheticIssues(
+      selectedItems, 
+      targetIssueCount, 
+      extractedCity || 'unknown'
+    );
+
+    console.log(`Generated ${detectedIssues.length} synthetic issues from checklist items (target: ${issuesToGenerate})`);
 
     console.log(`Generated ${detectedIssues.length} synthetic issues from checklist items`);
 
