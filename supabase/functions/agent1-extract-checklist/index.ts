@@ -146,7 +146,7 @@ serve(async (req) => {
     }
 
     // Upload files to OpenAI using File Upload API
-    const uploadedFiles = [];
+    const uploadedFiles: string[] = [];
     
     for (const file of files) {
       console.log(`Uploading file to OpenAI: ${file.name}, size: ${file.size} bytes`);
@@ -212,8 +212,9 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         name: "Architectural Compliance Extractor",
-        instructions: systemPrompt + "\n\nPlease respond with a JSON object containing an 'items' array. Each item should have these exact field names: sheet_name, issue_to_check, location, type_of_issue, code_source, code_identifier, short_code_requirement, long_code_requirement, source_link, project_type, city, zip_code, reviewer_name, type_of_correction. Return the result as: {\"items\": [...]}.",
+        instructions: systemPrompt + "\n\n**CRITICAL: You must ALWAYS respond with valid JSON only. If you cannot find any items, respond with: {\"items\": []}. Never provide explanations or conversational responses.** Each item should have these exact field names: sheet_name, issue_to_check, location, type_of_issue, code_source, code_identifier, short_code_requirement, long_code_requirement, source_link, project_type, city, zip_code, reviewer_name, type_of_correction.",
         model: "gpt-4o",
+        response_format: { type: "json_object" },
         tools: [{ type: "file_search" }],
         tool_resources: {
           file_search: {
@@ -383,6 +384,14 @@ serve(async (req) => {
     // Parse the JSON response
     let extractedItems;
     try {
+      // Check if response is conversational (heuristic: starts with plain text without JSON)
+      const isConversational = responseContent.trim().match(/^[A-Z][a-z\s,]+/) && !responseContent.includes('{');
+      
+      if (isConversational) {
+        console.error('OpenAI returned conversational response instead of JSON:', responseContent);
+        throw new Error('Unable to extract checklist items from the uploaded documents. The files may be image-based PDFs without text, or may not contain recognizable architectural plans or correction letters. Please ensure your PDFs contain searchable text and clear plan/correction content.');
+      }
+
       // Try to extract JSON from the response
       const jsonMatch = responseContent.match(/\{[\s\S]*"items"[\s\S]*\}/);
       if (jsonMatch) {
@@ -400,11 +409,21 @@ serve(async (req) => {
     } catch (parseError) {
       console.error('Failed to parse OpenAI response as JSON:', parseError);
       console.error('Response content:', responseContent);
-      throw new Error('Invalid JSON response from OpenAI');
+      
+      // Provide helpful error message
+      if ((parseError as Error).message?.includes('Unable to extract checklist items')) {
+        throw parseError; // Re-throw our custom error
+      }
+      throw new Error('Unable to parse response from OpenAI. The uploaded documents may not contain extractable architectural compliance information. Please verify your files contain readable text and clear plan/correction content.');
     }
 
     if (!Array.isArray(extractedItems)) {
       throw new Error('OpenAI response does not contain a valid items array');
+    }
+
+    if (extractedItems.length === 0) {
+      console.warn('OpenAI returned zero items from document analysis');
+      throw new Error('No checklist items could be extracted from the uploaded documents. Please ensure the PDFs contain clear architectural plans with correction letters or code summaries that include specific issues, locations, and code references.');
     }
 
     console.log(`Extracted ${extractedItems.length} items from OpenAI response`);

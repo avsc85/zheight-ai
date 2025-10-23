@@ -97,9 +97,23 @@ export const ChecklistExtractor = () => {
 
     } catch (error: any) {
       console.error('Extraction error:', error);
+      
+      // Parse error message for user-friendly display
+      let errorMessage = 'Extraction failed';
+      let errorDescription = error.message || 'Failed to process documents';
+      
+      // Provide specific guidance based on error type
+      if (errorDescription.includes('Unable to extract checklist items')) {
+        errorMessage = 'Document Processing Failed';
+        errorDescription += '\n\nTroubleshooting tips:\n• Ensure PDFs contain searchable text (not just images)\n• Upload both architectural plans AND correction letters\n• Check that documents are not corrupted';
+      } else if (errorDescription.includes('No checklist items could be extracted')) {
+        errorMessage = 'No Items Found';
+        errorDescription += '\n\nPlease verify:\n• Documents contain specific building code issues\n• Correction letters include code references\n• Plans have clear annotations or markup';
+      }
+      
       toast({
-        title: "Extraction failed",
-        description: error.message || "Failed to process documents",
+        title: errorMessage,
+        description: errorDescription,
         variant: "destructive"
       });
     } finally {
