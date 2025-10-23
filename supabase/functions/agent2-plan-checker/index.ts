@@ -41,58 +41,33 @@ async function uploadPDFToStorage(
   return signedData.signedUrl;
 }
 
-// Convert PDF page 1 to PNG image for vision processing
-async function convertPDFPageToImage(
+// Extract text from a specific PDF page for city detection
+async function extractPDFPageText(
   pdfUrl: string,
   pageNumber: number = 1
-): Promise<Uint8Array> {
-  console.log(`Converting PDF page ${pageNumber} to image...`);
-  
+): Promise<string> {
+  console.log(`Extracting text from PDF page ${pageNumber}...`);
   try {
-    // Fetch the PDF
     const pdfResponse = await fetch(pdfUrl);
     if (!pdfResponse.ok) {
       throw new Error(`Failed to fetch PDF: ${pdfResponse.status}`);
     }
-    
+
     const pdfArrayBuffer = await pdfResponse.arrayBuffer();
     const pdfData = new Uint8Array(pdfArrayBuffer);
-    
-    // Load the PDF document
+
     const loadingTask = getDocument({ data: pdfData });
     const pdfDoc = await loadingTask.promise;
-    
-    // Get the specified page
+
     const page = await pdfDoc.getPage(pageNumber);
-    
-    // Set scale for good quality (2x for high DPI)
-    const scale = 2.0;
-    const viewport = page.getViewport({ scale });
-    
-    // Create canvas context
-    const canvas = new OffscreenCanvas(viewport.width, viewport.height);
-    const context = canvas.getContext('2d');
-    
-    if (!context) {
-      throw new Error('Failed to get canvas context');
-    }
-    
-    // Render PDF page to canvas
-    await page.render({
-      canvasContext: context,
-      viewport: viewport,
-    }).promise;
-    
-    // Convert canvas to PNG blob
-    const blob = await canvas.convertToBlob({ type: 'image/png' });
-    const arrayBuffer = await blob.arrayBuffer();
-    
-    console.log('PDF page converted to PNG successfully');
-    return new Uint8Array(arrayBuffer);
-    
-  } catch (error) {
-    console.error('Error converting PDF to image:', error);
-    throw new Error(`PDF conversion failed: ${error.message}`);
+    const textContent = await page.getTextContent();
+    const text = textContent.items.map((item: any) => item.str).join(' ');
+
+    console.log('Extracted text length:', text.length);
+    return text;
+  } catch (error: any) {
+    console.error('Error extracting text from PDF page:', error);
+    throw new Error(`Text extraction failed: ${error.message}`);
   }
 }
 
@@ -160,13 +135,13 @@ async function cleanupTempImage(
   }
 }
 
-// Extract city from image using Lovable AI vision
-async function extractCityFromPDFPage(
-  imageUrl: string,
+// Extract city from PDF page text using Lovable AI (text-only)
+async function extractCityFromPDFText(
+  pageText: string,
   candidates: string[],
   lovableApiKey: string
 ): Promise<string | null> {
-  console.log('Extracting city from image via Lovable AI vision...');
+  console.log('Extracting city from text via Lovable AI...');
 
   if (!candidates || candidates.length === 0) {
     console.warn('No city candidates available for extraction');
@@ -174,18 +149,18 @@ async function extractCityFromPDFPage(
   }
 
   try {
-    const prompt = `You are analyzing the first page of an architectural plan PDF. 
-Look for the PROJECT ADDRESS or PROJECT LOCATION at the top of the page.
-Extract ONLY the city name from the address.
+    const prompt = `You are analyzing the first page text of an architectural plan PDF.
+Extract ONLY the city name from the project address or project location.
 
-Here are the possible cities to match against:
+Possible cities:
 ${candidates.join(', ')}
 
 INSTRUCTIONS:
-- Return EXACTLY one city name from the list above
-- If you find a city that matches, return it exactly as shown in the list
-- If no city matches or you cannot find an address, return "UNKNOWN"
-- Return ONLY the city name, nothing else`;
+- Return EXACTLY one city from the list above.
+- If none match, return "UNKNOWN".
+- Return ONLY the city name, nothing else.
+
+PAGE TEXT (may be noisy, OCR-like):\n${pageText.slice(0, 8000)}`;
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -199,16 +174,7 @@ INSTRUCTIONS:
           {
             role: 'user',
             content: [
-              {
-                type: 'text',
-                text: prompt
-              },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: imageUrl
-                }
-              }
+              { type: 'text', text: prompt }
             ]
           }
         ],
@@ -237,7 +203,6 @@ INSTRUCTIONS:
 
     console.log('Lovable AI raw response:', cityTextRaw);
 
-    // Validate against candidates with case-insensitive matching
     if (cityText && cityText !== 'UNKNOWN') {
       const matchedCity = candidates.find(
         c => c.toLowerCase() === cityText.toLowerCase()
@@ -249,33 +214,13 @@ INSTRUCTIONS:
       }
     }
 
-    console.log('Could not match city from PDF. Raw response:', cityTextRaw);
+    console.log('Could not match city from text. Raw response:', cityTextRaw);
     return null;
     
   } catch (error) {
-    console.error('Error extracting city from PDF:', error);
+    console.error('Error extracting city from text:', error);
     throw error;
   }
-}
-
-
-// Generate a fixed issue count for a city (8-20) based on deterministic hash
-function getFixedIssueCountForCity(cityName: string): number {
-  // Create a simple hash from city name for consistent results
-  let hash = 0;
-  const normalizedCity = cityName.toUpperCase().trim();
-  
-  for (let i = 0; i < normalizedCity.length; i++) {
-    hash = ((hash << 5) - hash) + normalizedCity.charCodeAt(i);
-    hash = hash & hash; // Convert to 32-bit integer
-  }
-  
-  // Use hash to generate consistent number between 8-20
-  const range = 20 - 8 + 1; // 13 possible values
-  const fixedCount = 8 + (Math.abs(hash) % range);
-  
-  console.log(`City "${cityName}" will generate ${fixedCount} issues (fixed)`);
-  return fixedCount;
 }
 
 // Generate synthetic compliance issues from checklist items
@@ -389,19 +334,18 @@ serve(async (req) => {
     const pdfUrl = await uploadPDFToStorage(firstFile, user.id, supabase);
     console.log('PDF uploaded:', pdfUrl);
 
-    // Step 2: Convert PDF page 1 to image
-    let imageUrl: string | null = null;
+    // Step 2: Extract text from page 1
+    let pageText: string;
     try {
-      const imageData = await convertPDFPageToImage(pdfUrl, 1);
-      imageUrl = await uploadImageToStorage(imageData, user.id, supabase);
-      console.log('Page 1 image URL:', imageUrl);
-    } catch (conversionError) {
-      console.error('PDF conversion failed:', conversionError);
+      pageText = await extractPDFPageText(pdfUrl, 1);
+      console.log('Page 1 text extracted');
+    } catch (extractionError) {
+      console.error('PDF text extraction failed:', extractionError);
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'Failed to convert PDF to image for vision analysis',
-          details: conversionError.message
+          error: 'Failed to extract text from PDF for city detection',
+          details: extractionError.message
         }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -429,12 +373,8 @@ serve(async (req) => {
     }
 
     // Step 4: Extract city from image using Lovable AI Vision
-    const extractedCityRaw = await extractCityFromPDFPage(imageUrl, candidates, lovableApiKey);
-    
-    // Clean up temporary image
-    if (imageUrl) {
-      await cleanupTempImage(imageUrl, supabase);
-    }
+    const extractedCityRaw = await extractCityFromPDFText(pageText, candidates, lovableApiKey);
+    console.log('City detection initiated from text');
     
     const extractedCity = extractedCityRaw || (candidates.length === 1 ? candidates[0] : null);
     console.log('City detection result:', extractedCity || 'Not detected');
