@@ -1,3 +1,4 @@
+import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.56.0';
 
@@ -39,19 +40,19 @@ async function uploadPDFToStorage(
   return signedData.signedUrl;
 }
 
-// Extract city from PDF first page using Lovable AI
-async function extractCityFromPDF(pdfUrl: string, lovableApiKey: string): Promise<string | null> {
-  console.log('Extracting city from PDF via URL...');
+// Extract city from PDF first page using OpenAI GPT-5
+async function extractCityFromPDF(pdfUrl: string, openAIApiKey: string): Promise<string | null> {
+  console.log('Extracting city from PDF via OpenAI GPT-5...');
   
   try {
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${lovableApiKey}`,
+        'Authorization': `Bearer ${openAIApiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'gpt-5-2025-08-07',
         messages: [
           {
             role: 'user',
@@ -68,12 +69,14 @@ async function extractCityFromPDF(pdfUrl: string, lovableApiKey: string): Promis
               }
             ]
           }
-        ]
+        ],
+        max_completion_tokens: 50
       })
     });
 
     if (!response.ok) {
-      console.error('City extraction API error:', response.status);
+      const errorText = await response.text();
+      console.error('City extraction API error:', response.status, errorText);
       return null;
     }
 
@@ -154,10 +157,10 @@ serve(async (req) => {
     // Get environment variables
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY')!;
+    const openAIApiKey = Deno.env.get('OPENAI_API_KEY')!;
 
-    if (!lovableApiKey) {
-      throw new Error('LOVABLE_API_KEY not configured');
+    if (!openAIApiKey) {
+      throw new Error('OPENAI_API_KEY not configured');
     }
 
     // Initialize Supabase client
@@ -201,7 +204,7 @@ serve(async (req) => {
     // Step 1: Upload PDF to storage and get signed URL
     const firstFile = files[0];
     const pdfUrl = await uploadPDFToStorage(firstFile, user.id, supabase);
-    const extractedCity = await extractCityFromPDF(pdfUrl, lovableApiKey);
+    const extractedCity = await extractCityFromPDF(pdfUrl, openAIApiKey);
     
     console.log('City detection result:', extractedCity || 'Not detected');
 
