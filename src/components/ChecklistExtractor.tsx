@@ -130,7 +130,7 @@ export const ChecklistExtractor = () => {
       </AgentCard>
 
       <DocumentUpload
-        title="Upload Historical Documents"
+        title="Upload City corrections / code summaries and corresponding residential plans"
         description="Upload city correction letters and corresponding architectural plans (PDF files only, max 20MB per file, 25MB total)"
         acceptedTypes={["application/pdf"]}
         onFilesUploaded={handleFilesUploaded}
