@@ -11,6 +11,7 @@ import { EyeIcon, EyeOffIcon } from "lucide-react";
 
 const PasswordReset = () => {
   const [loading, setLoading] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
@@ -21,24 +22,62 @@ const PasswordReset = () => {
   const [searchParams] = useSearchParams();
 
   useEffect(() => {
-    // Check if we have the necessary tokens from the URL
-    const accessToken = searchParams.get('access_token');
-    const refreshToken = searchParams.get('refresh_token');
-    
-    if (!accessToken || !refreshToken) {
-      setError("Invalid reset link. Please request a new password reset.");
-      return;
-    }
+    const setupSession = async () => {
+      // Check if we have the necessary tokens from the URL
+      const accessToken = searchParams.get('access_token');
+      const refreshToken = searchParams.get('refresh_token');
+      
+      if (!accessToken || !refreshToken) {
+        setError("Invalid reset link. Please request a new password reset.");
+        return;
+      }
 
-    // Set the session with the tokens from the URL
-    supabase.auth.setSession({
-      access_token: accessToken,
-      refresh_token: refreshToken,
-    });
+      try {
+        // Set the session with the tokens from the URL
+        const { data, error: sessionError } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+
+        if (sessionError) {
+          console.error('Session setup error:', sessionError);
+          
+          // Handle specific error types
+          if (sessionError.message.includes('expired')) {
+            setError("This reset link has expired. Please request a new password reset.");
+          } else if (sessionError.message.includes('already been used')) {
+            setError("This reset link has already been used. Please request a new password reset.");
+          } else if (sessionError.message.includes('Invalid')) {
+            setError("Invalid reset link. Please request a new password reset.");
+          } else {
+            setError(`Session error: ${sessionError.message}`);
+          }
+          return;
+        }
+
+        if (!data.session) {
+          setError("Unable to establish session. Please request a new password reset.");
+          return;
+        }
+
+        // Session is ready
+        setSessionReady(true);
+      } catch (err: any) {
+        console.error('Unexpected error setting up session:', err);
+        setError("An unexpected error occurred. Please request a new password reset.");
+      }
+    };
+
+    setupSession();
   }, [searchParams]);
 
   const handlePasswordReset = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!sessionReady) {
+      setError("Session not ready. Please wait or request a new reset link.");
+      return;
+    }
     
     if (!password || !confirmPassword) {
       setError("Please fill in all fields");
@@ -86,10 +125,35 @@ const PasswordReset = () => {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold">Set New Password</CardTitle>
-          <p className="text-muted-foreground">Enter your new password below</p>
+          <p className="text-muted-foreground">
+            {!sessionReady && !error ? "Verifying reset link..." : "Enter your new password below"}
+          </p>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handlePasswordReset} className="space-y-4">
+          {error && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertDescription className="flex flex-col gap-2">
+                <span>{error}</span>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => navigate("/forgot-password")}
+                  className="w-full mt-2"
+                >
+                  Request New Reset Link
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+          
+          {!error && !sessionReady && (
+            <div className="flex justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          )}
+
+          {sessionReady && (
+            <form onSubmit={handlePasswordReset} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="password">New Password</Label>
               <div className="relative">
@@ -143,17 +207,12 @@ const PasswordReset = () => {
                 </Button>
               </div>
             </div>
-            
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
 
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full" disabled={loading || !sessionReady}>
               {loading ? "Updating Password..." : "Update Password"}
             </Button>
           </form>
+          )}
         </CardContent>
       </Card>
     </div>
