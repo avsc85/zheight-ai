@@ -82,31 +82,17 @@ const SortableRow = ({ task, index, handleTaskChange, deleteTask, arUsers }: any
           </TableCell>
           <TableCell>
             <Select
-              value={task.assigned_ar_id || ""}
-              onValueChange={(value) => handleTaskChange(task.id, "assigned_ar_id", value || null)}
+              value={task.assigned_ar_id || "no_ar_assigned"}
+              onValueChange={(value) => handleTaskChange(task.id, "assigned_ar_id", value === "no_ar_assigned" ? null : value)}
             >
               <SelectTrigger className="h-8">
                 <SelectValue placeholder="Select AR" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="no_ar_assigned">No AR Assigned</SelectItem>
                 {arUsers.map((ar: AR) => (
                   <SelectItem key={ar.id} value={ar.id}>{ar.name}</SelectItem>
                 ))}
-              </SelectContent>
-            </Select>
-          </TableCell>
-          <TableCell>
-            <Select
-              value={task.assigned_skip_flag}
-              onValueChange={(value) => handleTaskChange(task.id, "assigned_skip_flag", value)}
-            >
-              <SelectTrigger className="h-8">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Y">Y</SelectItem>
-                <SelectItem value="N">N</SelectItem>
-                <SelectItem value="Skip">Skip</SelectItem>
               </SelectContent>
             </Select>
           </TableCell>
@@ -484,7 +470,7 @@ const ProjectSetup = () => {
         description: `Project "${project.project_name}" loaded successfully.`,
       });
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching project data:', error);
       toast({
         title: "Error",
@@ -530,6 +516,27 @@ const ProjectSetup = () => {
       return;
     }
 
+    // Validate: If AR is assigned (not null), due date is required
+    const invalidTasks = tasks
+      .map((task, index) => ({ task, taskNumber: index + 1 }))
+      .filter(({ task }) => task.assigned_ar_id && !task.due_date);
+    
+    if (invalidTasks.length > 0) {
+      // Get AR names for the invalid tasks
+      const taskDetails = invalidTasks.map(({ task, taskNumber }) => {
+        const arUser = arUsers.find(ar => ar.id === task.assigned_ar_id);
+        return `Task #${taskNumber} (${task.task_name}) - AR: ${arUser?.name || 'Unknown'}`;
+      }).join('\n');
+      
+      toast({
+        title: "Validation Error",
+        description: `${invalidTasks.length} task(s) with AR assigned are missing due dates:\n\n${taskDetails}`,
+        variant: "destructive",
+        position: "left",
+      });
+      return;
+    }
+
     setLoading(true);
     try {
       if (editMode && projectId) {
@@ -549,13 +556,14 @@ const ProjectSetup = () => {
 
         if (deleteError) throw deleteError;
 
-        // Insert updated tasks
+        // Insert updated tasks with auto-assignment logic
         const tasksToInsert = tasks.map((task, index) => ({
           project_id: projectId,
           milestone_number: index + 1,
           task_name: task.task_name,
           assigned_ar_id: task.assigned_ar_id,
-          assigned_skip_flag: task.assigned_skip_flag,
+          // Auto-set assigned_skip_flag: 'Y' if AR assigned, 'N' if not assigned
+          assigned_skip_flag: task.assigned_ar_id ? 'Y' : 'N',
           due_date: task.due_date || null,
           priority_exception: task.priority_exception,
           hours: task.hours,
@@ -569,6 +577,7 @@ const ProjectSetup = () => {
 
         if (tasksError) throw tasksError;
 
+        // Email notifications are sent automatically via database trigger
         toast({
           title: "Success",
           description: "Project updated successfully!",
@@ -594,13 +603,14 @@ const ProjectSetup = () => {
 
         console.log('Project created successfully:', project);
 
-        // Insert tasks
+        // Insert tasks with auto-assignment logic
         const tasksToInsert = tasks.map((task, index) => ({
           project_id: project.id,
           milestone_number: index + 1,
           task_name: task.task_name,
           assigned_ar_id: task.assigned_ar_id,
-          assigned_skip_flag: task.assigned_skip_flag,
+          // Auto-set assigned_skip_flag: 'Y' if AR assigned, 'N' if not assigned
+          assigned_skip_flag: task.assigned_ar_id ? 'Y' : 'N',
           due_date: task.due_date || null,
           priority_exception: task.priority_exception,
           hours: task.hours,
@@ -614,6 +624,7 @@ const ProjectSetup = () => {
 
         if (tasksError) throw tasksError;
 
+        // Email notifications are sent automatically via database trigger
         toast({
           title: "Success",
           description: "Project created successfully!",
@@ -837,7 +848,6 @@ const ProjectSetup = () => {
                             <TableHead className="w-12">#</TableHead>
                             <TableHead className="min-w-48">Task Name</TableHead>
                             <TableHead className="w-32">AR Assigned</TableHead>
-                            <TableHead className="w-32">Assigned/Skip</TableHead>
                             <TableHead className="w-32">Due Date</TableHead>
                             <TableHead className="min-w-36">Priority</TableHead>
                             <TableHead className="w-24">Hours</TableHead>
