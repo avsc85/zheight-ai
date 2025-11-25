@@ -1,0 +1,31 @@
+project_id = "tiiuowhbntuoepxpnobs"
+
+[functions.agent1-extract-checklist]
+verify_jwt = false
+
+[functions.agent2-plan-checker]
+verify_jwt = false
+
+[functions.ai-feasibility-analyzer]
+verify_jwt = false
+
+[functions.csv-upload-ordinances]
+verify_jwt = false
+
+[functions.delete-auth-user]
+verify_jwt = true
+
+[functions.check-orphaned-users]
+verify_jwt = true
+
+[functions.invite-user]
+verify_jwt = true
+
+[functions.get-users-with-auth]
+verify_jwt = true
+
+[functions.send-task-assignment-email]
+verify_jwt = false
+
+[functions.process-email-queue]
+verify_jwt = false
