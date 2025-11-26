@@ -57,20 +57,36 @@ DECLARE
     v_email_html TEXT;
     v_email_text TEXT;
     v_due_date_formatted TEXT;
+    v_should_send BOOLEAN := FALSE;
 BEGIN
-    -- Get project name
-    SELECT project_name INTO v_project_name
-    FROM public.projects
-    WHERE id = NEW.project_id;
+    -- Determine if we should send email based on operation
+    IF TG_OP = 'INSERT' THEN
+        -- On INSERT: Send if both AR and due date are set
+        v_should_send := (NEW.assigned_ar_id IS NOT NULL AND NEW.due_date IS NOT NULL);
+    ELSIF TG_OP = 'UPDATE' THEN
+        -- On UPDATE: Send ONLY if AR changed (not just due date or other fields)
+        v_should_send := (
+            NEW.assigned_ar_id IS NOT NULL AND 
+            OLD.assigned_ar_id IS DISTINCT FROM NEW.assigned_ar_id
+        );
+    END IF;
     
-    -- Get AR user name and email (ONLY the NEW assigned AR)
-    SELECT p.name, u.email INTO v_ar_name, v_ar_email
-    FROM public.profiles p
-    JOIN auth.users u ON u.id = p.user_id
-    WHERE p.user_id = NEW.assigned_ar_id;
-    
-    -- Format due date (due_date is already stored as text/varchar)
-    v_due_date_formatted := NEW.due_date;
+    -- Only process if conditions met
+    IF v_should_send THEN
+        
+        -- Get project name
+        SELECT project_name INTO v_project_name
+        FROM public.projects
+        WHERE id = NEW.project_id;
+        
+        -- Get AR user name and email (ONLY the NEW assigned AR)
+        SELECT p.name, u.email INTO v_ar_name, v_ar_email
+        FROM public.profiles p
+        JOIN auth.users u ON u.id = p.user_id
+        WHERE p.user_id = NEW.assigned_ar_id;
+        
+        -- Format due date (due_date is already stored as text/varchar)
+        v_due_date_formatted := NEW.due_date;
     
     -- Create email subject
     v_email_subject := 'New Task Assignment: ' || NEW.task_name || ' - ' || v_project_name;
@@ -176,6 +192,7 @@ This is an automated notification from the zHeight AI project management system.
         
         -- Log for debugging
         RAISE NOTICE 'Email notification logged for task: % (Project: %) assigned to %', NEW.task_name, v_project_name, v_ar_name;
+    END IF;
     
     RETURN NEW;
 END;
@@ -186,10 +203,6 @@ DROP TRIGGER IF EXISTS trigger_task_assignment_email ON public.project_tasks;
 CREATE TRIGGER trigger_task_assignment_email
     AFTER INSERT OR UPDATE ON public.project_tasks
     FOR EACH ROW
-    WHEN (
-        (TG_OP = 'INSERT' AND NEW.assigned_ar_id IS NOT NULL AND NEW.due_date IS NOT NULL) OR
-        (TG_OP = 'UPDATE' AND OLD.assigned_ar_id IS DISTINCT FROM NEW.assigned_ar_id)
-    )
     EXECUTE FUNCTION public.log_task_assignment_email();
 
 -- Grant necessary permissions
