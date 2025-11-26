@@ -138,7 +138,7 @@ BEGIN
             
             <div class="info-row">
                 <span class="info-label">Assignment Time:</span>
-                <span class="info-value">' || TO_CHAR(NOW(), 'Day, Month DD, YYYY at HH24:MI:SS') || '</span>
+                <span class="info-value">' || NOW()::text || '</span>
             </div>
             
             <p style="margin-top: 30px;">This is an automated notification from the zHeight AI project management system.</p>
@@ -161,7 +161,7 @@ Assigned To: ' || COALESCE(v_ar_name, 'Unknown') || '
 Project Name: ' || COALESCE(v_project_name, 'Unknown') || '
 Task Name: ' || NEW.task_name || '
 Due Date: ' || v_due_date_formatted || '
-Assignment Time: ' || TO_CHAR(NOW(), 'Day, Month DD, YYYY at HH24:MI:SS') || '
+Assignment Time: ' || NOW()::text || '
 
 This is an automated notification from the zHeight AI project management system.';
         

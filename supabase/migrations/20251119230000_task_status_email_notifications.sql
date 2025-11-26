@@ -123,7 +123,7 @@ BEGIN
             <div class="info-row"><span class="info-label">Project Name:</span><span class="info-value">' || COALESCE(v_project_name, 'Unknown') || '</span></div>
             <div class="info-row"><span class="info-label">Task Name:</span><span class="info-value">' || NEW.task_name || '</span></div>
             <div class="info-row"><span class="info-label">Due Date:</span><span class="info-value">' || v_due_date_formatted || '</span></div>
-            <div class="info-row"><span class="info-label">Assignment Time:</span><span class="info-value">' || TO_CHAR(NOW(), 'Day, Month DD, YYYY at HH24:MI:SS') || '</span></div>
+            <div class="info-row"><span class="info-label">Assignment Time:</span><span class="info-value">' || NOW()::text || '</span></div>
         </div>
         <div class="footer"><p>© ' || EXTRACT(YEAR FROM NOW()) || ' zHeight AI. All rights reserved.</p></div>
     </div>
@@ -160,7 +160,7 @@ BEGIN
             <div class="info-row"><span class="info-label">Task Name:</span><span class="info-value">' || NEW.task_name || '</span></div>
             <div class="info-row"><span class="info-label">New Status:</span><span class="info-value">' || v_status_label || '</span></div>
             <div class="info-row"><span class="info-label">Due Date:</span><span class="info-value">' || v_due_date_formatted || '</span></div>
-            <div class="info-row"><span class="info-label">Updated Time:</span><span class="info-value">' || TO_CHAR(NOW(), 'Day, Month DD, YYYY at HH24:MI:SS') || '</span></div>'
+            <div class="info-row"><span class="info-label">Updated Time:</span><span class="info-value">' || NOW()::text || '</span></div>'
             || CASE WHEN v_notes != '' THEN 
                 '<div class="notes-section"><strong>💬 AR Notes:</strong><p style="margin-top: 10px;">' || v_notes || '</p></div>'
             ELSE '' END ||
