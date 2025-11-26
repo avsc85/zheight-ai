@@ -206,6 +206,51 @@ export type Database = {
         }
         Relationships: []
       }
+      email_notifications: {
+        Row: {
+          attempts: number | null
+          body_html: string
+          body_text: string | null
+          created_at: string
+          email_type: string
+          error_message: string | null
+          id: string
+          metadata: Json | null
+          recipient_email: string
+          sent_at: string | null
+          status: string | null
+          subject: string
+        }
+        Insert: {
+          attempts?: number | null
+          body_html: string
+          body_text?: string | null
+          created_at?: string
+          email_type: string
+          error_message?: string | null
+          id?: string
+          metadata?: Json | null
+          recipient_email: string
+          sent_at?: string | null
+          status?: string | null
+          subject: string
+        }
+        Update: {
+          attempts?: number | null
+          body_html?: string
+          body_text?: string | null
+          created_at?: string
+          email_type?: string
+          error_message?: string | null
+          id?: string
+          metadata?: Json | null
+          recipient_email?: string
+          sent_at?: string | null
+          status?: string | null
+          subject?: string
+        }
+        Relationships: []
+      }
       feasibility_analyses: {
         Row: {
           city_dept_link: string | null
@@ -391,6 +436,18 @@ export type Database = {
           },
         ]
       }
+      pending_count: {
+        Row: {
+          count: number | null
+        }
+        Insert: {
+          count?: number | null
+        }
+        Update: {
+          count?: number | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           active_status: boolean | null
@@ -506,6 +563,7 @@ export type Database = {
           ar_field_id: string | null
           ar_planning_id: string | null
           created_at: string
+          deleted_at: string | null
           difficulty_level: string | null
           end_date: string | null
           expected_end_date: string | null
@@ -526,6 +584,7 @@ export type Database = {
           ar_field_id?: string | null
           ar_planning_id?: string | null
           created_at?: string
+          deleted_at?: string | null
           difficulty_level?: string | null
           end_date?: string | null
           expected_end_date?: string | null
@@ -546,6 +605,7 @@ export type Database = {
           ar_field_id?: string | null
           ar_planning_id?: string | null
           created_at?: string
+          deleted_at?: string | null
           difficulty_level?: string | null
           end_date?: string | null
           expected_end_date?: string | null
@@ -654,6 +714,15 @@ export type Database = {
           user_id: string
         }[]
       }
+      email_scheduler_with_delay: {
+        Args: never
+        Returns: {
+          batch_number: number
+          pending: number
+          processed: number
+          run_time: string
+        }[]
+      }
       find_user_by_email_pattern: {
         Args: { email_pattern: string }
         Returns: {
@@ -670,6 +739,12 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      process_emails_safely: { Args: never; Returns: Json }
+      process_pending_emails_batch: { Args: never; Returns: Json }
+      restore_deleted_project: {
+        Args: { project_id_param: string }
+        Returns: undefined
       }
     }
     Enums: {
