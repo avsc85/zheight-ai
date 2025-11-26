@@ -99,7 +99,7 @@ Deno.serve(async (req) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            from: 'zHeight AI <onboarding@resend.dev>',
+            from: 'zHeight Notifications <notifications@contact.zheight.com>',
             to: [recipientEmail],
             subject: email.subject,
             html: email.body_html,

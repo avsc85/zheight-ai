@@ -64,11 +64,10 @@ BEGIN
         -- On INSERT: Send if both AR and due date are set
         v_should_send := (NEW.assigned_ar_id IS NOT NULL AND NEW.due_date IS NOT NULL);
     ELSIF TG_OP = 'UPDATE' THEN
-        -- On UPDATE: Send only if AR or due date changed AND both are now set
+        -- On UPDATE: Send ONLY if AR changed (not just due date)
         v_should_send := (
-            (NEW.assigned_ar_id IS NOT NULL AND NEW.due_date IS NOT NULL) AND
-            (OLD.assigned_ar_id IS DISTINCT FROM NEW.assigned_ar_id OR 
-             OLD.due_date IS DISTINCT FROM NEW.due_date)
+            NEW.assigned_ar_id IS NOT NULL AND 
+            OLD.assigned_ar_id IS DISTINCT FROM NEW.assigned_ar_id
         );
     END IF;
     

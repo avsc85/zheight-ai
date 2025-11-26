@@ -130,6 +130,23 @@ const ProjectTracking = () => {
     try {
       setLoading(true);
       
+      // FIRST: Fetch all projects (including those without tasks)
+      let projectsQuery = supabase
+        .from('projects')
+        .select('id, project_name, project_manager_name, user_id, ar_planning_id, ar_field_id')
+        .eq('status', 'active')
+        .is('deleted_at', null);
+
+      // Apply role-based filtering for projects
+      if (isPM && !isAdmin) {
+        projectsQuery = projectsQuery.eq('user_id', user?.id);
+      } else if (isAR2 && !isAdmin) {
+        projectsQuery = projectsQuery.eq('ar_field_id', user?.id);
+      }
+
+      const { data: allProjects, error: projectsError } = await projectsQuery;
+      if (projectsError) throw projectsError;
+
       // Fetch assigned tasks
       let assignedQuery = supabase
         .from('project_tasks')
@@ -200,8 +217,33 @@ const ProjectTracking = () => {
         ...nextUnassignedTasks.map(task => ({ ...task, task_type: 'next_unassigned' }))
       ];
 
+      // Add projects without any tasks (show as "No tasks yet")
+      const projectsWithTasks = new Set(allTasks.map(t => t.projects?.id || t.project_id));
+      const projectsWithoutTasks = (allProjects || [])
+        .filter(p => !projectsWithTasks.has(p.id))
+        .map(project => ({
+          task_id: `no-task-${project.id}`,
+          project_id: project.id,
+          projects: project,
+          task_name: 'No tasks created yet',
+          task_status: 'not_started',
+          assigned_skip_flag: 'N',
+          assigned_ar_id: null,
+          due_date: null,
+          priority_exception: null,
+          last_step_timestamp: null,
+          notes_tasks_ar: null,
+          notes_tasks_pm: null,
+          task_type: 'no_task'
+        }));
+
+      const allTasksIncludingEmpty = [
+        ...allTasks,
+        ...projectsWithoutTasks
+      ];
+
       // Get user names for assigned AR users
-      const assignedUserIds = [...new Set(allTasks.map(task => task.assigned_ar_id).filter(Boolean))];
+      const assignedUserIds = [...new Set(allTasksIncludingEmpty.map(task => task.assigned_ar_id).filter(Boolean))];
       let userNames: Record<string, string> = {};
       
       if (assignedUserIds.length > 0) {
@@ -216,7 +258,7 @@ const ProjectTracking = () => {
         }, {} as Record<string, string>);
       }
 
-      const formattedTasks: ProjectTask[] = allTasks.map(task => ({
+      const formattedTasks: ProjectTask[] = allTasksIncludingEmpty.map(task => ({
         id: task.task_id,
         project: task.projects?.project_name || 'Unknown Project',
         projectId: task.projects?.id || task.project_id,
