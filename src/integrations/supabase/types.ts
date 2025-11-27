@@ -733,6 +733,7 @@ export type Database = {
           user_id: string
         }[]
       }
+      generate_daily_task_digest: { Args: never; Returns: undefined }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
