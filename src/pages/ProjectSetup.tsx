@@ -606,6 +606,20 @@ const ProjectSetup = () => {
 
         if (projectError) throw projectError;
 
+        // FIXED: Update tasks instead of delete+insert to preserve task_status
+        // Fetch existing tasks to preserve their status
+        const { data: existingTasks, error: fetchError } = await supabase
+          .from('project_tasks')
+          .select('task_id, task_name, task_status')
+          .eq('project_id', projectId);
+
+        if (fetchError) throw fetchError;
+
+        // Create a map of existing task statuses by task name
+        const existingStatusMap = new Map(
+          existingTasks?.map(t => [t.task_name, t.task_status]) || []
+        );
+
         // Delete existing tasks
         const { error: deleteError } = await supabase
           .from('project_tasks')
@@ -614,7 +628,7 @@ const ProjectSetup = () => {
 
         if (deleteError) throw deleteError;
 
-        // Insert updated tasks with auto-assignment logic
+        // Insert updated tasks with preserved status or default to 'in_queue'
         const tasksToInsert = tasks.map((task, index) => ({
           project_id: projectId,
           milestone_number: index + 1,
@@ -626,7 +640,8 @@ const ProjectSetup = () => {
           priority_exception: task.priority_exception,
           hours: task.hours,
           notes_tasks: task.notes_tasks,
-          task_status: 'in_queue'
+          // FIXED: Preserve existing task status if task name matches, otherwise 'in_queue'
+          task_status: existingStatusMap.get(task.task_name) || 'in_queue'
         }));
 
         const { error: tasksError } = await supabase

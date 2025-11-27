@@ -1,52 +1,9 @@
--- Migration: Add email notification logging table and trigger for task assignments
--- This migration creates a system to log email notifications that need to be sent
--- You can then use a separate service or scheduled function to process these
+-- Migration: Fix task assignment email trigger to prevent duplicate emails
+-- Date: 2025-11-27
+-- Issue: Old AR was receiving emails when new AR assigned
+-- Fix: More explicit AR change detection and safety checks
 
--- Create email notifications queue table
-CREATE TABLE IF NOT EXISTS public.email_notifications (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    recipient_email TEXT NOT NULL,
-    email_type TEXT NOT NULL,
-    subject TEXT NOT NULL,
-    body_html TEXT NOT NULL,
-    body_text TEXT,
-    metadata JSONB DEFAULT '{}'::jsonb,
-    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'failed')),
-    attempts INTEGER DEFAULT 0,
-    error_message TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    sent_at TIMESTAMP WITH TIME ZONE,
-    CONSTRAINT valid_email CHECK (recipient_email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$')
-);
-
--- Create index for efficient querying
-CREATE INDEX IF NOT EXISTS idx_email_notifications_status ON public.email_notifications(status, created_at);
-CREATE INDEX IF NOT EXISTS idx_email_notifications_created ON public.email_notifications(created_at DESC);
-
--- Enable RLS
-ALTER TABLE public.email_notifications ENABLE ROW LEVEL SECURITY;
-
--- Policy: Admins can view all notifications
-CREATE POLICY "Admins can view email notifications"
-    ON public.email_notifications
-    FOR SELECT
-    TO authenticated
-    USING (
-        EXISTS (
-            SELECT 1 FROM public.user_roles
-            WHERE user_roles.user_id = auth.uid()
-            AND user_roles.role = 'admin'
-        )
-    );
-
--- Policy: System can insert notifications
-CREATE POLICY "System can insert email notifications"
-    ON public.email_notifications
-    FOR INSERT
-    TO authenticated
-    WITH CHECK (true);
-
--- Function to create task assignment email notification
+-- Drop and recreate the function with improved logic
 CREATE OR REPLACE FUNCTION public.log_task_assignment_email()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -213,17 +170,4 @@ This is an automated notification from the zHeight AI project management system.
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Create trigger on project_tasks INSERT and UPDATE
--- IMPORTANT: UPDATE OF triggers ONLY when assigned_ar_id or due_date changes
-DROP TRIGGER IF EXISTS trigger_task_assignment_email ON public.project_tasks;
-CREATE TRIGGER trigger_task_assignment_email
-    AFTER INSERT OR UPDATE OF assigned_ar_id, due_date ON public.project_tasks
-    FOR EACH ROW
-    EXECUTE FUNCTION public.log_task_assignment_email();
-
--- Grant necessary permissions
-GRANT SELECT ON public.email_notifications TO authenticated;
-GRANT INSERT ON public.email_notifications TO authenticated;
-
-COMMENT ON TABLE public.email_notifications IS 'Queue for email notifications to be sent by external service';
-COMMENT ON FUNCTION public.log_task_assignment_email() IS 'Logs task assignment emails to notifications queue';
+COMMENT ON FUNCTION public.log_task_assignment_email() IS 'Logs task assignment emails - FIXED: Only sends to NEW AR when AR changes';
