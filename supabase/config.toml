@@ -5,6 +5,7 @@ verify_jwt = false
 
 [functions.agent2-plan-checker]
 verify_jwt = false
+import_map = "./import_map.json"
 
 [functions.ai-feasibility-analyzer]
 verify_jwt = false

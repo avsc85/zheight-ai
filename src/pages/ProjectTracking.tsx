@@ -438,6 +438,7 @@ const ProjectTracking = () => {
   const clearAllFilters = () => {
     setColumnFilters({
       project: '',
+      projectManagerName: '',
       taskActiveAssigned: '',
       arAssignedName: '',
       currentStatus: '',
