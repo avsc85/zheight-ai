@@ -606,49 +606,70 @@ const ProjectSetup = () => {
 
         if (projectError) throw projectError;
 
-        // FIXED: Update tasks instead of delete+insert to preserve task_status
-        // Fetch existing tasks to preserve their status
+        // FIXED: Only update tasks that changed, preserve task_id and task_status
+        // Fetch existing tasks with all details
         const { data: existingTasks, error: fetchError } = await supabase
           .from('project_tasks')
-          .select('task_id, task_name, task_status')
-          .eq('project_id', projectId);
+          .select('*')
+          .eq('project_id', projectId)
+          .order('milestone_number');
 
         if (fetchError) throw fetchError;
 
-        // Create a map of existing task statuses by task name
-        const existingStatusMap = new Map(
-          existingTasks?.map(t => [t.task_name, t.task_status]) || []
-        );
+        // Update each existing task individually to preserve task_id and task_status
+        for (let i = 0; i < tasks.length; i++) {
+          const task = tasks[i];
+          const existingTask = existingTasks?.[i];
 
-        // Delete existing tasks
-        const { error: deleteError } = await supabase
-          .from('project_tasks')
-          .delete()
-          .eq('project_id', projectId);
+          if (existingTask) {
+            // UPDATE existing task - only columns that may have changed
+            const { error: updateError } = await supabase
+              .from('project_tasks')
+              .update({
+                milestone_number: i + 1,
+                task_name: task.task_name,
+                assigned_ar_id: task.assigned_ar_id,
+                assigned_skip_flag: task.assigned_ar_id ? 'Y' : 'N',
+                due_date: task.due_date || null,
+                priority_exception: task.priority_exception,
+                hours: task.hours,
+                notes_tasks: task.notes_tasks,
+                // DO NOT update task_status - preserve existing status
+              })
+              .eq('task_id', existingTask.task_id);
 
-        if (deleteError) throw deleteError;
+            if (updateError) throw updateError;
+          } else {
+            // INSERT new task (if tasks array is longer than existing tasks)
+            const { error: insertError } = await supabase
+              .from('project_tasks')
+              .insert({
+                project_id: projectId,
+                milestone_number: i + 1,
+                task_name: task.task_name,
+                assigned_ar_id: task.assigned_ar_id,
+                assigned_skip_flag: task.assigned_ar_id ? 'Y' : 'N',
+                due_date: task.due_date || null,
+                priority_exception: task.priority_exception,
+                hours: task.hours,
+                notes_tasks: task.notes_tasks,
+                task_status: 'in_queue'
+              });
 
-        // Insert updated tasks with preserved status or default to 'in_queue'
-        const tasksToInsert = tasks.map((task, index) => ({
-          project_id: projectId,
-          milestone_number: index + 1,
-          task_name: task.task_name,
-          assigned_ar_id: task.assigned_ar_id,
-          // Auto-set assigned_skip_flag: 'Y' if AR assigned, 'N' if not assigned
-          assigned_skip_flag: task.assigned_ar_id ? 'Y' : 'N',
-          due_date: task.due_date || null,
-          priority_exception: task.priority_exception,
-          hours: task.hours,
-          notes_tasks: task.notes_tasks,
-          // FIXED: Preserve existing task status if task name matches, otherwise 'in_queue'
-          task_status: existingStatusMap.get(task.task_name) || 'in_queue'
-        }));
+            if (insertError) throw insertError;
+          }
+        }
 
-        const { error: tasksError } = await supabase
-          .from('project_tasks')
-          .insert(tasksToInsert);
+        // DELETE extra tasks if tasks array is shorter than existing tasks
+        if (existingTasks && existingTasks.length > tasks.length) {
+          const tasksToDelete = existingTasks.slice(tasks.length);
+          const { error: deleteError } = await supabase
+            .from('project_tasks')
+            .delete()
+            .in('task_id', tasksToDelete.map(t => t.task_id));
 
-        if (tasksError) throw tasksError;
+          if (deleteError) throw deleteError;
+        }
 
         // Email notifications are sent automatically via database trigger
         toast({
