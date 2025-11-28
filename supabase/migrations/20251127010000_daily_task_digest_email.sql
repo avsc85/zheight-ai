@@ -1,6 +1,6 @@
 -- Migration: Daily Task Digest Email for ARs and PMs
 -- Date: 2025-11-27
--- Feature: Send email at 12:30 PM IST (07:00 UTC) daily listing all pending tasks (in_queue, started)
+-- Feature: Send email at 9:00 AM IST (03:30 UTC) daily listing all pending tasks (in_queue, started)
 -- AR Email: Individual pending tasks sorted by deadline
 -- PM Email: Consolidated report of all projects and ARs under them
 -- Sorted by deadline, with same-day deadlines highlighted in RED BOLD
@@ -56,7 +56,6 @@ BEGIN
                 pt.due_date,
                 pt.task_status,
                 proj.project_name,
-                proj.project_address,
                 -- Check if deadline is today
                 CASE 
                     WHEN pt.due_date::date = v_today THEN true
@@ -225,7 +224,7 @@ BEGIN
             <p><strong>📌 Legend:</strong></p>
             <p>🔴 Red Background = Due TODAY | 🟡 Orange Text = Due Soon (1-3 days)</p>
             <p style="margin-top: 15px;">This is an automated daily digest from the zHeight AI project management system.</p>
-            <p>Sent at 12:30 PM IST | ' || TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS') || '</p>
+            <p>Sent at 9:00 AM IST | ' || TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS') || '</p>
             <p style="margin-top: 15px;">© ' || EXTRACT(YEAR FROM NOW()) || ' zHeight AI. All rights reserved.</p>
         </div>
     </div>
@@ -253,7 +252,7 @@ YOUR TASKS (Sorted by Deadline):
 
 ---
 This is an automated daily digest from zHeight AI.
-Sent at 12:30 PM IST | ' || TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS') || '
+Sent at 9:00 AM IST | ' || TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS') || '
 ';
             
             -- Insert into email notifications queue
@@ -325,7 +324,6 @@ Sent at 12:30 PM IST | ' || TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS') || '
             SELECT 
                 proj.id as project_id,
                 proj.project_name,
-                proj.project_address,
                 COUNT(DISTINCT pt.task_id) as total_tasks,
                 SUM(CASE WHEN pt.due_date::date = v_today THEN 1 ELSE 0 END) as urgent_tasks
             FROM public.projects proj
@@ -333,7 +331,7 @@ Sent at 12:30 PM IST | ' || TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS') || '
                 AND pt.task_status IN ('in_queue', 'started')
                 AND pt.due_date IS NOT NULL
             WHERE proj.project_manager_name = v_pm.pm_name
-            GROUP BY proj.id, proj.project_name, proj.project_address
+            GROUP BY proj.id, proj.project_name
             ORDER BY proj.project_name ASC
         LOOP
             v_pm_total_tasks := v_pm_total_tasks + COALESCE(v_project.total_tasks, 0);
@@ -343,9 +341,8 @@ Sent at 12:30 PM IST | ' || TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS') || '
             v_task_rows_html := v_task_rows_html || '
                 <tr style="background-color: #e3f2fd; font-weight: bold;">
                     <td colspan="5" style="padding: 15px; border-bottom: 2px solid #1976d2;">
-                        📁 ' || v_project.project_name || 
-                        CASE WHEN v_project.project_address IS NOT NULL THEN ' - ' || v_project.project_address ELSE '' END ||
-                    '</td>
+                        📁 ' || v_project.project_name || '
+                    </td>
                 </tr>';
             
             -- Get tasks for this project grouped by AR
@@ -523,7 +520,7 @@ Sent at 12:30 PM IST | ' || TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS') || '
             <p><strong>📌 Legend:</strong></p>
             <p>🔴 Red Background = Due TODAY | 🟡 Orange Text = Due Soon (1-3 days) | 📁 Blue Row = Project Name</p>
             <p style="margin-top: 15px;">This is an automated daily digest from the zHeight AI project management system.</p>
-            <p>Sent at 12:30 PM IST | ' || TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS') || '</p>
+            <p>Sent at 9:00 AM IST | ' || TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS') || '</p>
             <p style="margin-top: 15px;">© ' || EXTRACT(YEAR FROM NOW()) || ' zHeight AI. All rights reserved.</p>
         </div>
     </div>
@@ -549,7 +546,7 @@ YOUR PROJECTS & TASKS:
 
 ---
 This is an automated daily digest from zHeight AI.
-Sent at 12:30 PM IST | ' || TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS') || '
+Sent at 9:00 AM IST | ' || TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS') || '
 ';
             
             -- Insert PM digest into email queue
@@ -588,14 +585,14 @@ Sent at 12:30 PM IST | ' || TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS') || '
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-COMMENT ON FUNCTION public.generate_daily_task_digest() IS 'Generates daily task digest emails for ARs and PMs at 12:30 PM IST (07:00 UTC) - ARs get individual tasks, PMs get consolidated project report - highlights same-day deadlines in RED BOLD';
+COMMENT ON FUNCTION public.generate_daily_task_digest() IS 'Generates daily task digest emails for ARs and PMs at 9:00 AM IST (03:30 UTC) - ARs get individual tasks, PMs get consolidated project report - highlights same-day deadlines in RED BOLD';
 
 -- Remove any existing daily digest cron job
 SELECT cron.unschedule('daily_task_digest');
 
--- Schedule the daily digest to run at 12:30 PM IST (07:00 UTC) every day
+-- Schedule the daily digest to run at 9:00 AM IST (03:30 UTC) every day
 SELECT cron.schedule(
     'daily_task_digest',
-    '0 7 * * *',  -- 07:00 UTC = 12:30 PM IST
+    '30 3 * * *',  -- 03:30 UTC = 9:00 AM IST
     $$SELECT public.generate_daily_task_digest()$$
 );
