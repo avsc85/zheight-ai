@@ -1,6 +1,6 @@
 -- Migration: Daily Task Digest Email for ARs and PMs
 -- Date: 2025-11-27
--- Feature: Send email at 9:30 AM daily listing all pending tasks (in_queue, started)
+-- Feature: Send email at 12:30 PM IST (07:00 UTC) daily listing all pending tasks (in_queue, started)
 -- AR Email: Individual pending tasks sorted by deadline
 -- PM Email: Consolidated report of all projects and ARs under them
 -- Sorted by deadline, with same-day deadlines highlighted in RED BOLD
@@ -225,7 +225,7 @@ BEGIN
             <p><strong>📌 Legend:</strong></p>
             <p>🔴 Red Background = Due TODAY | 🟡 Orange Text = Due Soon (1-3 days)</p>
             <p style="margin-top: 15px;">This is an automated daily digest from the zHeight AI project management system.</p>
-            <p>Sent at 9:30 AM | ' || TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS') || '</p>
+            <p>Sent at 12:30 PM IST | ' || TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS') || '</p>
             <p style="margin-top: 15px;">© ' || EXTRACT(YEAR FROM NOW()) || ' zHeight AI. All rights reserved.</p>
         </div>
     </div>
@@ -253,7 +253,7 @@ YOUR TASKS (Sorted by Deadline):
 
 ---
 This is an automated daily digest from zHeight AI.
-Sent at 9:30 AM | ' || TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS') || '
+Sent at 12:30 PM IST | ' || TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS') || '
 ';
             
             -- Insert into email notifications queue
@@ -309,10 +309,10 @@ Sent at 9:30 AM | ' || TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS') || '
         v_pm_total_tasks := 0;
         v_pm_urgent_tasks := 0;
         
-        -- Count projects assigned to this PM
+        -- Count projects assigned to this PM using project_manager_name
         SELECT COUNT(DISTINCT id) INTO v_pm_projects_count
         FROM public.projects
-        WHERE project_manager_id = v_pm.user_id;
+        WHERE project_manager_name = v_pm.pm_name;
         
         -- Skip if PM has no projects
         IF v_pm_projects_count = 0 THEN
@@ -332,7 +332,7 @@ Sent at 9:30 AM | ' || TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS') || '
             LEFT JOIN public.project_tasks pt ON pt.project_id = proj.id
                 AND pt.task_status IN ('in_queue', 'started')
                 AND pt.due_date IS NOT NULL
-            WHERE proj.project_manager_id = v_pm.user_id
+            WHERE proj.project_manager_name = v_pm.pm_name
             GROUP BY proj.id, proj.project_name, proj.project_address
             ORDER BY proj.project_name ASC
         LOOP
@@ -523,7 +523,7 @@ Sent at 9:30 AM | ' || TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS') || '
             <p><strong>📌 Legend:</strong></p>
             <p>🔴 Red Background = Due TODAY | 🟡 Orange Text = Due Soon (1-3 days) | 📁 Blue Row = Project Name</p>
             <p style="margin-top: 15px;">This is an automated daily digest from the zHeight AI project management system.</p>
-            <p>Sent at 9:30 AM | ' || TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS') || '</p>
+            <p>Sent at 12:30 PM IST | ' || TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS') || '</p>
             <p style="margin-top: 15px;">© ' || EXTRACT(YEAR FROM NOW()) || ' zHeight AI. All rights reserved.</p>
         </div>
     </div>
@@ -549,7 +549,7 @@ YOUR PROJECTS & TASKS:
 
 ---
 This is an automated daily digest from zHeight AI.
-Sent at 9:30 AM | ' || TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS') || '
+Sent at 12:30 PM IST | ' || TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS') || '
 ';
             
             -- Insert PM digest into email queue
@@ -588,4 +588,14 @@ Sent at 9:30 AM | ' || TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI:SS') || '
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-COMMENT ON FUNCTION public.generate_daily_task_digest() IS 'Generates daily task digest emails for ARs and PMs at 9:30 AM - ARs get individual tasks, PMs get consolidated project report - highlights same-day deadlines in RED BOLD';
+COMMENT ON FUNCTION public.generate_daily_task_digest() IS 'Generates daily task digest emails for ARs and PMs at 12:30 PM IST (07:00 UTC) - ARs get individual tasks, PMs get consolidated project report - highlights same-day deadlines in RED BOLD';
+
+-- Remove any existing daily digest cron job
+SELECT cron.unschedule('daily_task_digest');
+
+-- Schedule the daily digest to run at 12:30 PM IST (07:00 UTC) every day
+SELECT cron.schedule(
+    'daily_task_digest',
+    '0 7 * * *',  -- 07:00 UTC = 12:30 PM IST
+    $$SELECT public.generate_daily_task_digest()$$
+);
