@@ -140,10 +140,10 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error in csv-upload-ordinances function:', error);
     return new Response(JSON.stringify({ 
-      error: error.message || 'An unexpected error occurred',
+      error: error instanceof Error ? error.message : 'An unexpected error occurred',
       successCount: 0,
       errorCount: 0 
     }), {

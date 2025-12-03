@@ -24,39 +24,22 @@ Deno.serve(async (req) => {
 
     console.log('🌅 Starting daily task digest generation at', new Date().toISOString())
 
-    // Call the generate_ar_daily_digest function (runs at 9:00 AM IST via cron)
-    const { data: arData, error: arError } = await supabaseAdmin.rpc('generate_ar_daily_digest')
+    // Call the generate_daily_task_digest function
+    const { data, error } = await supabaseAdmin.rpc('generate_daily_task_digest')
 
-    if (arError) {
-      console.error('❌ Error generating AR daily digest:', arError)
+    if (error) {
+      console.error('❌ Error generating daily digest:', error)
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: 'Failed to generate AR daily digest',
-          details: arError.message 
+          error: 'Failed to generate daily digest',
+          details: error.message 
         }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    console.log('✅ AR daily digest generated successfully')
-
-    // Call the generate_pm_daily_digest function (runs at 9:30 AM IST via separate cron)
-    const { data: pmData, error: pmError } = await supabaseAdmin.rpc('generate_pm_daily_digest')
-
-    if (pmError) {
-      console.error('❌ Error generating PM daily digest:', pmError)
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Failed to generate PM daily digest',
-          details: pmError.message 
-        }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    console.log('✅ PM daily digest generated successfully')
+    console.log('✅ Daily task digest generated successfully')
 
     // Get count of emails queued
     const { count: emailCount, error: countError } = await supabaseAdmin
@@ -73,9 +56,8 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'Daily digest generation completed (AR at 9:00 AM IST, PM at 9:30 AM IST)',
-        ar_digest: 'queued at 9:00 AM IST',
-        pm_digest: 'queued at 9:30 AM IST',
+        message: 'Daily task digest generated successfully',
+        emails_queued: queuedCount,
         generated_at: new Date().toISOString()
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

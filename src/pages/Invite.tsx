@@ -173,7 +173,7 @@ const Invite = () => {
       // so we need to update it to the intended role
       const { error: roleError } = await supabase
         .from('user_roles')
-        .update({ role: invitation.role })
+        .update({ role: invitation.role as "admin" | "pm" | "ar1_planning" | "ar2_field" | "user" })
         .eq('user_id', authData.user.id)
         .eq('role', 'user'); // Only update if currently 'user'
 

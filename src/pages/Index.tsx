@@ -3,7 +3,7 @@ import { Header } from "@/components/Header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { Bot, FileCheck, Folder, Calculator } from "lucide-react";
+import { Bot, FileCheck, Folder, Calculator, Zap } from "lucide-react";
 
 const Index = () => {
   const { user } = useAuth();
@@ -128,6 +128,27 @@ const Index = () => {
                   Access the Feasibility Checker
                 </Button>
               </Link>
+            </CardContent>
+          </Card>
+
+          {/* AI Agent 4 - Title 24 Coming Soon */}
+          <Card className="hover:shadow-lg transition-shadow border-primary/20 flex flex-col h-full opacity-75">
+            <CardHeader>
+              <CardTitle className="text-primary flex items-center gap-2">
+                <Zap className="h-5 w-5" />
+                AI Agent 4: Title 24
+              </CardTitle>
+              <CardDescription>
+                California Title 24 energy compliance analysis
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex-1 flex flex-col">
+              <p className="text-sm text-muted-foreground mb-4 flex-1">
+                Analyze architectural designs for California Title 24 energy efficiency compliance and requirements.
+              </p>
+              <Button className="w-full" disabled>
+                Coming Soon
+              </Button>
             </CardContent>
           </Card>
         </div>

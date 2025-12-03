@@ -155,12 +155,12 @@ Deno.serve(async (req) => {
       }
     )
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Unexpected error:', error)
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: `Unexpected error: ${error.message}` 
+        error: `Unexpected error: ${error instanceof Error ? error.message : 'Unknown error'}` 
       }),
       { 
         status: 500, 
