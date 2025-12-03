@@ -207,16 +207,19 @@ BEGIN
     v_today := CURRENT_DATE;
 
     -- PART 2: Generate PM Daily Digests (Consolidated)
+    -- Only for ACTIVE PMs (active_status = true)
     FOR v_pm IN
         SELECT DISTINCT
             p.user_id,
             p.name as pm_name,
-            u.email as pm_email
+            u.email as pm_email,
+            p.active_status
         FROM public.profiles p
         JOIN auth.users u ON u.id = p.user_id
         JOIN public.user_roles ur ON ur.user_id = p.user_id
         WHERE ur.role IN ('pm', 'admin')
         AND u.email IS NOT NULL
+        AND p.active_status = true  -- Only active PMs
     LOOP
         -- Reset variables for each PM
         v_task_rows_html := '';
@@ -393,17 +396,29 @@ This is an automated daily digest from zHeight AI.';
             )
         );
 
-        RAISE NOTICE 'PM daily digest email queued: % (%s projects, %s tasks, %s urgent)',
+        RAISE NOTICE 'PM daily digest email queued: % (ACTIVE, %s projects, %s tasks, %s urgent)',
             v_pm.pm_name, v_pm_projects_count, v_pm_total_tasks, v_pm_urgent_tasks;
     END LOOP;
 
-    RAISE NOTICE 'PM daily digest generation completed at %', NOW();
+    -- Log skipped inactive PMs
+    FOR v_pm IN
+        SELECT DISTINCT
+            p.name as pm_name
+        FROM public.profiles p
+        JOIN public.user_roles ur ON ur.user_id = p.user_id
+        WHERE ur.role IN ('pm', 'admin')
+        AND p.active_status = false  -- Inactive PMs
+    LOOP
+        RAISE NOTICE 'PM % is INACTIVE - digest NOT sent', v_pm.pm_name;
+    END LOOP;
+
+    RAISE NOTICE 'PM daily digest generation completed at % - only active PMs received digest', NOW();
 END;
 $$;
 
 COMMENT ON FUNCTION public.generate_ar_daily_digest() IS 'Generates daily task digest emails for AR1/AR2 users at 9:00 AM IST (03:30 UTC) - individual task lists with urgent RED highlighting';
 
-COMMENT ON FUNCTION public.generate_pm_daily_digest() IS 'Generates consolidated project report for PMs at 9:30 AM IST (04:00 UTC) - shows all project tasks grouped by project and AR';
+COMMENT ON FUNCTION public.generate_pm_daily_digest() IS 'Generates consolidated project report for ACTIVE PMs ONLY at 9:30 AM IST (04:00 UTC) - shows all project tasks grouped by project and AR - skips inactive PMs';
 
 -- Remove any existing daily digest cron jobs
 SELECT cron.unschedule('daily_task_digest');
