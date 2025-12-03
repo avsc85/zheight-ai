@@ -11,6 +11,18 @@ interface InviteUserRequest {
   role: string;
 }
 
+// Helper function to get role display name
+function getRoleDisplayName(role: string): string {
+  switch (role) {
+    case 'admin': return '👑 Admin';
+    case 'pm': return '🏢 Project Manager';
+    case 'ar1_planning': return '📋 AR1 - Planning';
+    case 'ar2_field': return '🔧 AR2 - Field';
+    case 'user': return '👤 User';
+    default: return role;
+  }
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -88,45 +100,42 @@ Deno.serve(async (req) => {
     // Clean up any expired invitations
     await supabase.rpc('cleanup_expired_invitations')
 
-    // Check if user already exists
+    // Check if user already exists in auth (but allow if they had a pending/expired invitation)
     const { data: existingUser, error: existingUserError } = await supabaseAdmin.auth.admin.listUsers()
     if (!existingUserError && existingUser.users.some(u => u.email === email)) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'User with this email already exists' }),
-        { 
-          status: 400, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      )
+      // Check if there's a pending invitation - if yes, allow re-invite (user may have been deleted)
+      const { data: anyInvitation } = await supabase
+        .from('user_invitations')
+        .select('*')
+        .eq('email', email)
+        .in('status', ['pending', 'expired', 'accepted'])
+        .limit(1)
+      
+      if (!anyInvitation || anyInvitation.length === 0) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'User with this email already exists' }),
+          { 
+            status: 400, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        )
+      }
     }
 
-    // Check for existing pending invitation
-    const { data: existingInvitation, error: inviteCheckError } = await supabase
+    // Check for existing pending invitation - if exists, mark as expired and allow new one
+    const { data: existingInvitation } = await supabase
       .from('user_invitations')
       .select('*')
       .eq('email', email)
       .eq('status', 'pending')
       .single()
 
-    if (inviteCheckError && inviteCheckError.code !== 'PGRST116') {
-      console.error('Error checking existing invitations:', inviteCheckError)
-      return new Response(
-        JSON.stringify({ success: false, error: 'Failed to check existing invitations' }),
-        { 
-          status: 500, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      )
-    }
-
     if (existingInvitation) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'A pending invitation already exists for this email' }),
-        { 
-          status: 400, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      )
+      // Mark old invitation as expired
+      await supabase
+        .from('user_invitations')
+        .update({ status: 'expired' })
+        .eq('id', existingInvitation.id)
     }
 
     // Create invitation record
@@ -152,22 +161,83 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Send invitation using Supabase's built-in invitation system
-    const redirectUrl = `${Deno.env.get('SUPABASE_URL')?.replace('supabase.co', 'lovableproject.com') || 'http://localhost:3000'}/invite?email=${encodeURIComponent(email)}`
+    // Send custom invitation email via email notification system
+    const appUrl = 'https://zheight.tech'
+    const inviteLink = `${appUrl}/invite?email=${encodeURIComponent(email)}&invitation_id=${encodeURIComponent(invitation.id)}`
     
-    const { data: authInvite, error: authInviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-      redirectTo: redirectUrl,
-      data: {
-        full_name: name,
-        role: role,
-        invitation_id: invitation.id
-      }
-    })
-
-    if (authInviteError) {
-      console.error('Error sending auth invitation:', authInviteError)
+    const emailSubject = `You've been invited to join zHeight Internal AI`
+    
+    const emailHtml = `
+<html>
+<body style="font-family: Arial, sans-serif; background-color: #f5f5f5;">
+  <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+      <h1 style="margin: 0;">Welcome to zHeight Internal AI</h1>
+      <p style="margin: 10px 0 0 0;">You've been invited to join</p>
+    </div>
+    
+    <div style="background-color: white; padding: 30px; border-radius: 0 0 8px 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+      <p>Hi <strong>${name}</strong>,</p>
       
-      // Clean up the invitation record if auth invite failed
+      <p>You have been invited to join the zHeight Internal AI project management system as:</p>
+      
+      <div style="background-color: #f0f0f0; padding: 12px 15px; border-radius: 5px; margin: 15px 0; font-weight: bold; color: #667eea; text-align: center;">
+        ${getRoleDisplayName(role)}
+      </div>
+      
+      <p style="text-align: center; margin: 20px 0;">
+        <a href="${inviteLink}" style="background-color: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+          Accept Invitation & Create Account
+        </a>
+      </p>
+      
+      <p style="color: #777; font-size: 14px; margin-top: 20px;">Link: <span style="background-color: #f0f0f0; padding: 5px; border-radius: 3px; word-break: break-all;">${inviteLink}</span></p>
+      
+      <p style="color: #999; font-size: 13px; margin-top: 20px;"><strong>Note:</strong> This invitation expires in 7 days.</p>
+    </div>
+  </div>
+</body>
+</html>
+    `
+    
+    const emailText = `Welcome to zHeight Internal AI
+
+Hi ${name},
+
+You have been invited to join the zHeight Internal AI project management system as:
+${getRoleDisplayName(role)}
+
+Accept your invitation here:
+${inviteLink}
+
+This invitation expires in 7 days.
+
+If you have any questions, please contact your administrator.
+---
+© 2025 zHeight AI. All rights reserved.`.trim()
+    
+    // Insert custom invitation email into queue
+    const { error: emailError } = await supabase
+      .from('email_notifications')
+      .insert({
+        recipient_email: email,
+        email_type: 'user_invitation',
+        subject: emailSubject,
+        body_html: emailHtml,
+        body_text: emailText,
+        metadata: {
+          invitation_id: invitation.id,
+          invitee_name: name,
+          invitee_role: role,
+          invited_by: user.id,
+          expires_at: invitation.expires_at
+        }
+      })
+    
+    if (emailError) {
+      console.error('Error queuing invitation email:', emailError)
+      
+      // Clean up the invitation record if email queuing failed
       await supabase
         .from('user_invitations')
         .delete()
@@ -176,7 +246,7 @@ Deno.serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: `Failed to send invitation: ${authInviteError.message}` 
+          error: `Failed to queue invitation email: ${emailError.message}` 
         }),
         { 
           status: 500, 

@@ -35,6 +35,7 @@ const Invite = () => {
   const [loadingInvitation, setLoadingInvitation] = useState(true);
 
   const email = searchParams.get('email');
+  const invitationId = searchParams.get('invitation_id');
 
   // Redirect if already logged in
   useEffect(() => {
@@ -46,8 +47,8 @@ const Invite = () => {
   // Load invitation data
   useEffect(() => {
     const loadInvitation = async () => {
-      if (!email) {
-        setError("Invalid invitation link - no email provided");
+      if (!email && !invitationId) {
+        setError("Invalid invitation link - no email or invitation ID provided");
         setLoadingInvitation(false);
         return;
       }
@@ -56,16 +57,23 @@ const Invite = () => {
         // Clean up expired invitations first
         await supabase.rpc('cleanup_expired_invitations');
 
-        const { data, error: inviteError } = await supabase
+        // Query by email OR invitation_id, whichever is available
+        let query = supabase
           .from('user_invitations')
           .select('*')
-          .eq('email', email)
-          .eq('status', 'pending')
-          .single();
+          .eq('status', 'pending');
+
+        if (invitationId) {
+          query = query.eq('id', invitationId);
+        } else if (email) {
+          query = query.eq('email', email);
+        }
+
+        const { data, error: inviteError } = await query.single();
 
         if (inviteError) {
           if (inviteError.code === 'PGRST116') {
-            setError("No valid invitation found for this email address");
+            setError("No valid invitation found for this link");
           } else {
             setError("Failed to load invitation details");
           }
@@ -91,7 +99,7 @@ const Invite = () => {
     };
 
     loadInvitation();
-  }, [email]);
+  }, [email, invitationId]);
 
   const getRoleIcon = (role: string) => {
     switch (role) {
@@ -158,6 +166,20 @@ const Invite = () => {
 
       if (!authData.user) {
         throw new Error("Failed to create user account");
+      }
+
+      // Update user role from 'user' to the invited role
+      // The handle_new_user_role trigger creates role='user' by default,
+      // so we need to update it to the intended role
+      const { error: roleError } = await supabase
+        .from('user_roles')
+        .update({ role: invitation.role })
+        .eq('user_id', authData.user.id)
+        .eq('role', 'user'); // Only update if currently 'user'
+
+      if (roleError && roleError.code !== 'PGRST116') {
+        console.error('Error updating user role:', roleError);
+        // Don't fail signup for this - user can still sign in
       }
 
       // Mark invitation as accepted

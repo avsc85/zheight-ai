@@ -110,20 +110,24 @@ Deno.serve(async (req) => {
 
     const authUsers = authData.users || []
 
-    // Combine the data
-    const usersWithAuth: UserWithAuth[] = profilesData.map(profile => {
-      const userRole = rolesData.find(role => role.user_id === profile.user_id)
-      const authUser = authUsers.find((u: any) => u.id === profile.user_id)
+    // Create map of profiles for quick lookup
+    const profileMap = new Map(profilesData.map(p => [p.user_id, p]))
+    const roleMap = new Map(rolesData.map(r => [r.user_id, r]))
+
+    // Combine auth users with profiles (handles users without profiles)
+    const usersWithAuth: UserWithAuth[] = authUsers.map((authUser: any) => {
+      const profile = profileMap.get(authUser.id)
+      const userRole = roleMap.get(authUser.id)
       
       return {
-        id: profile.user_id,
-        email: authUser?.email || 'Unknown',
-        full_name: profile.name,
-        company: profile.company,
+        id: authUser.id,
+        email: authUser.email || 'Unknown',
+        full_name: profile?.name || null,
+        company: profile?.company || null,
         role: userRole?.role || 'user',
-        created_at: profile.created_at,
-        last_sign_in_at: authUser?.last_sign_in_at || null,
-        active_status: profile.active_status
+        created_at: profile?.created_at || authUser.created_at,
+        last_sign_in_at: authUser.last_sign_in_at || null,
+        active_status: profile?.active_status || null
       }
     })
 

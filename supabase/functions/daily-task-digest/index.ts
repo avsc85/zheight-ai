@@ -42,22 +42,22 @@ Deno.serve(async (req) => {
     console.log('✅ Daily task digest generated successfully')
 
     // Get count of emails queued
-    const { data: queuedEmails, error: countError } = await supabaseAdmin
+    const { count: emailCount, error: countError } = await supabaseAdmin
       .from('email_notifications')
-      .select('id', { count: 'exact', head: true })
+      .select('*', { count: 'exact', head: true })
       .eq('email_type', 'daily_task_digest')
       .eq('status', 'pending')
       .gte('created_at', new Date(new Date().setHours(0, 0, 0, 0)).toISOString())
 
-    const emailCount = queuedEmails?.length || 0
+    const queuedCount = emailCount || 0
 
-    console.log(`📧 ${emailCount} daily digest email(s) queued for delivery`)
+    console.log(`📧 ${queuedCount} daily digest email(s) queued for delivery`)
 
     return new Response(
       JSON.stringify({
         success: true,
         message: 'Daily task digest generated successfully',
-        emails_queued: emailCount,
+        emails_queued: queuedCount,
         generated_at: new Date().toISOString()
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
