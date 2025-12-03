@@ -58,8 +58,8 @@ async function createSummarizedOutput(
       console.log(`Found ${existingItems.length} existing items for city: ${extractedCity}`);
       
       // Filter out duplicates (items with same issue_to_check)
-      const existingIssues = new Set(summarizedItems.map(item => item.issue_to_check?.toLowerCase().trim()));
-      const uniqueExistingItems = existingItems.filter(item => 
+      const existingIssues = new Set(summarizedItems.map((item: any) => item.issue_to_check?.toLowerCase().trim()));
+      const uniqueExistingItems = existingItems.filter((item: any) => 
         !existingIssues.has(item.issue_to_check?.toLowerCase().trim())
       );
       
@@ -643,11 +643,11 @@ serve(async (req) => {
       }
     );
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error in agent1-extract-checklist function:', error);
     return new Response(
       JSON.stringify({
-        error: error.message,
+        error: error instanceof Error ? error.message : 'Unknown error',
         success: false
       }),
       {

@@ -141,12 +141,12 @@ Deno.serve(async (req) => {
       }
     )
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Error in get-users-with-auth function:', error)
     return new Response(
       JSON.stringify({ 
         error: 'Failed to fetch users',
-        details: error.message 
+        details: error instanceof Error ? error.message : 'Unknown error' 
       }),
       { 
         status: 500, 
