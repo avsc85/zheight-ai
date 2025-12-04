@@ -109,7 +109,7 @@ BEGIN
             
             <p style="margin-top: 20px;">Please review the project details and coordinate with your team to ensure successful completion.</p>
             
-            <a href="' || COALESCE(current_setting('app.base_url', true), 'https://app.zheight.tech') || '/project-mgmt/setup/' || NEW.id || '" class="button">
+            <a href="' || COALESCE(current_setting('app.base_url', true), 'https://zheight.tech') || '/project-mgmt/setup/' || NEW.id || '" class="button">
                 View Project Details →
             </a>
         </div>

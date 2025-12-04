@@ -444,17 +444,19 @@ const ProjectSetup = () => {
       console.log('Project data fetched:', project);
 
       // Check if user has permission to edit this specific project
-      // PMs can edit ALL projects (updated RLS policy), AR2 can edit assigned projects, Admins can edit all
-      const canEdit = isAdmin || isPM || (isAR2 && project.ar_field_id === user?.id);
+      // PMs can edit ONLY their own projects (where user_id matches their id)
+      // AR2 can edit assigned projects, Admins can edit all
+      const canEdit = isAdmin || (isPM && project.user_id === user?.id) || (isAR2 && project.ar_field_id === user?.id);
       
       console.log('Permission check:', { 
         canEdit, 
         isAdmin, 
         isPM, 
         isAR2, 
-        projectArFieldId: project.ar_field_id, 
+        projectArFieldId: project.ar_field_id,
+        projectUserId: project.user_id,
         userId: user?.id,
-        note: 'PMs now have access to ALL projects per updated RLS policy'
+        note: 'PMs can only edit projects where they are the PM (user_id match)'
       });
 
       if (!canEdit) {

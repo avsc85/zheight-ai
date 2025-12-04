@@ -431,22 +431,30 @@ const ProjectBoard = () => {
       setLoading(true);
       console.log('Fetching tasks for user:', user?.id, 'Role:', userRole?.role);
       
-      // For PMs and Admins, fetch all tasks. For ARs, fetch only their assigned tasks
+      // For PMs and Admins, fetch ALL tasks for their assigned projects
+      // For ARs, fetch only their assigned tasks
       let query = supabase
         .from('project_tasks')
         .select(`
           *,
           projects (
             project_name,
-            user_id
+            user_id,
+            project_manager_name
           )
         `)
-        .not('assigned_ar_id', 'is', null)
         .neq('assigned_skip_flag', 'Skip');
 
-      // If user is not PM or Admin, filter by their assigned tasks only
-      if (userRole?.role !== 'pm' && userRole?.role !== 'admin') {
-        query = query.eq('assigned_ar_id', user?.id);
+      // Apply role-based filtering
+      if (userRole?.role === 'pm') {
+        // PM can only see tasks for projects they own (user_id match)
+        query = query.eq('projects.user_id', user?.id);
+      } else if (userRole?.role === 'admin') {
+        // Admin can see ALL tasks (no filter)
+      } else {
+        // AR can only see assigned tasks
+        query = query.not('assigned_ar_id', 'is', null)
+          .eq('assigned_ar_id', user?.id);
       }
 
       const { data: tasks, error } = await query;
