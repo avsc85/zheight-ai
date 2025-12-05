@@ -87,10 +87,10 @@ const ProjectTracking = () => {
   });
   const { toast } = useToast();
   const { user } = useAuth();
-  const { role, isPM, isAR2, isAdmin } = useUserRole();
+  const { role, isPM, isAR1, isAR2, isAdmin } = useUserRole();
   
   useEffect(() => {
-    if (user && (isPM || isAR2 || isAdmin)) {
+    if (user && (isPM || isAR1 || isAR2 || isAdmin)) {
       fetchProjects();
       
       // Set up real-time subscription
@@ -124,7 +124,7 @@ const ProjectTracking = () => {
         supabase.removeChannel(channel);
       };
     }
-  }, [user, isPM, isAR2, isAdmin]);
+  }, [user, isPM, isAR1, isAR2, isAdmin]);
 
   const fetchProjects = async () => {
     try {
@@ -140,6 +140,8 @@ const ProjectTracking = () => {
       // Apply role-based filtering for projects
       if (isPM && !isAdmin) {
         projectsQuery = projectsQuery.eq('user_id', user?.id);
+      } else if (isAR1 && !isAdmin) {
+        projectsQuery = projectsQuery.eq('ar_planning_id', user?.id);
       } else if (isAR2 && !isAdmin) {
         projectsQuery = projectsQuery.eq('ar_field_id', user?.id);
       }
@@ -167,6 +169,8 @@ const ProjectTracking = () => {
       // Apply role-based filtering for assigned tasks
       if (isPM && !isAdmin) {
         assignedQuery = assignedQuery.filter('projects.user_id', 'eq', user?.id);
+      } else if (isAR1 && !isAdmin) {
+        assignedQuery = assignedQuery.filter('projects.ar_planning_id', 'eq', user?.id);
       } else if (isAR2 && !isAdmin) {
         assignedQuery = assignedQuery.filter('projects.ar_field_id', 'eq', user?.id);
       }
@@ -194,6 +198,8 @@ const ProjectTracking = () => {
       // Apply role-based filtering for next unassigned tasks
       if (isPM && !isAdmin) {
         nextUnassignedQuery = nextUnassignedQuery.filter('projects.user_id', 'eq', user?.id);
+      } else if (isAR1 && !isAdmin) {
+        nextUnassignedQuery = nextUnassignedQuery.filter('projects.ar_planning_id', 'eq', user?.id);
       } else if (isAR2 && !isAdmin) {
         nextUnassignedQuery = nextUnassignedQuery.filter('projects.ar_field_id', 'eq', user?.id);
       }
@@ -560,7 +566,7 @@ const ProjectTracking = () => {
     </Popover>
   );
 
-  if (!isPM && !isAR2 && !isAdmin) {
+  if (!isPM && !isAR1 && !isAR2 && !isAdmin) {
     return (
       <div className="min-h-screen bg-gradient-subtle">
         <Header />
@@ -568,7 +574,7 @@ const ProjectTracking = () => {
           <Card>
             <CardContent className="p-8 text-center">
               <p className="text-muted-foreground">
-                Access denied. This page is only available for PM, AR2, and Admin users.
+                Access denied. This page is only available for PM, AR1, AR2, and Admin users.
               </p>
             </CardContent>
           </Card>

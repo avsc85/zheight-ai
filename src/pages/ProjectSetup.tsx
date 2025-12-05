@@ -177,7 +177,7 @@ const ProjectSetup = () => {
   const [editMode, setEditMode] = useState(false);
   
   const { toast } = useToast();
-  const { user, loading: authLoading, isPM, isAR2, isAdmin, userRole } = useAuth();
+  const { user, loading: authLoading, isPM, isAR1, isAR2, isAdmin, userRole } = useAuth();
   
   // Wait for both auth and role data to be loaded
   const isLoading = authLoading || !user || !userRole;
@@ -198,7 +198,8 @@ const ProjectSetup = () => {
     // Only proceed when authentication and roles are fully loaded
     if (!isLoading) {
       console.log('Auth and roles loaded, checking permissions:', { 
-        isPM, 
+        isPM,
+        isAR1,
         isAR2, 
         isAdmin, 
         role: userRole?.role, 
@@ -206,11 +207,11 @@ const ProjectSetup = () => {
         user: user?.id 
       });
       
-      if (projectId && (isPM || isAR2 || isAdmin)) {
+      if (projectId && (isPM || isAR1 || isAR2 || isAdmin)) {
         console.log('User has permission, fetching project data');
         setEditMode(true);
         fetchProjectData(projectId);
-      } else if (projectId && !isPM && !isAR2 && !isAdmin) {
+      } else if (projectId && !isPM && !isAR1 && !isAR2 && !isAdmin) {
         console.log('User lacks permission for project access');
         toast({
           title: "Access Denied",
@@ -220,7 +221,7 @@ const ProjectSetup = () => {
         navigate('/project-mgmt/tracking');
       }
     }
-  }, [projectId, isLoading, isPM, isAR2, isAdmin, user?.id]);
+  }, [projectId, isLoading, isPM, isAR1, isAR2, isAdmin, user?.id]);
 
   const fetchARUsers = async () => {
     try {
@@ -407,7 +408,7 @@ const ProjectSetup = () => {
     try {
       setLoading(true);
       console.log('Fetching project data for ID:', id);
-      console.log('Current user roles:', { isPM, isAR2, isAdmin, authLoading });
+      console.log('Current user roles:', { isPM, isAR1, isAR2, isAdmin, authLoading });
       
       // Ensure auth and roles are loaded before proceeding
       if (isLoading) {
@@ -417,7 +418,7 @@ const ProjectSetup = () => {
       }
 
       // Ensure user has basic permissions before fetching
-      if (!isPM && !isAR2 && !isAdmin) {
+      if (!isPM && !isAR1 && !isAR2 && !isAdmin) {
         console.log('User does not have required roles');
         toast({
           title: "Access Denied",
@@ -445,14 +446,16 @@ const ProjectSetup = () => {
 
       // Check if user has permission to edit this specific project
       // PMs can edit ONLY their own projects (where user_id matches their id)
-      // AR2 can edit assigned projects, Admins can edit all
-      const canEdit = isAdmin || (isPM && project.user_id === user?.id) || (isAR2 && project.ar_field_id === user?.id);
+      // AR1 can edit assigned planning projects, AR2 can edit assigned field projects, Admins can edit all
+      const canEdit = isAdmin || (isPM && project.user_id === user?.id) || (isAR1 && project.ar_planning_id === user?.id) || (isAR2 && project.ar_field_id === user?.id);
       
       console.log('Permission check:', { 
         canEdit, 
         isAdmin, 
-        isPM, 
+        isPM,
+        isAR1,
         isAR2, 
+        projectArPlanningId: project.ar_planning_id,
         projectArFieldId: project.ar_field_id,
         projectUserId: project.user_id,
         userId: user?.id,
@@ -545,13 +548,13 @@ const ProjectSetup = () => {
 
   const saveProject = async () => {
     // Save or update project based on edit mode
-    console.log('Saving project - User roles:', { isPM, isAR2, isAdmin, userRole: userRole?.role });
+    console.log('Saving project - User roles:', { isPM, isAR1, isAR2, isAdmin, userRole: userRole?.role });
     
-    if (!user || (!isPM && !isAR2 && !isAdmin)) {
-      console.error('Access denied - User roles:', { isPM, isAR2, isAdmin, role: userRole?.role });
+    if (!user || (!isPM && !isAR1 && !isAR2 && !isAdmin)) {
+      console.error('Access denied - User roles:', { isPM, isAR1, isAR2, isAdmin, role: userRole?.role });
       toast({
         title: "Access Denied",
-        description: "Only Project Managers, AR2 Field users, and Admins can manage projects.",
+        description: "Only Project Managers, AR1, AR2, and Admins can manage projects.",
         variant: "destructive",
       });
       return;
@@ -779,7 +782,7 @@ const ProjectSetup = () => {
           )}
 
           {/* Show permission denied state when roles are loaded but user lacks access */}
-          {!isLoading && !isPM && !isAR2 && !isAdmin && (
+          {!isLoading && !isPM && !isAR1 && !isAR2 && !isAdmin && (
             <Card>
               <CardContent className="p-8 text-center">
                 <div className="space-y-4">
@@ -788,7 +791,7 @@ const ProjectSetup = () => {
                     You don't have permission to access project setup.
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    Required role: PM, AR2, or Admin | Your role: {userRole?.role || 'Unknown'}
+                    Required role: PM, AR1, AR2, or Admin | Your role: {userRole?.role || 'Unknown'}
                   </p>
                   <Button 
                     onClick={() => navigate('/project-mgmt/tracking')} 
@@ -802,7 +805,7 @@ const ProjectSetup = () => {
           )}
           
           {/* Show main content only when roles are loaded and user has permission */}
-          {!isLoading && (isPM || isAR2 || isAdmin) && (
+          {!isLoading && (isPM || isAR1 || isAR2 || isAdmin) && (
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-8">
                 <TabsTrigger value="setup" className="text-sm font-medium">
