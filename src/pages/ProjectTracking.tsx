@@ -179,7 +179,7 @@ const ProjectTracking = () => {
         .from('project_tasks')
         .select(`
           *,
-          projects (
+          projects!inner (
             id,
             project_name,
             project_manager_name,
@@ -193,14 +193,13 @@ const ProjectTracking = () => {
         .in('project_id', accessibleProjectIds);
 
       if (assignedError) throw assignedError;
-      if (assignedError) throw assignedError;
 
       // Fetch next unassigned task per project using accessible project IDs
       const { data: allUnassignedTasks, error: unassignedError } = await supabase
         .from('project_tasks')
         .select(`
           *,
-          projects (
+          projects!inner (
             id,
             project_name,
             project_manager_name,
@@ -213,7 +212,6 @@ const ProjectTracking = () => {
         .in('project_id', accessibleProjectIds)
         .order('milestone_number', { ascending: true });
 
-      if (unassignedError) throw unassignedError;
       if (unassignedError) throw unassignedError;
 
       // Get only the first (lowest milestone_number) unassigned task per project

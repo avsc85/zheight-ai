@@ -45,6 +45,7 @@ interface Task {
   status: 'in_queue' | 'started' | 'completed' | 'blocked';
   timeAllocated: number;
   arAssigned: string;
+  arAssignedName?: string;
   projectId: string;
   completionDate?: string;
   milestoneNumber: number;
@@ -218,6 +219,15 @@ const TaskCard = ({ task, onUpdateNotes, onUpdateStatus, currentUserId, userRole
             <Clock className="h-4 w-4 text-muted-foreground" />
             <p className="text-xs text-muted-foreground">{task.deadline}</p>
           </div>
+          
+          {/* Show AR Assigned info for PM/Admin */}
+          {(userRole === 'pm' || userRole === 'admin') && task.arAssignedName && (
+            <div className="bg-purple-50 p-2 rounded">
+              <p className="text-xs font-medium text-purple-700">
+                Assigned to: {task.arAssignedName}
+              </p>
+            </div>
+          )}
           
           {task.timeAllocated > 0 && (
             <p className="text-xs text-primary font-medium">
@@ -435,57 +445,96 @@ const ProjectBoard = () => {
       setLoading(true);
       console.log('Fetching tasks for user:', user?.id, 'Role:', userRole?.role);
       
-      // For PMs and Admins, fetch ALL tasks for their assigned projects
-      // For ARs, fetch only their assigned tasks
-      let query = supabase
-        .from('project_tasks')
-        .select(`
-          *,
-          projects (
-            project_name,
-            user_id,
-            project_manager_name
-          )
-        `)
-        .neq('assigned_skip_flag', 'Skip');
-
       // Apply role-based filtering
       if (userRole?.role === 'pm') {
-        // PM can only see tasks for projects they own (user_id match)
-        query = query.eq('projects.user_id', user?.id);
+        // Get PM's name first
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('name')
+          .eq('user_id', user?.id)
+          .single();
+        
+        const pmName = profileData?.name;
+        
+        // First, get accessible project IDs for this PM
+        let projectsQuery = supabase
+          .from('projects')
+          .select('id')
+          .eq('status', 'active')
+          .is('deleted_at', null);
+        
+        if (pmName) {
+          projectsQuery = projectsQuery.or(`user_id.eq.${user?.id},project_manager_name.eq.${pmName}`);
+        } else {
+          projectsQuery = projectsQuery.eq('user_id', user?.id);
+        }
+        
+        const { data: accessibleProjects } = await projectsQuery;
+        const projectIds = (accessibleProjects || []).map(p => p.id);
+        
+        if (projectIds.length === 0) {
+          setTasks([]);
+          setLoading(false);
+          return;
+        }
+        
+        // Then fetch only assigned AR tasks for those projects
+        const { data: tasks, error } = await supabase
+          .from('project_tasks')
+          .select(`
+            *,
+            projects (
+              project_name,
+              user_id,
+              project_manager_name
+            )
+          `)
+          .not('assigned_ar_id', 'is', null)
+          .in('project_id', projectIds)
+          .neq('assigned_skip_flag', 'Skip');
+        
+        if (error) throw error;
+        
+        await processTasks(tasks);
+        
       } else if (userRole?.role === 'admin') {
-        // Admin can see ALL tasks (no filter)
+        // Admin can see ALL tasks
+        const { data: tasks, error } = await supabase
+          .from('project_tasks')
+          .select(`
+            *,
+            projects (
+              project_name,
+              user_id,
+              project_manager_name
+            )
+          `)
+          .neq('assigned_skip_flag', 'Skip');
+        
+        if (error) throw error;
+        
+        await processTasks(tasks);
+        
       } else {
-        // AR can only see assigned tasks
-        query = query.not('assigned_ar_id', 'is', null)
-          .eq('assigned_ar_id', user?.id);
+        // AR can only see tasks assigned to them
+        const { data: tasks, error } = await supabase
+          .from('project_tasks')
+          .select(`
+            *,
+            projects (
+              project_name,
+              user_id,
+              project_manager_name
+            )
+          `)
+          .not('assigned_ar_id', 'is', null)
+          .eq('assigned_ar_id', user?.id)
+          .neq('assigned_skip_flag', 'Skip');
+        
+        if (error) throw error;
+        
+        await processTasks(tasks);
       }
-
-      const { data: tasks, error } = await query;
-
-      if (error) throw error;
-      
-      console.log('Raw tasks from database:', tasks);
-
-      const formattedTasks: Task[] = (tasks || []).map(task => ({
-        id: task.task_id,
-        project: task.projects?.project_name || 'Unknown Project',
-        task: task.task_name,
-        deadline: task.due_date || 'No deadline',
-        priority: task.priority_exception || '',
-        notesAR: task.notes_tasks_ar || '',
-        notesPM: task.notes_tasks_pm || '',
-        status: task.task_status as Task['status'],
-        timeAllocated: 0, // This would come from time tracking
-        arAssigned: task.assigned_ar_id,
-        projectId: task.project_id,
-        completionDate: task.completion_date,
-        milestoneNumber: task.milestone_number || 0
-      }));
-      
-      console.log('Formatted tasks:', formattedTasks);
-
-      setTasks(formattedTasks);
     } catch (error) {
       console.error('Error fetching tasks:', error);
       toast({
@@ -497,6 +546,48 @@ const ProjectBoard = () => {
       setLoading(false);
     }
   };
+  
+  const processTasks = async (tasks: any[]) => {
+    console.log('Raw tasks from database:', tasks);
+
+    // Get AR user names
+    const assignedARIds = [...new Set((tasks || []).map(t => t.assigned_ar_id).filter(Boolean))];
+    let arNames: Record<string, string> = {};
+    
+    if (assignedARIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('user_id, name')
+        .in('user_id', assignedARIds);
+      
+      arNames = (profiles || []).reduce((acc, profile) => {
+        acc[profile.user_id] = profile.name || 'Unknown';
+        return acc;
+      }, {} as Record<string, string>);
+    }
+
+    const formattedTasks: Task[] = (tasks || []).map(task => ({
+      id: task.task_id,
+      project: task.projects?.project_name || 'Unknown Project',
+      task: task.task_name,
+      deadline: task.due_date || 'No deadline',
+      priority: task.priority_exception || '',
+      notesAR: task.notes_tasks_ar || '',
+      notesPM: task.notes_tasks_pm || '',
+      status: task.task_status as Task['status'],
+      timeAllocated: 0, // This would come from time tracking
+      arAssigned: task.assigned_ar_id,
+      arAssignedName: task.assigned_ar_id ? arNames[task.assigned_ar_id] : undefined,
+      projectId: task.project_id,
+      completionDate: task.completion_date,
+      milestoneNumber: task.milestone_number || 0
+    }));
+    
+    console.log('Formatted tasks:', formattedTasks);
+
+    setTasks(formattedTasks);
+  };
+
 
   const handleUpdateNotes = async (taskId: string, notes: string, type: 'ar' | 'pm') => {
     try {
