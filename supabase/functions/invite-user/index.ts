@@ -122,20 +122,17 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Check for existing pending invitation - if exists, mark as expired and allow new one
-    const { data: existingInvitation } = await supabase
+    // Mark ALL existing pending invitations for this email as expired using admin client
+    const { error: expireError } = await supabaseAdmin
       .from('user_invitations')
-      .select('*')
+      .update({ status: 'expired' })
       .eq('email', email)
       .eq('status', 'pending')
-      .single()
 
-    if (existingInvitation) {
-      // Mark old invitation as expired
-      await supabase
-        .from('user_invitations')
-        .update({ status: 'expired' })
-        .eq('id', existingInvitation.id)
+    if (expireError) {
+      console.log('Note: Error expiring old invitations (may not exist):', expireError.message)
+    } else {
+      console.log('Expired any existing pending invitations for:', email)
     }
 
     // Create invitation record
