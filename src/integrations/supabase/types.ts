@@ -741,6 +741,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_assigned_pm: { Args: { project_id_param: string }; Returns: boolean }
       process_emails_safely: { Args: never; Returns: Json }
       process_pending_emails_batch: { Args: never; Returns: Json }
       restore_deleted_project: {
