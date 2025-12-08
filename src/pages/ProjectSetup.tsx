@@ -445,21 +445,37 @@ const ProjectSetup = () => {
       console.log('Project data fetched:', project);
 
       // Check if user has permission to edit this specific project
-      // PMs can edit ONLY their own projects (where user_id matches their id)
+      // PMs can edit projects where they are the creator (user_id) OR assigned as PM (project_manager_name)
       // AR1 can edit assigned planning projects, AR2 can edit assigned field projects, Admins can edit all
-      const canEdit = isAdmin || (isPM && project.user_id === user?.id) || (isAR1 && project.ar_planning_id === user?.id) || (isAR2 && project.ar_field_id === user?.id);
+      
+      // Get current user's profile name for PM matching
+      let currentUserName: string | null = null;
+      if (isPM && !isAdmin) {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('name')
+          .eq('user_id', user?.id)
+          .single();
+        currentUserName = profileData?.name || null;
+      }
+      
+      const isPMForProject = isPM && (project.user_id === user?.id || project.project_manager_name === currentUserName);
+      const canEdit = isAdmin || isPMForProject || (isAR1 && project.ar_planning_id === user?.id) || (isAR2 && project.ar_field_id === user?.id);
       
       console.log('Permission check:', { 
         canEdit, 
         isAdmin, 
         isPM,
+        isPMForProject,
         isAR1,
         isAR2, 
         projectArPlanningId: project.ar_planning_id,
         projectArFieldId: project.ar_field_id,
         projectUserId: project.user_id,
+        projectManagerName: project.project_manager_name,
+        currentUserName,
         userId: user?.id,
-        note: 'PMs can only edit projects where they are the PM (user_id match)'
+        note: 'PMs can edit projects where they are the creator (user_id) OR assigned as PM (project_manager_name match)'
       });
 
       if (!canEdit) {

@@ -665,6 +665,20 @@ const ProjectTracking = () => {
                     <p className="text-muted-foreground">Loading project data...</p>
                   </CardContent>
                 </Card>
+              ) : projects.length === 0 ? (
+                <Card>
+                  <CardContent className="p-12 text-center space-y-4">
+                    <div className="text-6xl">📋</div>
+                    <h3 className="text-xl font-semibold text-foreground">No projects assigned to you</h3>
+                    <p className="text-muted-foreground max-w-md mx-auto">
+                      {isPM && !isAdmin 
+                        ? "You don't have any projects assigned as Project Manager yet. Projects will appear here once you are assigned."
+                        : isAR1 || isAR2 
+                          ? "You don't have any projects assigned for review yet."
+                          : "No projects found in the system."}
+                    </p>
+                  </CardContent>
+                </Card>
               ) : (
                 <>
                   {/* Project Tracking Table */}
