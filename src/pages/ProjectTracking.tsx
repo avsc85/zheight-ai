@@ -130,6 +130,17 @@ const ProjectTracking = () => {
     try {
       setLoading(true);
       
+      // Get current user's profile name for PM matching
+      let currentUserName: string | null = null;
+      if (isPM && !isAdmin) {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('name')
+          .eq('user_id', user?.id)
+          .single();
+        currentUserName = profileData?.name || null;
+      }
+      
       // FIRST: Fetch all projects (including those without tasks)
       let projectsQuery = supabase
         .from('projects')
@@ -138,7 +149,11 @@ const ProjectTracking = () => {
         .is('deleted_at', null);
 
       // Apply role-based filtering for projects
-      if (isPM && !isAdmin) {
+      if (isPM && !isAdmin && currentUserName) {
+        // PM can see projects they own OR projects where they're assigned as PM
+        projectsQuery = projectsQuery.or(`user_id.eq.${user?.id},project_manager_name.eq.${currentUserName}`);
+      } else if (isPM && !isAdmin) {
+        // Fallback to user_id if no name found
         projectsQuery = projectsQuery.eq('user_id', user?.id);
       } else if (isAR1 && !isAdmin) {
         projectsQuery = projectsQuery.eq('ar_planning_id', user?.id);
@@ -167,7 +182,10 @@ const ProjectTracking = () => {
         .eq('assigned_skip_flag', 'Y');
 
       // Apply role-based filtering for assigned tasks
-      if (isPM && !isAdmin) {
+      if (isPM && !isAdmin && currentUserName) {
+        // PM can see tasks for projects they own OR manage
+        assignedQuery = assignedQuery.or(`projects.user_id.eq.${user?.id},projects.project_manager_name.eq.${currentUserName}`);
+      } else if (isPM && !isAdmin) {
         assignedQuery = assignedQuery.filter('projects.user_id', 'eq', user?.id);
       } else if (isAR1 && !isAdmin) {
         assignedQuery = assignedQuery.filter('projects.ar_planning_id', 'eq', user?.id);
@@ -196,7 +214,10 @@ const ProjectTracking = () => {
         .order('milestone_number', { ascending: true });
 
       // Apply role-based filtering for next unassigned tasks
-      if (isPM && !isAdmin) {
+      if (isPM && !isAdmin && currentUserName) {
+        // PM can see unassigned tasks for projects they own OR manage
+        nextUnassignedQuery = nextUnassignedQuery.or(`projects.user_id.eq.${user?.id},projects.project_manager_name.eq.${currentUserName}`);
+      } else if (isPM && !isAdmin) {
         nextUnassignedQuery = nextUnassignedQuery.filter('projects.user_id', 'eq', user?.id);
       } else if (isAR1 && !isAdmin) {
         nextUnassignedQuery = nextUnassignedQuery.filter('projects.ar_planning_id', 'eq', user?.id);
