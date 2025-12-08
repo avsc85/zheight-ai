@@ -155,10 +155,14 @@ const TaskCard = ({ task, onUpdateNotes, onUpdateStatus, currentUserId, userRole
     isTaskAssignedToUser: task.arAssigned === currentUserId
   });
   
+  // AR users can edit AR notes if task is assigned to them
   const canEditARNotes = task.arAssigned === currentUserId && 
     (userRole === 'ar1_planning' || userRole === 'ar2_field' || userRole === 'admin');
-  const canEditPMNotes = userRole === 'pm' || userRole === 'admin';  
-  const canEditStatus = canEditARNotes;
+  // Only admin can edit PM notes on AR Board (PMs have view-only access here)
+  const canEditPMNotes = userRole === 'admin';  
+  // Only AR users assigned to the task can edit status (PMs have view-only access)
+  const canEditStatus = task.arAssigned === currentUserId && 
+    (userRole === 'ar1_planning' || userRole === 'ar2_field' || userRole === 'admin');
 
   return (
     <Card className={`mb-4 border-l-4 ${getStatusColor()} hover:shadow-md transition-shadow`}>

@@ -164,8 +164,18 @@ const ProjectTracking = () => {
       const { data: allProjects, error: projectsError } = await projectsQuery;
       if (projectsError) throw projectsError;
 
-      // Fetch assigned tasks
-      let assignedQuery = supabase
+      // Get project IDs that this PM has access to (based on projects query results)
+      const accessibleProjectIds = (allProjects || []).map(p => p.id);
+      
+      if (accessibleProjectIds.length === 0) {
+        // No accessible projects, return empty
+        setProjects([]);
+        setLoading(false);
+        return;
+      }
+
+      // Fetch assigned tasks for accessible projects only
+      const { data: assignedTasks, error: assignedError } = await supabase
         .from('project_tasks')
         .select(`
           *,
@@ -179,25 +189,14 @@ const ProjectTracking = () => {
           )
         `)
         .in('task_status', ['in_queue', 'started', 'blocked'])
-        .eq('assigned_skip_flag', 'Y');
+        .eq('assigned_skip_flag', 'Y')
+        .in('project_id', accessibleProjectIds);
 
-      // Apply role-based filtering for assigned tasks
-      if (isPM && !isAdmin && currentUserName) {
-        // PM can see tasks for projects they own OR manage
-        assignedQuery = assignedQuery.or(`projects.user_id.eq.${user?.id},projects.project_manager_name.eq.${currentUserName}`);
-      } else if (isPM && !isAdmin) {
-        assignedQuery = assignedQuery.filter('projects.user_id', 'eq', user?.id);
-      } else if (isAR1 && !isAdmin) {
-        assignedQuery = assignedQuery.filter('projects.ar_planning_id', 'eq', user?.id);
-      } else if (isAR2 && !isAdmin) {
-        assignedQuery = assignedQuery.filter('projects.ar_field_id', 'eq', user?.id);
-      }
-
-      const { data: assignedTasks, error: assignedError } = await assignedQuery;
+      if (assignedError) throw assignedError;
       if (assignedError) throw assignedError;
 
-      // Fetch next unassigned task per project
-      let nextUnassignedQuery = supabase
+      // Fetch next unassigned task per project using accessible project IDs
+      const { data: allUnassignedTasks, error: unassignedError } = await supabase
         .from('project_tasks')
         .select(`
           *,
@@ -211,21 +210,10 @@ const ProjectTracking = () => {
           )
         `)
         .eq('assigned_skip_flag', 'N')
+        .in('project_id', accessibleProjectIds)
         .order('milestone_number', { ascending: true });
 
-      // Apply role-based filtering for next unassigned tasks
-      if (isPM && !isAdmin && currentUserName) {
-        // PM can see unassigned tasks for projects they own OR manage
-        nextUnassignedQuery = nextUnassignedQuery.or(`projects.user_id.eq.${user?.id},projects.project_manager_name.eq.${currentUserName}`);
-      } else if (isPM && !isAdmin) {
-        nextUnassignedQuery = nextUnassignedQuery.filter('projects.user_id', 'eq', user?.id);
-      } else if (isAR1 && !isAdmin) {
-        nextUnassignedQuery = nextUnassignedQuery.filter('projects.ar_planning_id', 'eq', user?.id);
-      } else if (isAR2 && !isAdmin) {
-        nextUnassignedQuery = nextUnassignedQuery.filter('projects.ar_field_id', 'eq', user?.id);
-      }
-
-      const { data: allUnassignedTasks, error: unassignedError } = await nextUnassignedQuery;
+      if (unassignedError) throw unassignedError;
       if (unassignedError) throw unassignedError;
 
       // Get only the first (lowest milestone_number) unassigned task per project
