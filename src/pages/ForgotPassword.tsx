@@ -27,10 +27,12 @@ const ForgotPassword = () => {
     setError("");
 
     try {
-      // Use hash-based redirect which Supabase recovery links will use
-      // Supabase sends recovery links with #access_token=... format
+      // Use the current origin to support both production and preview environments
+      const redirectUrl = `${window.location.origin}/reset-password`;
+      console.log('Password reset redirect URL:', redirectUrl);
+      
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `https://zheight.tech/reset-password`,
+        redirectTo: redirectUrl,
       });
 
       if (resetError) throw resetError;
