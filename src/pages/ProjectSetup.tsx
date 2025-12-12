@@ -24,6 +24,8 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { FileAttachment } from "@/components/FileAttachment";
+import { TaskAttachmentDialog } from "@/components/TaskAttachmentDialog";
 
 // Default task template
 const defaultTasks = [
@@ -131,14 +133,23 @@ const SortableRow = ({ task, index, handleTaskChange, deleteTask, arUsers }: any
             />
           </TableCell>
           <TableCell>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => deleteTask(task.id)}
-              className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
-            >
-              ×
-            </Button>
+            <div className="flex items-center gap-1">
+              {task.task_id && (
+                <TaskAttachmentDialog
+                  taskId={task.task_id}
+                  taskName={task.task_name}
+                  canEdit={true}
+                />
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => deleteTask(task.id)}
+                className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
+              >
+                ×
+              </Button>
+            </div>
           </TableCell>
         </TableRow>
       </ContextMenuTrigger>
@@ -175,6 +186,8 @@ const ProjectSetup = () => {
   const [allUsers, setAllUsers] = useState<AR[]>([]);
   const [loading, setLoading] = useState(false);
   const [editMode, setEditMode] = useState(false);
+  const [projectAttachments, setProjectAttachments] = useState<any[]>([]);
+  const [canEditProject, setCanEditProject] = useState(false);
   
   const { toast } = useToast();
   const { user, loading: authLoading, isPM, isAR1, isAR2, isAdmin, userRole } = useAuth();
@@ -404,6 +417,21 @@ const ProjectSetup = () => {
     }
   };
 
+  const fetchProjectAttachments = async (projectId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('attachments' as any)
+        .select('*')
+        .eq('project_id', projectId)
+        .order('uploaded_at', { ascending: false });
+
+      if (error) throw error;
+      setProjectAttachments(data || []);
+    } catch (error: any) {
+      console.error('Error fetching attachments:', error);
+    }
+  };
+
   const fetchProjectData = async (id: string) => {
     try {
       setLoading(true);
@@ -462,6 +490,9 @@ const ProjectSetup = () => {
       const isPMForProject = isPM && (project.user_id === user?.id || project.project_manager_name === currentUserName);
       const canEdit = isAdmin || isPMForProject || (isAR1 && project.ar_planning_id === user?.id) || (isAR2 && project.ar_field_id === user?.id);
       
+      // Store canEdit state for use in FileAttachment component
+      setCanEditProject(canEdit);
+      
       console.log('Permission check:', { 
         canEdit, 
         isAdmin, 
@@ -480,9 +511,15 @@ const ProjectSetup = () => {
 
       if (!canEdit) {
         console.log('Permission denied for this specific project');
+        
+        // Better error message for AR users
+        const errorMessage = (isAR1 || isAR2) 
+          ? "AR users have view-only access. Please use Project Tracking to view your assigned tasks."
+          : "You don't have permission to edit this project.";
+        
         toast({
           title: "Access Denied", 
-          description: "You don't have permission to edit this specific project.",
+          description: errorMessage,
           variant: "destructive",
         });
         navigate('/project-mgmt/tracking');
@@ -517,6 +554,7 @@ const ProjectSetup = () => {
         console.log(`Task ${index}: ID=${uniqueId}, Name=${task.task_name}, AR=${task.assigned_ar_id}`);
         return {
           id: uniqueId, // Use database task_id or generate truly unique sequential ID
+          task_id: task.task_id, // Database UUID for attachments
           task_name: task.task_name,
           assigned_ar_id: task.assigned_ar_id,
           assigned_skip_flag: task.assigned_skip_flag || "N",
@@ -542,6 +580,9 @@ const ProjectSetup = () => {
       }
 
       setTasks(formattedTasks.length > 0 ? formattedTasks : defaultTasks);
+      
+      // Fetch project attachments
+      await fetchProjectAttachments(id);
       
       console.log('Project data loaded successfully');
       toast({
@@ -922,6 +963,10 @@ const ProjectSetup = () => {
                         placeholder="32"
                       />
                     </div>
+                  </div>
+                  
+                  {/* Project Notes and Attachments side by side */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="notes">Project Notes</Label>
                       <Textarea
@@ -929,9 +974,21 @@ const ProjectSetup = () => {
                         value={projectData.project_notes}
                         onChange={(e) => handleProjectDataChange("project_notes", e.target.value)}
                         placeholder="Project notes..."
-                        className="min-h-20"
+                        className="min-h-32"
                       />
                     </div>
+                    
+                    {/* Project-level Attachments - Visible to all users */}
+                    {projectId && (
+                      <div className="space-y-2">
+                        <FileAttachment
+                          projectId={projectId}
+                          attachments={projectAttachments}
+                          onAttachmentsChange={() => fetchProjectAttachments(projectId)}
+                          canEdit={canEditProject}
+                        />
+                      </div>
+                    )}
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">

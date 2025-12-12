@@ -14,6 +14,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserRole } from "@/hooks/useUserRole";
+import { TaskAttachmentDialog } from "@/components/TaskAttachmentDialog";
+import { ProjectAttachmentDialog } from "@/components/ProjectAttachmentDialog";
 
 interface ProjectTask {
   id: string;
@@ -88,6 +90,22 @@ const ProjectTracking = () => {
   const { toast } = useToast();
   const { user } = useAuth();
   const { role, isPM, isAR1, isAR2, isAdmin } = useUserRole();
+  const [currentUserName, setCurrentUserName] = useState<string | null>(null);
+  
+  // Fetch current user's profile name for PM matching
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      if (user?.id && isPM) {
+        const { data } = await supabase
+          .from('profiles')
+          .select('name')
+          .eq('user_id', user.id)
+          .single();
+        setCurrentUserName(data?.name || null);
+      }
+    };
+    fetchUserProfile();
+  }, [user?.id, isPM]);
   
   useEffect(() => {
     if (user && (isPM || isAR1 || isAR2 || isAdmin)) {
@@ -141,41 +159,63 @@ const ProjectTracking = () => {
         currentUserName = profileData?.name || null;
       }
       
-      // FIRST: Fetch all projects (including those without tasks)
-      let projectsQuery = supabase
-        .from('projects')
-        .select('id, project_name, project_manager_name, user_id, ar_planning_id, ar_field_id')
-        .eq('status', 'active')
-        .is('deleted_at', null);
-
-      // Apply role-based filtering for projects
-      if (isPM && !isAdmin && currentUserName) {
-        // PM can see projects they own OR projects where they're assigned as PM
-        projectsQuery = projectsQuery.or(`user_id.eq.${user?.id},project_manager_name.eq.${currentUserName}`);
-      } else if (isPM && !isAdmin) {
-        // Fallback to user_id if no name found
-        projectsQuery = projectsQuery.eq('user_id', user?.id);
-      } else if (isAR1 && !isAdmin) {
-        projectsQuery = projectsQuery.eq('ar_planning_id', user?.id);
-      } else if (isAR2 && !isAdmin) {
-        projectsQuery = projectsQuery.eq('ar_field_id', user?.id);
-      }
-
-      const { data: allProjects, error: projectsError } = await projectsQuery;
-      if (projectsError) throw projectsError;
-
-      // Get project IDs that this PM has access to (based on projects query results)
-      const accessibleProjectIds = (allProjects || []).map(p => p.id);
+      let accessibleProjectIds: string[] = [];
+      let allProjects: any[] = [];
       
-      if (accessibleProjectIds.length === 0) {
-        // No accessible projects, return empty
-        setProjects([]);
-        setLoading(false);
-        return;
+      // For AR users, get projects from their assigned tasks (task-level filtering)
+      if ((isAR1 || isAR2) && !isAdmin) {
+        const { data: arTasks } = await supabase
+          .from('project_tasks')
+          .select('project_id')
+          .eq('assigned_ar_id', user?.id);
+        
+        accessibleProjectIds = [...new Set((arTasks || []).map(t => t.project_id))];
+        
+        if (accessibleProjectIds.length === 0) {
+          setProjects([]);
+          setLoading(false);
+          return;
+        }
+        
+        // Fetch project details for AR users
+        const { data: arProjects } = await supabase
+          .from('projects')
+          .select('id, project_name, project_manager_name, user_id, ar_planning_id, ar_field_id')
+          .in('id', accessibleProjectIds);
+        
+        allProjects = arProjects || [];
+      } else {
+        // For PM/Admin, fetch projects based on project-level filtering
+        let projectsQuery = supabase
+          .from('projects')
+          .select('id, project_name, project_manager_name, user_id, ar_planning_id, ar_field_id')
+          .eq('status', 'active')
+          .is('deleted_at', null);
+
+        // Apply role-based filtering for projects
+        if (isPM && !isAdmin && currentUserName) {
+          // PM can see projects they own OR projects where they're assigned as PM
+          projectsQuery = projectsQuery.or(`user_id.eq.${user?.id},project_manager_name.eq.${currentUserName}`);
+        } else if (isPM && !isAdmin) {
+          // Fallback to user_id if no name found
+          projectsQuery = projectsQuery.eq('user_id', user?.id);
+        }
+
+        const { data: allProjectsData, error: projectsError } = await projectsQuery;
+        if (projectsError) throw projectsError;
+
+        allProjects = allProjectsData || [];
+        accessibleProjectIds = allProjects.map(p => p.id);
+        
+        if (accessibleProjectIds.length === 0) {
+          setProjects([]);
+          setLoading(false);
+          return;
+        }
       }
 
       // Fetch assigned tasks for accessible projects only
-      const { data: assignedTasks, error: assignedError } = await supabase
+      let assignedTasksQuery = supabase
         .from('project_tasks')
         .select(`
           *,
@@ -191,28 +231,41 @@ const ProjectTracking = () => {
         .in('task_status', ['in_queue', 'started', 'blocked'])
         .eq('assigned_skip_flag', 'Y')
         .in('project_id', accessibleProjectIds);
+      
+      // AR users: only see tasks assigned to them
+      if ((isAR1 || isAR2) && !isAdmin) {
+        assignedTasksQuery = assignedTasksQuery.eq('assigned_ar_id', user?.id);
+      }
+
+      const { data: assignedTasks, error: assignedError } = await assignedTasksQuery;
 
       if (assignedError) throw assignedError;
 
       // Fetch next unassigned task per project using accessible project IDs
-      const { data: allUnassignedTasks, error: unassignedError } = await supabase
-        .from('project_tasks')
-        .select(`
-          *,
-          projects!inner (
-            id,
-            project_name,
-            project_manager_name,
-            user_id,
-            ar_planning_id,
-            ar_field_id
-          )
-        `)
-        .eq('assigned_skip_flag', 'N')
-        .in('project_id', accessibleProjectIds)
-        .order('milestone_number', { ascending: true });
+      // AR users should NOT see unassigned tasks - skip this query for them
+      let allUnassignedTasks: any[] = [];
+      
+      if (isAdmin || isPM) {
+        const { data, error: unassignedError } = await supabase
+          .from('project_tasks')
+          .select(`
+            *,
+            projects!inner (
+              id,
+              project_name,
+              project_manager_name,
+              user_id,
+              ar_planning_id,
+              ar_field_id
+            )
+          `)
+          .eq('assigned_skip_flag', 'N')
+          .in('project_id', accessibleProjectIds)
+          .order('milestone_number', { ascending: true });
 
-      if (unassignedError) throw unassignedError;
+        if (unassignedError) throw unassignedError;
+        allUnassignedTasks = data || [];
+      }
 
       // Get only the first (lowest milestone_number) unassigned task per project
       const nextUnassignedByProject = new Map();
@@ -769,6 +822,8 @@ const ProjectTracking = () => {
                                 </TableHead>
                                 <TableHead className="min-w-64">AR Notes</TableHead>
                                 <TableHead className="min-w-64">PM Notes</TableHead>
+                                <TableHead className="w-24 text-center">Project Docs</TableHead>
+                                <TableHead className="w-24 text-center">Task Files</TableHead>
                               </TableRow>
                              </TableHeader>
                            <TableBody>
@@ -909,6 +964,23 @@ const ProjectTracking = () => {
                                        )}
                                      </div>
                                    )}
+                                 </TableCell>
+                                 <TableCell className="text-center">
+                                   <ProjectAttachmentDialog
+                                     projectId={project.projectId}
+                                     projectName={project.project}
+                                   />
+                                 </TableCell>
+                                 <TableCell className="text-center">
+                                   <TaskAttachmentDialog
+                                     taskId={project.id}
+                                     taskName={project.taskActiveAssigned}
+                                     canEdit={
+                                       isAdmin || 
+                                       (isPM && project.projectManagerName === currentUserName) ||
+                                       (project.arAssigned === user?.id)
+                                     }
+                                   />
                                  </TableCell>
                                </TableRow>
                              ))}
