@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Filter, Download, RefreshCw, Edit, Save, X, ArrowUpDown, ChevronUp, ChevronDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
 import { TaskAttachmentDialog } from "@/components/TaskAttachmentDialog";
 import { ProjectAttachmentDialog } from "@/components/ProjectAttachmentDialog";

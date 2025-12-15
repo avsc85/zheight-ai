@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/context-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/contexts/AuthContext";
 import { FileAttachment } from "@/components/FileAttachment";
 import { TaskAttachmentDialog } from "@/components/TaskAttachmentDialog";
 

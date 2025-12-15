@@ -1,5 +1,5 @@
 import { Bot, User, LogOut, Users, FolderKanban, BarChart3 } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import zHeightLogo from "@/assets/zheight-logo.png";
 import { 
