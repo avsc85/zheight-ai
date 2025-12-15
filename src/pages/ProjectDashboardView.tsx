@@ -86,19 +86,19 @@ const ProjectDashboardView = () => {
       const arIds = [...new Set(tasks?.filter(t => t.assigned_ar_id).map(t => t.assigned_ar_id))];
       
       // Fetch AR profiles separately
-      let arProfiles: any[] = [];
+      let arProfiles: { user_id: string; name: string | null }[] = [];
       if (arIds.length > 0) {
         const { data: profiles } = await supabase
           .from("profiles")
-          .select("id, name")
-          .in("id", arIds);
+          .select("user_id, name")
+          .in("user_id", arIds);
         arProfiles = profiles || [];
       }
 
       // Map AR names to tasks
       const tasksWithARNames = tasks?.map(task => ({
         ...task,
-        ar_name: arProfiles.find(p => p.id === task.assigned_ar_id)?.name || "Unassigned"
+        ar_name: arProfiles.find(p => p.user_id === task.assigned_ar_id)?.name || "Unassigned"
       })) || [];
 
       // Fetch attachments
@@ -109,7 +109,7 @@ const ProjectDashboardView = () => {
 
       // Get unique team members (ARs)
       const uniqueARs = arProfiles.map(p => ({
-        id: p.id,
+        id: p.user_id,
         name: p.name
       }));
 
