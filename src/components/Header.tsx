@@ -1,4 +1,4 @@
-import { Bot, User, LogOut, Users, FolderKanban } from "lucide-react";
+import { Bot, User, LogOut, Users, FolderKanban, BarChart3 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import zHeightLogo from "@/assets/zheight-logo.png";
@@ -115,6 +115,12 @@ export const Header = () => {
                   <DropdownMenuSeparator />
                   {isAdmin && (
                     <>
+                      <DropdownMenuItem asChild>
+                        <Link to="/project-mgmt/dashboard" className="flex items-center">
+                          <BarChart3 className="mr-2 h-4 w-4" />
+                          <span>Admin Dashboard</span>
+                        </Link>
+                      </DropdownMenuItem>
                       <DropdownMenuItem asChild>
                         <Link to="/admin/users" className="flex items-center">
                           <Users className="mr-2 h-4 w-4" />

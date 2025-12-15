@@ -29,15 +29,11 @@ import { TaskAttachmentDialog } from "@/components/TaskAttachmentDialog";
 
 // Default task template
 const defaultTasks = [
-  { id: 1, task_name: "Floor Plan + Site Map", assigned_ar_id: null, assigned_skip_flag: "Y", due_date: "", priority_exception: "Prioritize over everything", hours: 6, notes_tasks: "" },
-  { id: 2, task_name: "Proposed Floor Plan", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", priority_exception: "", hours: 2, notes_tasks: "" },
-  { id: 3, task_name: "Elevations", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", priority_exception: "", hours: 5, notes_tasks: "" },
-  { id: 4, task_name: "Finalization PF w/t Customer", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", priority_exception: "", hours: 6, notes_tasks: "" },
-  { id: 5, task_name: "Full Set Completion Planning", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", priority_exception: "", hours: 6, notes_tasks: "" },
-  { id: 6, task_name: "MEP / T-24 / Struc/Finalization", assigned_ar_id: null, assigned_skip_flag: "Skip", due_date: "", priority_exception: "", hours: 1, notes_tasks: "" },
-  { id: 7, task_name: "Final Submission Set", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", priority_exception: "", hours: 2, notes_tasks: "" },
-  { id: 8, task_name: "Revision 1", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", priority_exception: "", hours: 3, notes_tasks: "" },
-  { id: 9, task_name: "Revision 2", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", priority_exception: "", hours: 3, notes_tasks: "" }
+  { id: 1, task_name: "Floor Plan + Site Map", assigned_ar_id: null, assigned_skip_flag: "Y", due_date: "", hours: 6, notes_tasks: "" },
+  { id: 2, task_name: "Elevations", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", hours: 5, notes_tasks: "" },
+  { id: 3, task_name: "Finalization PF w/t Customer", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", hours: 6, notes_tasks: "" },
+  { id: 4, task_name: "Final Submission Set", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", hours: 2, notes_tasks: "" },
+  { id: 5, task_name: "Revision", assigned_ar_id: null, assigned_skip_flag: "N", due_date: "", hours: 3, notes_tasks: "" }
 ];
 
 interface AR {
@@ -108,14 +104,6 @@ const SortableRow = ({ task, index, handleTaskChange, deleteTask, arUsers }: any
           </TableCell>
           <TableCell>
             <Input
-              value={task.priority_exception}
-              onChange={(e) => handleTaskChange(task.id, "priority_exception", e.target.value)}
-              className="h-8"
-              placeholder="Priority notes..."
-            />
-          </TableCell>
-          <TableCell>
-            <Input
               value={task.hours}
               onChange={(e) => handleTaskChange(task.id, "hours", parseInt(e.target.value) || 0)}
               className="h-8 w-20"
@@ -173,10 +161,7 @@ const ProjectSetup = () => {
   const [projectData, setProjectData] = useState({
     project_name: "",
     project_manager_name: "",
-    start_date: "",
     expected_end_date: "",
-    difficulty_level: null as string | null,
-    project_notes: "",
     hours_allocated: 32,
     ar_planning_id: "",
     ar_field_id: ""
@@ -390,7 +375,6 @@ const ProjectSetup = () => {
       assigned_ar_id: null,
       assigned_skip_flag: "N",
       due_date: "",
-      priority_exception: "",
       hours: 0,
       notes_tasks: ""
     };
@@ -530,10 +514,7 @@ const ProjectSetup = () => {
       setProjectData({
         project_name: project.project_name,
         project_manager_name: project.project_manager_name || "",
-        start_date: project.start_date || "",
         expected_end_date: project.expected_end_date || "",
-        difficulty_level: project.difficulty_level,
-        project_notes: project.project_notes || "",
         hours_allocated: project.hours_allocated || 32,
         ar_planning_id: project.ar_planning_id || "",
         ar_field_id: project.ar_field_id || ""
@@ -559,7 +540,6 @@ const ProjectSetup = () => {
           assigned_ar_id: task.assigned_ar_id,
           assigned_skip_flag: task.assigned_skip_flag || "N",
           due_date: task.due_date || "",
-          priority_exception: task.priority_exception || "",
           hours: task.hours || 0,
           notes_tasks: task.notes_tasks || ""
         };
@@ -627,15 +607,6 @@ const ProjectSetup = () => {
       return;
     }
 
-    if (!projectData.difficulty_level) {
-      toast({
-        title: "Validation Error",
-        description: "Please select a difficulty level.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     // Validate: If AR is assigned (not null), due date is required
     const invalidTasks = tasks
       .map((task, index) => ({ task, taskNumber: index + 1 }))
@@ -663,7 +634,10 @@ const ProjectSetup = () => {
         // Update existing project
         const { error: projectError } = await supabase
           .from('projects')
-          .update(projectData)
+          .update({
+            ...projectData,
+            updated_at: new Date().toISOString()
+          })
           .eq('id', projectId);
 
         if (projectError) throw projectError;
@@ -693,7 +667,6 @@ const ProjectSetup = () => {
                 assigned_ar_id: task.assigned_ar_id,
                 assigned_skip_flag: task.assigned_ar_id ? 'Y' : 'N',
                 due_date: task.due_date || null,
-                priority_exception: task.priority_exception,
                 hours: task.hours,
                 notes_tasks: task.notes_tasks,
                 // DO NOT update task_status - preserve existing status
@@ -712,7 +685,6 @@ const ProjectSetup = () => {
                 assigned_ar_id: task.assigned_ar_id,
                 assigned_skip_flag: task.assigned_ar_id ? 'Y' : 'N',
                 due_date: task.due_date || null,
-                priority_exception: task.priority_exception,
                 hours: task.hours,
                 notes_tasks: task.notes_tasks,
                 task_status: 'in_queue'
@@ -740,14 +712,15 @@ const ProjectSetup = () => {
         });
 
       } else {
-        // Create new project
+        // Create new project with start_date set to today
         console.log('Inserting project with data:', { ...projectData, user_id: user.id });
         
         const { data: project, error: projectError } = await supabase
           .from('projects')
           .insert({
             ...projectData,
-            user_id: user.id
+            user_id: user.id,
+            start_date: new Date().toISOString().split('T')[0]  // Set to today's date
           })
           .select()
           .single();
@@ -768,7 +741,6 @@ const ProjectSetup = () => {
           // Auto-set assigned_skip_flag: 'Y' if AR assigned, 'N' if not assigned
           assigned_skip_flag: task.assigned_ar_id ? 'Y' : 'N',
           due_date: task.due_date || null,
-          priority_exception: task.priority_exception,
           hours: task.hours,
           notes_tasks: task.notes_tasks,
           task_status: 'in_queue'
@@ -790,10 +762,7 @@ const ProjectSetup = () => {
         setProjectData({
           project_name: "",
           project_manager_name: "",
-          start_date: "",
           expected_end_date: "",
-          difficulty_level: null,
-          project_notes: "",
           hours_allocated: 32,
           ar_planning_id: "",
           ar_field_id: ""
@@ -923,35 +892,13 @@ const ProjectSetup = () => {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="startDate">Start date</Label>
-                      <Input
-                        id="startDate"
-                        type="date"
-                        value={projectData.start_date}
-                        onChange={(e) => handleProjectDataChange("start_date", e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="endDate">Expected End date</Label>
+                      <Label htmlFor="endDate">Expected End Date</Label>
                       <Input
                         id="endDate"
                         type="date"
                         value={projectData.expected_end_date}
                         onChange={(e) => handleProjectDataChange("expected_end_date", e.target.value)}
                       />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="difficultyLevel">Difficulty Level</Label>
-                      <Select value={projectData.difficulty_level || ""} onValueChange={(value) => handleProjectDataChange("difficulty_level", value)}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="High / Medium / Low" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="high">High</SelectItem>
-                          <SelectItem value="medium">Medium</SelectItem>
-                          <SelectItem value="low">Low</SelectItem>
-                        </SelectContent>
-                      </Select>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="hoursAllocated">Hours Allocated</Label>
@@ -965,31 +912,17 @@ const ProjectSetup = () => {
                     </div>
                   </div>
                   
-                  {/* Project Notes and Attachments side by side */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Project-level Attachments */}
+                  {projectId && (
                     <div className="space-y-2">
-                      <Label htmlFor="notes">Project Notes</Label>
-                      <Textarea
-                        id="notes"
-                        value={projectData.project_notes}
-                        onChange={(e) => handleProjectDataChange("project_notes", e.target.value)}
-                        placeholder="Project notes..."
-                        className="min-h-32"
+                      <FileAttachment
+                        projectId={projectId}
+                        attachments={projectAttachments}
+                        onAttachmentsChange={() => fetchProjectAttachments(projectId)}
+                        canEdit={canEditProject}
                       />
                     </div>
-                    
-                    {/* Project-level Attachments - Visible to all users */}
-                    {projectId && (
-                      <div className="space-y-2">
-                        <FileAttachment
-                          projectId={projectId}
-                          attachments={projectAttachments}
-                          onAttachmentsChange={() => fetchProjectAttachments(projectId)}
-                          canEdit={canEditProject}
-                        />
-                      </div>
-                    )}
-                  </div>
+                  )}
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
                     <div className="space-y-2">
@@ -1041,7 +974,6 @@ const ProjectSetup = () => {
                             <TableHead className="min-w-48">Task Name</TableHead>
                             <TableHead className="w-32">AR Assigned</TableHead>
                             <TableHead className="w-32">Due Date</TableHead>
-                            <TableHead className="min-w-36">Priority</TableHead>
                             <TableHead className="w-24">Hours</TableHead>
                             <TableHead className="min-w-32">Notes</TableHead>
                             <TableHead className="w-16">Actions</TableHead>

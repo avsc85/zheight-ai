@@ -15,6 +15,8 @@ import ProjectManagement from "./pages/ProjectManagement";
 import ProjectBoard from "./pages/ProjectBoard";
 import ProjectSetup from "./pages/ProjectSetup";
 import ProjectTracking from "./pages/ProjectTracking";
+import AdminDashboard from "./pages/AdminDashboard";
+import ProjectDashboardView from "./pages/ProjectDashboardView";
 import NotFound from "./pages/NotFound";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -103,6 +105,22 @@ const App = () => (
             element={
               <ProtectedRoute>
                 <ProjectTracking />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/project-mgmt/dashboard" 
+            element={
+              <ProtectedRoute>
+                <AdminDashboard />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/project-mgmt/dashboard/:projectId" 
+            element={
+              <ProtectedRoute>
+                <ProjectDashboardView />
               </ProtectedRoute>
             } 
           />
