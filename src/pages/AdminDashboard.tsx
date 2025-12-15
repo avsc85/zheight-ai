@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   LayoutDashboard, 
   TrendingUp, 
@@ -20,10 +19,7 @@ import {
   Calendar,
   FolderKanban,
   Table as TableIcon,
-  Grid3x3,
-  Edit,
-  Save,
-  X
+  Grid3x3
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -44,488 +40,7 @@ interface ProjectSummary {
   completion_percentage: number;
   days_remaining: number;
   status: string;
-  tasks?: any[];
 }
-
-// Helper functions - defined before components
-const getStatusBadge = (status: string) => {
-  const styles = {
-    completed: "bg-green-100 text-green-800 hover:bg-green-200",
-    active: "bg-blue-100 text-blue-800 hover:bg-blue-200",
-    urgent: "bg-orange-100 text-orange-800 hover:bg-orange-200",
-    overdue: "bg-red-100 text-red-800 hover:bg-red-200",
-  };
-  return (
-    <Badge className={styles[status as keyof typeof styles] || styles.active}>
-      {status.charAt(0).toUpperCase() + status.slice(1)}
-    </Badge>
-  );
-};
-
-const getTaskStatusBadge = (status: string) => {
-  const styles = {
-    completed: "bg-green-100 text-green-700 border-green-300",
-    started: "bg-blue-100 text-blue-700 border-blue-300",
-    in_queue: "bg-gray-100 text-gray-700 border-gray-300",
-    on_hold: "bg-yellow-100 text-yellow-700 border-yellow-300",
-  };
-  const labels = {
-    completed: "Completed",
-    started: "In Progress",
-    in_queue: "In Queue",
-    on_hold: "On Hold",
-  };
-  return (
-    <Badge variant="outline" className={styles[status as keyof typeof styles] || styles.in_queue}>
-      {labels[status as keyof typeof labels] || status}
-    </Badge>
-  );
-};
-
-const getLatestTask = (project: ProjectSummary) => {
-  if (!project.tasks || project.tasks.length === 0) return null;
-  
-  // First try to get the in-progress task
-  const inProgressTask = project.tasks.find(t => t.task_status === 'started');
-  if (inProgressTask) return inProgressTask;
-  
-  // Otherwise get the most recent task by due date
-  const sortedTasks = [...project.tasks].sort((a, b) => {
-    if (!a.due_date) return 1;
-    if (!b.due_date) return -1;
-    return new Date(b.due_date).getTime() - new Date(a.due_date).getTime();
-  });
-  
-  return sortedTasks[0];
-};
-
-// Project Card Component for Grid View
-interface ProjectCardProps {
-  project: ProjectSummary;
-  allUsers: any[];
-  getStatusBadge: (status: string) => JSX.Element;
-  getLatestTask: (project: ProjectSummary) => any;
-  updateTaskAR: (taskId: string, arId: string) => Promise<void>;
-  navigate: any;
-}
-
-const ProjectCard = ({ project, allUsers, getStatusBadge, getLatestTask, updateTaskAR, navigate }: ProjectCardProps) => {
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [isEditingAR, setIsEditingAR] = useState(false);
-  const [tempARId, setTempARId] = useState<string | null>(null);
-  
-  const latestTask = getLatestTask(project);
-  const currentTask = selectedTaskId 
-    ? project.tasks?.find(t => t.task_id === selectedTaskId)
-    : latestTask;
-
-  const currentAR = currentTask?.assigned_ar_id 
-    ? allUsers.find(u => u.id === currentTask.assigned_ar_id)
-    : null;
-
-  const handleSaveAR = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (currentTask?.task_id && tempARId) {
-      await updateTaskAR(currentTask.task_id, tempARId);
-      setIsEditingAR(false);
-      setTempARId(null);
-    }
-  };
-
-  const handleCancelEdit = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setIsEditingAR(false);
-    setTempARId(null);
-  };
-
-  const assignableUsers = allUsers.filter(u => 
-    u.role !== 'pm' && u.role !== 'admin'
-  );
-
-  return (
-    <Card className="hover:shadow-lg transition-shadow">
-      <CardHeader>
-        <div className="flex items-start justify-between">
-          <div className="flex-1">
-            <CardTitle className="text-lg mb-2">{project.project_name}</CardTitle>
-            <CardDescription className="flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              {project.project_manager_name}
-            </CardDescription>
-          </div>
-          {getStatusBadge(project.status)}
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          {/* Progress Bar */}
-          <div>
-            <div className="flex justify-between text-sm mb-2">
-              <span className="text-muted-foreground">Progress</span>
-              <span className="font-semibold">{project.completion_percentage}%</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div
-                className="bg-primary h-2 rounded-full transition-all"
-                style={{ width: `${project.completion_percentage}%` }}
-              ></div>
-            </div>
-          </div>
-
-          {/* Stats */}
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <p className="text-muted-foreground">Total Tasks</p>
-              <p className="font-semibold">{project.total_tasks}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Completed</p>
-              <p className="font-semibold text-green-600">{project.completed_tasks}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">In Progress</p>
-              <p className="font-semibold text-blue-600">{project.in_progress_tasks}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Overdue</p>
-              <p className="font-semibold text-red-600">{project.overdue_tasks}</p>
-            </div>
-          </div>
-
-          {/* Timeline */}
-          <div className="flex items-center gap-2 text-sm">
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-            <span className="text-muted-foreground">
-              {project.days_remaining > 0
-                ? `${project.days_remaining} days remaining`
-                : project.days_remaining === 0
-                ? "Due today"
-                : `${Math.abs(project.days_remaining)} days overdue`}
-            </span>
-          </div>
-
-          {/* Task Selection */}
-          <div onClick={(e) => e.stopPropagation()}>
-            <p className="text-sm font-medium text-muted-foreground mb-2">Task Name</p>
-            <Select
-              value={selectedTaskId || (latestTask?.task_id || "")}
-              onValueChange={(value) => {
-                setSelectedTaskId(value);
-                setIsEditingAR(false);
-                setTempARId(null);
-              }}
-            >
-              <SelectTrigger className="h-9 bg-white">
-                <SelectValue placeholder="Select task..." />
-              </SelectTrigger>
-              <SelectContent className="bg-white">
-                {project.tasks?.map(task => (
-                  <SelectItem 
-                    key={task.task_id} 
-                    value={task.task_id}
-                    className="hover:bg-blue-50 focus:bg-blue-100 cursor-pointer"
-                  >
-                    <span className="font-medium text-gray-900">{task.task_name}</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Task Status */}
-          <div onClick={(e) => e.stopPropagation()}>
-            <p className="text-sm font-medium text-muted-foreground mb-2">Task Status</p>
-            {currentTask ? (
-              getTaskStatusBadge(currentTask.task_status)
-            ) : (
-              <span className="text-sm text-muted-foreground">No task selected</span>
-            )}
-          </div>
-
-          {/* AR Assignment */}
-          <div onClick={(e) => e.stopPropagation()}>
-            <p className="text-sm font-medium text-muted-foreground mb-2">Assigned AR</p>
-            {currentTask ? (
-              <div className="flex items-center gap-2">
-                {isEditingAR ? (
-                  <>
-                    <Select
-                      value={tempARId || currentTask.assigned_ar_id || ""}
-                      onValueChange={setTempARId}
-                    >
-                      <SelectTrigger className="h-9 flex-1 bg-white">
-                        <SelectValue placeholder="Select AR..." />
-                      </SelectTrigger>
-                      <SelectContent className="bg-white">
-                        {assignableUsers.map(user => (
-                          <SelectItem 
-                            key={user.id} 
-                            value={user.id}
-                            className="hover:bg-purple-50 focus:bg-purple-100 cursor-pointer"
-                          >
-                            <span className="font-medium text-gray-900">{user.name}</span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-9 w-9 p-0 text-green-600"
-                      onClick={handleSaveAR}
-                    >
-                      <Save className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-9 w-9 p-0 text-red-600"
-                      onClick={handleCancelEdit}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <div className="flex-1 px-3 py-2 bg-secondary rounded-md text-sm font-medium">
-                      {currentAR ? currentAR.name : "No AR assigned"}
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-9 w-9 p-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setIsEditingAR(true);
-                      }}
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                  </>
-                )}
-              </div>
-            ) : (
-              <div className="px-3 py-2 bg-secondary rounded-md text-sm text-muted-foreground">
-                No task selected
-              </div>
-            )}
-          </div>
-
-          {/* View Button */}
-          <Button 
-            className="w-full" 
-            variant="outline"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              navigate(`/project-mgmt/dashboard/${project.id}`);
-            }}
-          >
-            <BarChart3 className="h-4 w-4" />
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-};
-
-// Project Row Component
-interface ProjectRowProps {
-  project: ProjectSummary;
-  allUsers: any[];
-  getStatusBadge: (status: string) => JSX.Element;
-  getLatestTask: (project: ProjectSummary) => any;
-  updateTaskAR: (taskId: string, arId: string) => Promise<void>;
-  navigate: any;
-}
-
-const ProjectRow = ({ project, allUsers, getStatusBadge, getLatestTask, updateTaskAR, navigate }: ProjectRowProps) => {
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [isEditingAR, setIsEditingAR] = useState(false);
-  const [tempARId, setTempARId] = useState<string | null>(null);
-  
-  const latestTask = getLatestTask(project);
-  const currentTask = selectedTaskId 
-    ? project.tasks?.find(t => t.task_id === selectedTaskId)
-    : latestTask;
-
-  const currentAR = currentTask?.assigned_ar_id 
-    ? allUsers.find(u => u.id === currentTask.assigned_ar_id)
-    : null;
-
-  const handleSaveAR = async () => {
-    if (currentTask?.task_id && tempARId) {
-      await updateTaskAR(currentTask.task_id, tempARId);
-      setIsEditingAR(false);
-      setTempARId(null);
-    }
-  };
-
-  const handleCancelEdit = () => {
-    setIsEditingAR(false);
-    setTempARId(null);
-  };
-
-  // Filter users: exclude PM and Admin roles
-  const assignableUsers = allUsers.filter(u => 
-    u.role !== 'pm' && u.role !== 'admin'
-  );
-
-  return (
-    <TableRow className="hover:bg-accent">
-      <TableCell className="font-medium">{project.project_name}</TableCell>
-      
-      {/* PM Column - Read Only */}
-      <TableCell>
-        <span className="text-sm font-medium">{project.project_manager_name}</span>
-      </TableCell>
-
-      <TableCell>{getStatusBadge(project.status)}</TableCell>
-      
-      {/* Due Date */}
-      <TableCell>
-        <div className="flex flex-col text-sm">
-          <span className="whitespace-nowrap">{project.expected_end_date || "N/A"}</span>
-          {project.days_remaining !== 0 && (
-            <span className={`text-xs whitespace-nowrap ${project.days_remaining < 0 ? "text-red-600" : "text-muted-foreground"}`}>
-              {project.days_remaining > 0 
-                ? `${project.days_remaining}d left` 
-                : `${Math.abs(project.days_remaining)}d overdue`}
-            </span>
-          )}
-        </div>
-      </TableCell>
-
-      {/* Progress */}
-      <TableCell>
-        <div className="flex items-center gap-2">
-          <div className="w-20 bg-gray-200 rounded-full h-2">
-            <div
-              className="bg-primary h-2 rounded-full"
-              style={{ width: `${project.completion_percentage}%` }}
-            ></div>
-          </div>
-          <span className="text-sm font-medium">{project.completion_percentage}%</span>
-        </div>
-      </TableCell>
-
-      {/* Task Selection Dropdown */}
-      <TableCell className="max-w-[220px]">
-        <Select
-          value={selectedTaskId || (latestTask?.task_id || "")}
-          onValueChange={(value) => {
-            setSelectedTaskId(value);
-            setIsEditingAR(false);
-            setTempARId(null);
-          }}
-        >
-          <SelectTrigger className="h-9 w-full bg-white">
-            <SelectValue placeholder="Select task..." />
-          </SelectTrigger>
-          <SelectContent className="bg-white max-w-[300px]">
-            {project.tasks?.map(task => (
-              <SelectItem 
-                key={task.task_id} 
-                value={task.task_id}
-                className="hover:bg-blue-50 focus:bg-blue-100 cursor-pointer"
-              >
-                <span className="font-medium text-gray-900">{task.task_name}</span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </TableCell>
-
-      {/* Task Status Badge */}
-      <TableCell>
-        {currentTask ? (
-          getTaskStatusBadge(currentTask.task_status)
-        ) : (
-          <span className="text-sm text-muted-foreground">-</span>
-        )}
-      </TableCell>
-
-      {/* AR Assignment - Shows current AR or allows editing */}
-      <TableCell>
-        {currentTask ? (
-          <div className="flex items-center gap-2">
-            {isEditingAR ? (
-              <>
-                <Select
-                  value={tempARId || currentTask.assigned_ar_id || ""}
-                  onValueChange={setTempARId}
-                >
-                  <SelectTrigger className="h-9 w-48 bg-white">
-                    <SelectValue placeholder="Select AR..." />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white">
-                    {assignableUsers.map(user => (
-                      <SelectItem 
-                        key={user.id} 
-                        value={user.id}
-                        className="hover:bg-purple-50 focus:bg-purple-100 cursor-pointer"
-                      >
-                        <span className="font-medium text-gray-900">
-                          {user.name} <span className="text-xs text-gray-500">({user.role.replace('ar1_planning', 'AR Planning').replace('ar2_field', 'AR Field')})</span>
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-8 w-8 p-0 text-green-600"
-                  onClick={handleSaveAR}
-                >
-                  <Save className="h-4 w-4" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-8 w-8 p-0 text-red-600"
-                  onClick={handleCancelEdit}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </>
-            ) : (
-              <>
-                <span className="text-sm font-medium min-w-[120px]">
-                  {currentAR ? currentAR.name : "No AR assigned"}
-                </span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-8 w-8 p-0"
-                  onClick={() => setIsEditingAR(true)}
-                >
-                  <Edit className="h-4 w-4" />
-                </Button>
-              </>
-            )}
-          </div>
-        ) : (
-          <span className="text-sm text-muted-foreground">No task selected</span>
-        )}
-      </TableCell>
-
-      {/* View Dashboard Action */}
-      <TableCell>
-        <Button 
-          size="sm" 
-          variant="outline"
-          onClick={(e) => {
-            e.stopPropagation();
-            navigate(`/project-mgmt/dashboard/${project.id}`);
-          }}
-        >
-          <BarChart3 className="h-4 w-4" />
-        </Button>
-      </TableCell>
-    </TableRow>
-  );
-};
 
 const AdminDashboard = () => {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
@@ -533,7 +48,6 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
-  const [allUsers, setAllUsers] = useState<any[]>([]);
   const [statsOverview, setStatsOverview] = useState({
     totalProjects: 0,
     activeProjects: 0,
@@ -550,7 +64,6 @@ const AdminDashboard = () => {
   useEffect(() => {
     // Always fetch data, let the component render
     fetchAllProjects();
-    fetchAllUsers();
   }, []);
 
   const fetchAllProjects = async () => {
@@ -632,7 +145,6 @@ const AdminDashboard = () => {
           completion_percentage: completionPercentage,
           days_remaining: daysRemaining,
           status,
-          tasks: projectTasks
         });
       }
 
@@ -660,86 +172,6 @@ const AdminDashboard = () => {
     }
   };
 
-  const fetchAllUsers = async () => {
-    try {
-      console.log("Fetching all users...");
-      
-      const { data: userRoles, error: rolesError } = await supabase
-        .from('user_roles')
-        .select('user_id, role');
-
-      if (rolesError) {
-        console.error("Error fetching user roles:", rolesError);
-        return;
-      }
-
-      if (!userRoles || userRoles.length === 0) {
-        console.log("No user roles found");
-        return;
-      }
-
-      console.log("User roles fetched:", userRoles.length);
-
-      const userIds = userRoles.map(ur => ur.user_id);
-      
-      const { data: profiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('user_id, name')
-        .in('user_id', userIds);
-
-      if (profilesError) {
-        console.error("Error fetching profiles:", profilesError);
-        return;
-      }
-
-      if (profiles) {
-        const usersWithRoles = profiles.map(profile => {
-          const role = userRoles.find(ur => ur.user_id === profile.user_id)?.role || '';
-          return {
-            id: profile.user_id,
-            name: profile.name,
-            role: role
-          };
-        });
-        console.log("Users with roles:", usersWithRoles);
-        setAllUsers(usersWithRoles);
-      }
-    } catch (error) {
-      console.error("Error fetching users:", error);
-    }
-  };
-
-  const updateTaskAR = async (taskId: string, arId: string) => {
-    try {
-      // Update the task AR assignment
-      // Database trigger (trigger_task_assignment_email) will automatically handle email notification
-      const { error: updateError } = await supabase
-        .from('project_tasks')
-        .update({ 
-          assigned_ar_id: arId,
-          assigned_skip_flag: 'Y'  // 'Y' = AR assigned, 'N' = No AR
-        })
-        .eq('task_id', taskId);
-
-      if (updateError) throw updateError;
-
-      toast({
-        title: "Success",
-        description: "AR assigned successfully! Email notification will be sent.",
-      });
-
-      fetchAllProjects();
-    } catch (error) {
-      console.error("Error updating AR:", error);
-      toast({
-        title: "Error",
-        description: "Failed to assign AR.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Filter projects when search term changes
   useEffect(() => {
     if (searchTerm) {
       const filtered = projects.filter(p =>
@@ -751,6 +183,21 @@ const AdminDashboard = () => {
       setFilteredProjects(projects);
     }
   }, [searchTerm, projects]);
+
+  const getStatusBadge = (status: string) => {
+    const styles = {
+      completed: "bg-green-100 text-green-800 hover:bg-green-200",
+      active: "bg-blue-100 text-blue-800 hover:bg-blue-200",
+      urgent: "bg-orange-100 text-orange-800 hover:bg-orange-200",
+      overdue: "bg-red-100 text-red-800 hover:bg-red-200",
+    };
+    return (
+      <Badge className={styles[status as keyof typeof styles] || styles.active}>
+        {status.charAt(0).toUpperCase() + status.slice(1)}
+      </Badge>
+    );
+  };
+
 
   if (loading) {
     return (
@@ -891,18 +338,87 @@ const AdminDashboard = () => {
 
         {/* Projects Grid View */}
         {viewMode === "grid" && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-            {filteredProjects.map((project) => (
-              <ProjectCard
-                key={project.id}
-                project={project}
-                allUsers={allUsers}
-                getStatusBadge={getStatusBadge}
-                getLatestTask={getLatestTask}
-                updateTaskAR={updateTaskAR}
-                navigate={navigate}
-              />
-            ))}
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">{filteredProjects.map((project) => (
+            <Card
+              key={project.id}
+              className="hover:shadow-lg transition-shadow cursor-pointer"
+              onClick={() => navigate(`/project-mgmt/dashboard/${project.id}`)}
+            >
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <CardTitle className="text-lg mb-2">{project.project_name}</CardTitle>
+                    <CardDescription className="flex items-center gap-2">
+                      <Users className="h-4 w-4" />
+                      {project.project_manager_name}
+                    </CardDescription>
+                  </div>
+                  {getStatusBadge(project.status)}
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {/* Progress Bar */}
+                  <div>
+                    <div className="flex justify-between text-sm mb-2">
+                      <span className="text-muted-foreground">Progress</span>
+                      <span className="font-semibold">{project.completion_percentage}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-primary h-2 rounded-full transition-all"
+                        style={{ width: `${project.completion_percentage}%` }}
+                      ></div>
+                    </div>
+                  </div>
+
+                  {/* Stats */}
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-muted-foreground">Total Tasks</p>
+                      <p className="font-semibold">{project.total_tasks}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Completed</p>
+                      <p className="font-semibold text-green-600">{project.completed_tasks}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">In Progress</p>
+                      <p className="font-semibold text-blue-600">{project.in_progress_tasks}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Overdue</p>
+                      <p className="font-semibold text-red-600">{project.overdue_tasks}</p>
+                    </div>
+                  </div>
+
+                  {/* Timeline */}
+                  <div className="flex items-center gap-2 text-sm">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-muted-foreground">
+                      {project.days_remaining > 0
+                        ? `${project.days_remaining} days remaining`
+                        : project.days_remaining === 0
+                        ? "Due today"
+                        : `${Math.abs(project.days_remaining)} days overdue`}
+                    </span>
+                  </div>
+
+                  {/* Status */}
+                  <div className="flex items-center justify-between">
+                    {getStatusBadge(project.status)}
+                    <span className="text-sm text-muted-foreground">{project.hours_allocated}h allocated</span>
+                  </div>
+
+                  {/* View Button */}
+                  <Button className="w-full" variant="outline">
+                    <BarChart3 className="h-4 w-4 mr-2" />
+                    View Dashboard
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
           </div>
         )}
 
@@ -916,25 +432,80 @@ const AdminDashboard = () => {
                     <TableHead>Project Name</TableHead>
                     <TableHead>PM</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Start Date</TableHead>
                     <TableHead>Due Date</TableHead>
                     <TableHead>Progress</TableHead>
-                    <TableHead className="w-[220px]">Task Name</TableHead>
-                    <TableHead>Task Status</TableHead>
-                    <TableHead>Assigned AR</TableHead>
+                    <TableHead>Tasks</TableHead>
+                    <TableHead>Active AR</TableHead>
+                    <TableHead>Priority</TableHead>
                     <TableHead>Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredProjects.map((project) => (
-                    <ProjectRow
+                    <TableRow 
                       key={project.id}
-                      project={project}
-                      allUsers={allUsers}
-                      getStatusBadge={getStatusBadge}
-                      getLatestTask={getLatestTask}
-                      updateTaskAR={updateTaskAR}
-                      navigate={navigate}
-                    />
+                      className="cursor-pointer hover:bg-accent"
+                      onClick={() => navigate(`/project-mgmt/dashboard/${project.id}`)}
+                    >
+                      <TableCell className="font-medium">{project.project_name}</TableCell>
+                      <TableCell>{project.project_manager_name}</TableCell>
+                      <TableCell>{getStatusBadge(project.status)}</TableCell>
+                      <TableCell>{project.start_date || "N/A"}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span>{project.expected_end_date || "N/A"}</span>
+                          {project.days_remaining !== 0 && (
+                            <span className={`text-xs ${project.days_remaining < 0 ? "text-red-600" : "text-muted-foreground"}`}>
+                              {project.days_remaining > 0 
+                                ? `${project.days_remaining}d left` 
+                                : `${Math.abs(project.days_remaining)}d overdue`}
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <div className="w-20 bg-gray-200 rounded-full h-2">
+                            <div
+                              className="bg-primary h-2 rounded-full"
+                              style={{ width: `${project.completion_percentage}%` }}
+                            ></div>
+                          </div>
+                          <span className="text-sm font-medium">{project.completion_percentage}%</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm">
+                          <div className="flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3 text-green-600" />
+                            <span>{project.completed_tasks}</span>
+                          </div>
+                          <div className="flex items-center gap-1 text-muted-foreground">
+                            <Clock className="h-3 w-3" />
+                            <span>{project.in_progress_tasks} active</span>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm text-muted-foreground">
+                          {project.in_progress_tasks > 0 ? `${project.in_progress_tasks} AR(s)` : "None"}
+                        </span>
+                      </TableCell>
+                      <TableCell>{getStatusBadge(project.status)}</TableCell>
+                      <TableCell>
+                        <Button 
+                          size="sm" 
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/project-mgmt/dashboard/${project.id}`);
+                          }}
+                        >
+                          <BarChart3 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
                   ))}
                 </TableBody>
               </Table>

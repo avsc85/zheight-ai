@@ -561,7 +561,6 @@ export type Database = {
           notes_tasks: string | null
           notes_tasks_ar: string | null
           notes_tasks_pm: string | null
-          priority_exception: string | null
           project_id: string
           task_id: string
           task_name: string
@@ -582,7 +581,6 @@ export type Database = {
           notes_tasks?: string | null
           notes_tasks_ar?: string | null
           notes_tasks_pm?: string | null
-          priority_exception?: string | null
           project_id: string
           task_id?: string
           task_name: string
@@ -603,7 +601,6 @@ export type Database = {
           notes_tasks?: string | null
           notes_tasks_ar?: string | null
           notes_tasks_pm?: string | null
-          priority_exception?: string | null
           project_id?: string
           task_id?: string
           task_name?: string
@@ -627,7 +624,6 @@ export type Database = {
           ar_planning_id: string | null
           created_at: string
           deleted_at: string | null
-          difficulty_level: string | null
           end_date: string | null
           expected_end_date: string | null
           hours_allocated: number | null
@@ -637,7 +633,6 @@ export type Database = {
           notes: string | null
           project_manager_name: string | null
           project_name: string
-          project_notes: string | null
           start_date: string | null
           status: string | null
           updated_at: string
@@ -648,7 +643,6 @@ export type Database = {
           ar_planning_id?: string | null
           created_at?: string
           deleted_at?: string | null
-          difficulty_level?: string | null
           end_date?: string | null
           expected_end_date?: string | null
           hours_allocated?: number | null
@@ -658,7 +652,6 @@ export type Database = {
           notes?: string | null
           project_manager_name?: string | null
           project_name: string
-          project_notes?: string | null
           start_date?: string | null
           status?: string | null
           updated_at?: string
@@ -669,7 +662,6 @@ export type Database = {
           ar_planning_id?: string | null
           created_at?: string
           deleted_at?: string | null
-          difficulty_level?: string | null
           end_date?: string | null
           expected_end_date?: string | null
           hours_allocated?: number | null
@@ -679,7 +671,6 @@ export type Database = {
           notes?: string | null
           project_manager_name?: string | null
           project_name?: string
-          project_notes?: string | null
           start_date?: string | null
           status?: string | null
           updated_at?: string
