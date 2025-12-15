@@ -31,7 +31,6 @@ interface ProjectSummary {
   project_manager_name: string;
   start_date: string;
   expected_end_date: string;
-  difficulty_level: string;
   hours_allocated: number;
   total_tasks: number;
   completed_tasks: number;
@@ -137,7 +136,6 @@ const AdminDashboard = () => {
           project_manager_name: project.project_manager_name || "Unassigned",
           start_date: project.start_date,
           expected_end_date: project.expected_end_date,
-          difficulty_level: project.difficulty_level || "medium",
           hours_allocated: project.hours_allocated || 0,
           total_tasks: projectTasks.length,
           completed_tasks: completedTasks,
@@ -200,18 +198,6 @@ const AdminDashboard = () => {
     );
   };
 
-  const getDifficultyBadge = (level: string) => {
-    const styles = {
-      high: "bg-red-50 text-red-700 border-red-200",
-      medium: "bg-yellow-50 text-yellow-700 border-yellow-200",
-      low: "bg-green-50 text-green-700 border-green-200",
-    };
-    return (
-      <Badge variant="outline" className={styles[level as keyof typeof styles] || styles.medium}>
-        {level.charAt(0).toUpperCase() + level.slice(1)}
-      </Badge>
-    );
-  };
 
   if (loading) {
     return (
@@ -418,9 +404,9 @@ const AdminDashboard = () => {
                     </span>
                   </div>
 
-                  {/* Difficulty */}
+                  {/* Status */}
                   <div className="flex items-center justify-between">
-                    {getDifficultyBadge(project.difficulty_level)}
+                    {getStatusBadge(project.status)}
                     <span className="text-sm text-muted-foreground">{project.hours_allocated}h allocated</span>
                   </div>
 
@@ -451,7 +437,7 @@ const AdminDashboard = () => {
                     <TableHead>Progress</TableHead>
                     <TableHead>Tasks</TableHead>
                     <TableHead>Active AR</TableHead>
-                    <TableHead>Difficulty</TableHead>
+                    <TableHead>Priority</TableHead>
                     <TableHead>Action</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -506,7 +492,7 @@ const AdminDashboard = () => {
                           {project.in_progress_tasks > 0 ? `${project.in_progress_tasks} AR(s)` : "None"}
                         </span>
                       </TableCell>
-                      <TableCell>{getDifficultyBadge(project.difficulty_level)}</TableCell>
+                      <TableCell>{getStatusBadge(project.status)}</TableCell>
                       <TableCell>
                         <Button 
                           size="sm" 
