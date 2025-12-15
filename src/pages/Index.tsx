@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/contexts/AuthContext";
 import { Bot, FileCheck, Folder, Calculator, Zap } from "lucide-react";
 
 const Index = () => {

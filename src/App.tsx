@@ -18,9 +18,19 @@ import ProjectTracking from "./pages/ProjectTracking";
 import AdminDashboard from "./pages/AdminDashboard";
 import ProjectDashboardView from "./pages/ProjectDashboardView";
 import NotFound from "./pages/NotFound";
-import { useAuth } from "@/hooks/useAuth";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 
-const queryClient = new QueryClient();
+// Configure QueryClient with optimal caching defaults
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 2 * 60 * 1000, // 2 minutes - data considered fresh
+      gcTime: 10 * 60 * 1000, // 10 minutes - keep in cache
+      refetchOnWindowFocus: false, // Don't refetch on tab focus
+      retry: 1, // Only retry once on failure
+    },
+  },
+});
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
@@ -42,93 +52,95 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/invite" element={<Invite />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<PasswordReset />} />
-          <Route 
-            path="/ai-plan-checker" 
-            element={
-              <ProtectedRoute>
-                <AIPlanChecker />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/ai-feasibility" 
-            element={
-              <ProtectedRoute>
-                <AIFeasibility />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/admin/users" 
-            element={
-              <ProtectedRoute>
-                <UserManagement />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/project-mgmt" 
-            element={
-              <ProtectedRoute>
-                <ProjectManagement />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/project-mgmt/board" 
-            element={
-              <ProtectedRoute>
-                <ProjectBoard />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/project-mgmt/setup/:projectId?" 
-            element={
-              <ProtectedRoute>
-                <ProjectSetup />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/project-mgmt/tracking" 
-            element={
-              <ProtectedRoute>
-                <ProjectTracking />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/project-mgmt/dashboard" 
-            element={
-              <ProtectedRoute>
-                <AdminDashboard />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/project-mgmt/dashboard/:projectId" 
-            element={
-              <ProtectedRoute>
-                <ProjectDashboardView />
-              </ProtectedRoute>
-            } 
-          />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
+    <AuthProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/invite" element={<Invite />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<PasswordReset />} />
+            <Route 
+              path="/ai-plan-checker" 
+              element={
+                <ProtectedRoute>
+                  <AIPlanChecker />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/ai-feasibility" 
+              element={
+                <ProtectedRoute>
+                  <AIFeasibility />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/admin/users" 
+              element={
+                <ProtectedRoute>
+                  <UserManagement />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/project-mgmt" 
+              element={
+                <ProtectedRoute>
+                  <ProjectManagement />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/project-mgmt/board" 
+              element={
+                <ProtectedRoute>
+                  <ProjectBoard />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/project-mgmt/setup/:projectId?" 
+              element={
+                <ProtectedRoute>
+                  <ProjectSetup />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/project-mgmt/tracking" 
+              element={
+                <ProtectedRoute>
+                  <ProjectTracking />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/project-mgmt/dashboard" 
+              element={
+                <ProtectedRoute>
+                  <AdminDashboard />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/project-mgmt/dashboard/:projectId" 
+              element={
+                <ProtectedRoute>
+                  <ProjectDashboardView />
+                </ProtectedRoute>
+              } 
+            />
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </AuthProvider>
   </QueryClientProvider>
 );
 
