@@ -84,11 +84,11 @@ export default function AIFeasibility() {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-6 py-8">
         <div className="space-y-8">
-          {/* Header Section */}
-          <div className="text-center space-y-2">
-            <h1 className="text-3xl font-bold text-foreground">AI Feasibility Analyzer</h1>
+          {/* Page Header */}
+          <div className="mb-2">
+            <h1 className="text-3xl font-bold text-foreground mb-2">AI Feasibility Analyzer</h1>
             <p className="text-muted-foreground">
               Analyze residential single-family house feasibility using AI-powered lot analysis
             </p>

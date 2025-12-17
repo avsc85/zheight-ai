@@ -18,6 +18,9 @@ export default {
 			}
 		},
 		extend: {
+			fontFamily: {
+				sans: ['Inter', 'system-ui', 'sans-serif'],
+			},
 			colors: {
 				border: 'hsl(var(--border))',
 				input: 'hsl(var(--input))',
@@ -63,17 +66,32 @@ export default {
 					'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
+				},
+				// Monday.com inspired status colors
+				status: {
+					done: 'hsl(var(--status-done))',
+					started: 'hsl(var(--status-started))',
+					queue: 'hsl(var(--status-queue))',
+					ready: 'hsl(var(--status-ready))',
+					blocked: 'hsl(var(--status-blocked))'
+				},
+				// Header colors
+				header: {
+					DEFAULT: 'hsl(var(--header-bg))',
+					foreground: 'hsl(var(--header-foreground))'
 				}
 			},
 			backgroundImage: {
 				'gradient-primary': 'var(--gradient-primary)',
 				'gradient-accent': 'var(--gradient-accent)',
-				'gradient-subtle': 'var(--gradient-subtle)'
+				'gradient-subtle': 'var(--gradient-subtle)',
+				'gradient-hero': 'var(--gradient-hero)'
 			},
 			boxShadow: {
 				'primary': 'var(--shadow-primary)',
 				'accent': 'var(--shadow-accent)',
-				'soft': 'var(--shadow-soft)'
+				'soft': 'var(--shadow-soft)',
+				'card': 'var(--shadow-card)'
 			},
 			borderRadius: {
 				lg: 'var(--radius)',

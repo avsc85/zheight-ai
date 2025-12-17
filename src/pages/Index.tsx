@@ -3,156 +3,149 @@ import { Header } from "@/components/Header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { Bot, FileCheck, Folder, Calculator, Zap } from "lucide-react";
+import { Bot, FileCheck, Folder, Calculator, Zap, ArrowRight } from "lucide-react";
 
 const Index = () => {
   const { user } = useAuth();
 
-  const handlePromptChange = (prompt: string) => {
-    console.log("Prompt updated:", prompt);
-  };
-
   return (
-    <div className="min-h-screen bg-gradient-subtle">
+    <div className="min-h-screen bg-background">
       <Header />
       
-      <main className="container mx-auto px-6 py-8">
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-foreground mb-4">
-            zHeight Internal AI Applications
-          </h1>
-          <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-            Streamline your architectural workflow with AI-powered code compliance tools and project management
-          </p>
-          
-          {!user && (
-            <div className="mt-8">
+      {/* Hero Section */}
+      <section className="bg-header py-16 md:py-24">
+        <div className="container mx-auto px-6">
+          <div className="max-w-3xl">
+            <h1 className="text-4xl md:text-5xl font-bold text-header-foreground mb-6 leading-tight">
+              AI-Powered Building Code
+              <span className="text-primary block">Compliance & Project Management</span>
+            </h1>
+            <p className="text-xl text-header-foreground/70 mb-8 leading-relaxed">
+              Streamline your architectural workflow with intelligent tools for code compliance verification and project tracking.
+            </p>
+            
+            {!user && (
               <Link to="/auth">
-                <Button size="lg" className="mr-4">
-                  Sign In to Get Started
+                <Button size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2">
+                  Get Started
+                  <ArrowRight className="h-4 w-4" />
                 </Button>
               </Link>
-            </div>
-          )}
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* Tools Grid */}
+      <main className="container mx-auto px-6 py-12">
+        <div className="mb-8">
+          <h2 className="text-2xl font-semibold text-foreground mb-2">Available Tools</h2>
+          <p className="text-muted-foreground">Select a tool to get started with your workflow</p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
           {/* Project Management Tool */}
-          <Card className="hover:shadow-lg transition-shadow border-primary/20 flex flex-col h-full">
-            <CardHeader>
-              <CardTitle className="text-primary flex items-center gap-2">
-                <Folder className="h-5 w-5" />
-                Project Management Tool
-              </CardTitle>
-              <CardDescription>
+          <Card className="group hover:shadow-lg transition-all duration-300 border-border/50 hover:border-primary/30">
+            <CardHeader className="pb-4">
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center mb-3 group-hover:bg-primary/20 transition-colors">
+                <Folder className="h-5 w-5 text-primary" />
+              </div>
+              <CardTitle className="text-lg text-foreground">Project Management</CardTitle>
+              <CardDescription className="text-muted-foreground">
                 Comprehensive project setup, milestone tracking, and AR assignment system
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex-1 flex flex-col">
-              <p className="text-sm text-muted-foreground mb-4 flex-1">
-                Manage projects, assign tasks to ARs, and track progress through Kanban boards and detailed reporting.
-              </p>
+            <CardContent className="pt-0">
               <Link to="/project-mgmt">
-                <Button className="w-full">
-                  Access Project Management
+                <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground group-hover:shadow-primary transition-shadow">
+                  Open Dashboard
+                  <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>
               </Link>
             </CardContent>
           </Card>
 
           {/* AI Agent 1 */}
-          <Card className="hover:shadow-lg transition-shadow border-primary/20 flex flex-col h-full">
-            <CardHeader>
-              <CardTitle className="text-primary flex items-center gap-2">
-                <Bot className="h-5 w-5" />
-                AI Agent 1: Checklist Extractor
-              </CardTitle>
-              <CardDescription>
-                Extract compliance checklists from plan check documents
+          <Card className="group hover:shadow-lg transition-all duration-300 border-border/50 hover:border-primary/30">
+            <CardHeader className="pb-4">
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center mb-3 group-hover:bg-primary/20 transition-colors">
+                <Bot className="h-5 w-5 text-primary" />
+              </div>
+              <CardTitle className="text-lg text-foreground">Agent 1: Checklist Extractor</CardTitle>
+              <CardDescription className="text-muted-foreground">
+                Extract compliance checklists from plan check documents using AI
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex-1 flex flex-col">
-              <p className="text-sm text-muted-foreground mb-4 flex-1">
-                AI-powered analysis of architectural documents to extract compliance requirements.
-              </p>
+            <CardContent className="pt-0">
               <Link to="/ai-plan-checker">
-                <Button className="w-full">
-                  Access Checklist Extractor
+                <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground group-hover:shadow-primary transition-shadow">
+                  Extract Checklist
+                  <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>
               </Link>
             </CardContent>
           </Card>
           
           {/* AI Agent 2 */}
-          <Card className="hover:shadow-lg transition-shadow border-primary/20 flex flex-col h-full">
-            <CardHeader>
-              <CardTitle className="text-primary flex items-center gap-2">
-                <FileCheck className="h-5 w-5" />
-                AI Agent 2: Plan Checker
-              </CardTitle>
-              <CardDescription>
+          <Card className="group hover:shadow-lg transition-all duration-300 border-border/50 hover:border-primary/30">
+            <CardHeader className="pb-4">
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center mb-3 group-hover:bg-primary/20 transition-colors">
+                <FileCheck className="h-5 w-5 text-primary" />
+              </div>
+              <CardTitle className="text-lg text-foreground">Agent 2: Plan Checker</CardTitle>
+              <CardDescription className="text-muted-foreground">
                 Verify architectural plans against extracted requirements
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex-1 flex flex-col">
-              <p className="text-sm text-muted-foreground mb-4 flex-1">
-                Compare your architectural plans against compliance requirements for quality assurance.
-              </p>
+            <CardContent className="pt-0">
               <Link to="/ai-plan-checker">
-                <Button className="w-full">
-                  Access Plan Checker
+                <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground group-hover:shadow-primary transition-shadow">
+                  Check Plans
+                  <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>
               </Link>
             </CardContent>
           </Card>
-        </div>
 
-        {/* AI Agent 3 - Feasibility Checker */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
-          <Card className="hover:shadow-lg transition-shadow border-primary/20 flex flex-col h-full">
-            <CardHeader>
-              <CardTitle className="text-primary flex items-center gap-2">
-                <Calculator className="h-5 w-5" />
-                AI Agent 3: Feasibility Checker
-              </CardTitle>
-              <CardDescription>
+          {/* AI Agent 3 */}
+          <Card className="group hover:shadow-lg transition-all duration-300 border-border/50 hover:border-primary/30">
+            <CardHeader className="pb-4">
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center mb-3 group-hover:bg-primary/20 transition-colors">
+                <Calculator className="h-5 w-5 text-primary" />
+              </div>
+              <CardTitle className="text-lg text-foreground">Agent 3: Feasibility Checker</CardTitle>
+              <CardDescription className="text-muted-foreground">
                 AI-powered residential single-family house feasibility analysis
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex-1 flex flex-col">
-              <p className="text-sm text-muted-foreground mb-4 flex-1">
-                Analyze lot details, zoning, and jurisdiction data against local ordinance requirements for residential projects.
-              </p>
+            <CardContent className="pt-0">
               <Link to="/ai-feasibility">
-                <Button className="w-full">
-                  Access the Feasibility Checker
+                <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground group-hover:shadow-primary transition-shadow">
+                  Analyze Feasibility
+                  <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>
               </Link>
             </CardContent>
           </Card>
 
-          {/* AI Agent 4 - Title 24 Coming Soon */}
-          <Card className="hover:shadow-lg transition-shadow border-primary/20 flex flex-col h-full opacity-75">
-            <CardHeader>
-              <CardTitle className="text-primary flex items-center gap-2">
-                <Zap className="h-5 w-5" />
-                AI Agent 4: Title 24
-              </CardTitle>
-              <CardDescription>
+          {/* AI Agent 4 - Coming Soon */}
+          <Card className="group border-border/30 opacity-60">
+            <CardHeader className="pb-4">
+              <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center mb-3">
+                <Zap className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <CardTitle className="text-lg text-muted-foreground">Agent 4: Title 24</CardTitle>
+              <CardDescription className="text-muted-foreground">
                 California Title 24 energy compliance analysis
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex-1 flex flex-col">
-              <p className="text-sm text-muted-foreground mb-4 flex-1">
-                Analyze architectural designs for California Title 24 energy efficiency compliance and requirements.
-              </p>
-              <Button className="w-full" disabled>
+            <CardContent className="pt-0">
+              <Button className="w-full" variant="secondary" disabled>
                 Coming Soon
               </Button>
             </CardContent>
           </Card>
         </div>
-
       </main>
     </div>
   );

@@ -4,11 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import zHeightLogo from "@/assets/zheight-logo.png";
 
 const Auth = () => {
   const [loading, setLoading] = useState(false);
@@ -117,58 +117,59 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-subtle flex items-center justify-center p-6">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">zHeight Internal AI</CardTitle>
-          <p className="text-muted-foreground">Sign in to access the project management system</p>
+    <div className="min-h-screen bg-header flex items-center justify-center p-6">
+      <Card className="w-full max-w-md shadow-xl border-0">
+        <CardHeader className="text-center pb-2">
+          <div className="flex justify-center mb-4">
+            <img src={zHeightLogo} alt="zHeight Logo" className="h-12 w-auto" />
+          </div>
+          <CardTitle className="text-2xl font-bold text-foreground">Welcome Back</CardTitle>
+          <p className="text-muted-foreground text-sm mt-1">Sign in to access the project management system</p>
         </CardHeader>
-        <CardContent>
-          <div className="w-full">{/* Removed tabs, only signin now */}
+        <CardContent className="pt-4">
+          <form onSubmit={handleSignIn} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="signin-email" className="text-foreground">Email</Label>
+              <Input
+                id="signin-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter your email"
+                className="bg-background border-border focus:border-primary focus:ring-primary"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="signin-password" className="text-foreground">Password</Label>
+              <Input
+                id="signin-password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter your password"
+                className="bg-background border-border focus:border-primary focus:ring-primary"
+                required
+              />
+            </div>
+            {error && (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" disabled={loading}>
+              {loading ? "Signing In..." : "Sign In"}
+            </Button>
             
-            {/* Sign In Form - No longer in tabs */}
-            <form onSubmit={handleSignIn} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="signin-email">Email</Label>
-                  <Input
-                    id="signin-email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="Enter your email"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="signin-password">Password</Label>
-                  <Input
-                    id="signin-password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter your password"
-                    required
-                  />
-                </div>
-                {error && (
-                  <Alert variant="destructive">
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
-                )}
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? "Signing In..." : "Sign In"}
-                </Button>
-                
-                <div className="text-center">
-                  <Link 
-                    to="/forgot-password" 
-                    className="text-sm text-primary hover:underline"
-                  >
-                    Forgot your password?
-                  </Link>
-                </div>
-              </form>
-          </div>{/* End of removed tabs container */}
+            <div className="text-center">
+              <Link 
+                to="/forgot-password" 
+                className="text-sm text-primary hover:text-primary/80 hover:underline transition-colors"
+              >
+                Forgot your password?
+              </Link>
+            </div>
+          </form>
         </CardContent>
       </Card>
     </div>

@@ -119,10 +119,10 @@ const TaskCard = ({ task, onUpdateNotes, onUpdateStatus, currentUserId, userRole
 
   const getStatusColor = () => {
     switch (task.status) {
-      case 'started': return 'border-l-blue-500';
-      case 'completed': return 'border-l-green-500';
-      case 'blocked': return 'border-l-red-500';
-      default: return 'border-l-gray-300';
+      case 'started': return 'border-l-status-started';
+      case 'completed': return 'border-l-status-done';
+      case 'blocked': return 'border-l-status-blocked';
+      default: return 'border-l-status-queue';
     }
   };
 
@@ -222,8 +222,8 @@ const TaskCard = ({ task, onUpdateNotes, onUpdateStatus, currentUserId, userRole
           
           {/* Show AR Assigned info for PM/Admin */}
           {(userRole === 'pm' || userRole === 'admin') && task.arAssignedName && (
-            <div className="bg-purple-50 p-2 rounded">
-              <p className="text-xs font-medium text-purple-700">
+            <div className="bg-primary/5 p-2 rounded border border-primary/10">
+              <p className="text-xs font-medium text-primary">
                 Assigned to: {task.arAssignedName}
               </p>
             </div>
@@ -283,7 +283,7 @@ const TaskCard = ({ task, onUpdateNotes, onUpdateStatus, currentUserId, userRole
             ) : (
               <div className="min-h-6">
                 {task.notesAR ? (
-                  <p className="text-xs text-muted-foreground italic bg-blue-50 p-2 rounded">
+                  <p className="text-xs text-muted-foreground italic bg-status-started/5 p-2 rounded border border-status-started/10">
                     {task.notesAR}
                   </p>
                 ) : (
@@ -343,7 +343,7 @@ const TaskCard = ({ task, onUpdateNotes, onUpdateStatus, currentUserId, userRole
             ) : (
               <div className="min-h-6">
                 {task.notesPM ? (
-                  <p className="text-xs text-muted-foreground italic bg-green-50 p-2 rounded">
+                  <p className="text-xs text-muted-foreground italic bg-status-done/5 p-2 rounded border border-status-done/10">
                     {task.notesPM}
                   </p>
                 ) : (

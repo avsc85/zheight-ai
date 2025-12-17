@@ -1,4 +1,4 @@
-import { Bot, User, LogOut, Users, FolderKanban, BarChart3 } from "lucide-react";
+import { Bot, User, LogOut, Users, BarChart3 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import zHeightLogo from "@/assets/zheight-logo.png";
@@ -25,53 +25,61 @@ export const Header = () => {
   };
 
   return (
-    <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
-      <div className="container mx-auto px-6 py-4">
+    <header className="bg-header sticky top-0 z-50 border-b border-header/10">
+      <div className="container mx-auto px-6 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-8">
-            <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-              <img src={zHeightLogo} alt="zHeight Logo" className="h-10 w-auto" />
+            <Link to="/" className="flex items-center gap-3 hover:opacity-90 transition-opacity">
+              <img src={zHeightLogo} alt="zHeight Logo" className="h-9 w-auto" />
               <div>
-                <h1 className="text-xl font-bold text-foreground">zHeight Internal AI Applications</h1>
-                <p className="text-sm text-muted-foreground">Building Code Compliance & Project Management</p>
+                <h1 className="text-lg font-semibold text-header-foreground">zHeight Internal AI</h1>
+                <p className="text-xs text-header-foreground/60">Building Code Compliance & Project Management</p>
               </div>
             </Link>
             
             {/* Navigation Tabs */}
             {isAuthenticated && (
-              <nav className="hidden md:flex items-center gap-2">
+              <nav className="hidden md:flex items-center gap-1">
                 <Link to="/">
                   <Button 
-                    variant={isActive('/') ? "default" : "ghost"} 
+                    variant="ghost" 
                     size="sm"
-                    className="font-medium"
+                    className={`font-medium text-header-foreground/80 hover:text-header-foreground hover:bg-header-foreground/10 ${
+                      isActive('/') ? 'bg-header-foreground/10 text-header-foreground' : ''
+                    }`}
                   >
                     Home
                   </Button>
                 </Link>
                 <Link to="/project-mgmt">
                   <Button 
-                    variant={isActive('/project-mgmt') ? "default" : "ghost"} 
+                    variant="ghost" 
                     size="sm"
-                    className="font-medium"
+                    className={`font-medium text-header-foreground/80 hover:text-header-foreground hover:bg-header-foreground/10 ${
+                      isActive('/project-mgmt') ? 'bg-header-foreground/10 text-header-foreground' : ''
+                    }`}
                   >
                     Project Mgmt
                   </Button>
                 </Link>
                 <Link to="/ai-plan-checker">
                   <Button 
-                    variant={isActive('/ai-plan-checker') ? "default" : "ghost"} 
+                    variant="ghost" 
                     size="sm"
-                    className="font-medium"
+                    className={`font-medium text-header-foreground/80 hover:text-header-foreground hover:bg-header-foreground/10 ${
+                      isActive('/ai-plan-checker') ? 'bg-header-foreground/10 text-header-foreground' : ''
+                    }`}
                   >
                     AI Plan Checker
                   </Button>
                 </Link>
                 <Link to="/ai-feasibility">
                   <Button 
-                    variant={isActive('/ai-feasibility') ? "default" : "ghost"} 
+                    variant="ghost" 
                     size="sm"
-                    className="font-medium"
+                    className={`font-medium text-header-foreground/80 hover:text-header-foreground hover:bg-header-foreground/10 ${
+                      isActive('/ai-feasibility') ? 'bg-header-foreground/10 text-header-foreground' : ''
+                    }`}
                   >
                     AI Feasibility
                   </Button>
@@ -81,17 +89,19 @@ export const Header = () => {
           </div>
           
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Bot className="w-4 h-4" />
+            <div className="flex items-center gap-2 text-sm text-header-foreground/60">
+              <Bot className="w-4 h-4 text-primary" />
               <span>3 AI Agents Active</span>
             </div>
             
             {isAuthenticated ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="flex items-center gap-2">
-                    <User className="h-4 w-4" />
-                    <span className="hidden sm:inline">
+                  <Button variant="ghost" className="flex items-center gap-2 text-header-foreground/80 hover:text-header-foreground hover:bg-header-foreground/10">
+                    <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center">
+                      <User className="h-4 w-4 text-primary" />
+                    </div>
+                    <span className="hidden sm:inline text-sm">
                       {profile?.name || user?.email}
                     </span>
                   </Button>
@@ -130,14 +140,14 @@ export const Header = () => {
                       <DropdownMenuSeparator />
                     </>
                   )}
-                  <DropdownMenuItem onClick={signOut}>
+                  <DropdownMenuItem onClick={signOut} className="text-destructive focus:text-destructive">
                     <LogOut className="mr-2 h-4 w-4" />
                     <span>Log out</span>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
-              <Button variant="outline" asChild>
+              <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
                 <a href="/auth">Sign In</a>
               </Button>
             )}
