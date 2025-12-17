@@ -35,23 +35,29 @@ const AIPlanChecker = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-subtle">
+    <div className="min-h-screen bg-background">
       <Header />
       
       <main className="container mx-auto px-6 py-8">
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-foreground mb-4">
+        {/* Page Header */}
+        <div className="mb-10">
+          <h1 className="text-3xl font-bold text-foreground mb-2">
             AI Plan Checker
           </h1>
-          <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+          <p className="text-muted-foreground">
             Extract compliance checklists and verify architectural plans with AI-powered tools
           </p>
         </div>
 
         {/* Agent 1 Interface */}
         <div className="mb-12">
-          <h2 className="text-2xl font-bold text-foreground mb-6">Agent 1: Checklist Extractor</h2>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+              <span className="text-sm font-semibold text-primary">1</span>
+            </div>
+            <h2 className="text-xl font-semibold text-foreground">Checklist Extractor</h2>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <ChecklistExtractor />
             <PromptEditor onPromptChange={handlePromptChange} agentType="agent1" />
           </div>
@@ -59,8 +65,13 @@ const AIPlanChecker = () => {
 
         {/* Agent 2 Interface */}
         <div>
-          <h2 className="text-2xl font-bold text-foreground mb-6">Agent 2: Plan Checker</h2>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start mb-8">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+              <span className="text-sm font-semibold text-primary">2</span>
+            </div>
+            <h2 className="text-xl font-semibold text-foreground">Plan Checker</h2>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start mb-8">
             <PlanChecker onIssuesUpdate={handleIssuesUpdate} />
             <div className="h-full">
               <PromptEditor onPromptChange={handlePromptChange} agentType="agent2" />

@@ -49,35 +49,35 @@ interface ProjectSummary {
 
 // Helper functions - defined before components
 const getStatusBadge = (status: string) => {
-  const styles = {
-    completed: "bg-green-100 text-green-800 hover:bg-green-200",
-    active: "bg-blue-100 text-blue-800 hover:bg-blue-200",
-    urgent: "bg-orange-100 text-orange-800 hover:bg-orange-200",
-    overdue: "bg-red-100 text-red-800 hover:bg-red-200",
+  const variants: Record<string, "done" | "started" | "queue" | "blocked"> = {
+    completed: "done",
+    active: "started",
+    urgent: "queue",
+    overdue: "blocked",
   };
   return (
-    <Badge className={styles[status as keyof typeof styles] || styles.active}>
+    <Badge variant={variants[status] || "started"}>
       {status.charAt(0).toUpperCase() + status.slice(1)}
     </Badge>
   );
 };
 
 const getTaskStatusBadge = (status: string) => {
-  const styles = {
-    completed: "bg-green-100 text-green-700 border-green-300",
-    started: "bg-blue-100 text-blue-700 border-blue-300",
-    in_queue: "bg-gray-100 text-gray-700 border-gray-300",
-    on_hold: "bg-yellow-100 text-yellow-700 border-yellow-300",
+  const variants: Record<string, "done-soft" | "started-soft" | "queue-soft" | "blocked-soft"> = {
+    completed: "done-soft",
+    started: "started-soft",
+    in_queue: "queue-soft",
+    on_hold: "blocked-soft",
   };
-  const labels = {
+  const labels: Record<string, string> = {
     completed: "Completed",
     started: "In Progress",
     in_queue: "In Queue",
     on_hold: "On Hold",
   };
   return (
-    <Badge variant="outline" className={styles[status as keyof typeof styles] || styles.in_queue}>
-      {labels[status as keyof typeof labels] || status}
+    <Badge variant={variants[status] || "queue-soft"}>
+      {labels[status] || status}
     </Badge>
   );
 };
@@ -164,7 +164,7 @@ const ProjectCard = ({ project, allUsers, getStatusBadge, getLatestTask, updateT
               <span className="text-muted-foreground">Progress</span>
               <span className="font-semibold">{project.completion_percentage}%</span>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
+            <div className="w-full bg-secondary rounded-full h-2">
               <div
                 className="bg-primary h-2 rounded-full transition-all"
                 style={{ width: `${project.completion_percentage}%` }}
@@ -399,7 +399,7 @@ const ProjectRow = ({ project, allUsers, getStatusBadge, getLatestTask, updateTa
       {/* Progress */}
       <TableCell>
         <div className="flex items-center gap-2">
-          <div className="w-20 bg-gray-200 rounded-full h-2">
+          <div className="w-20 bg-secondary rounded-full h-2">
             <div
               className="bg-primary h-2 rounded-full"
               style={{ width: `${project.completion_percentage}%` }}

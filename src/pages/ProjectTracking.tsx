@@ -51,15 +51,15 @@ interface ColumnFilters {
 }
 
 const getStatusBadge = (status: string) => {
-  const variants: Record<string, string> = {
-    "started": "bg-blue-100 text-blue-800",
-    "in_queue": "bg-gray-100 text-gray-800", 
-    "completed": "bg-green-100 text-green-800",
-    "blocked": "bg-red-100 text-red-800"
+  const variants: Record<string, "started" | "queue" | "done" | "blocked"> = {
+    "started": "started",
+    "in_queue": "queue", 
+    "completed": "done",
+    "blocked": "blocked"
   };
   
   return (
-    <Badge className={variants[status] || "bg-gray-100 text-gray-800"}>
+    <Badge variant={variants[status] || "queue"}>
       {status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
     </Badge>
   );

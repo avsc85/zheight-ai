@@ -15,6 +15,28 @@ const badgeVariants = cva(
         destructive:
           "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80",
         outline: "text-foreground",
+        // Monday.com inspired status variants
+        done:
+          "border-transparent bg-status-done text-white",
+        started:
+          "border-transparent bg-status-started text-white",
+        queue:
+          "border-transparent bg-status-queue text-white",
+        ready:
+          "border-transparent bg-status-ready text-white",
+        blocked:
+          "border-transparent bg-status-blocked text-white",
+        // Softer status variants
+        "done-soft":
+          "border-status-done/30 bg-status-done/10 text-status-done",
+        "started-soft":
+          "border-status-started/30 bg-status-started/10 text-status-started",
+        "queue-soft":
+          "border-status-queue/30 bg-status-queue/10 text-status-queue",
+        "ready-soft":
+          "border-status-ready/30 bg-status-ready/10 text-status-ready",
+        "blocked-soft":
+          "border-status-blocked/30 bg-status-blocked/10 text-status-blocked",
       },
     },
     defaultVariants: {
