@@ -23,7 +23,8 @@ import {
   Grid3x3,
   Edit,
   Save,
-  X
+  X,
+  Plus
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -856,16 +857,27 @@ const AdminDashboard = () => {
           </Card>
         </div>
 
-        {/* Search */}
+        {/* Search and Actions */}
         <div className="mb-6 flex items-center justify-between">
-          <div className="relative max-w-md flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search projects or managers..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
+          <div className="flex items-center gap-4">
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => navigate("/project-mgmt/setup")}
+              className="flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              New Project
+            </Button>
+            <div className="relative max-w-md">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search projects or managers..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 w-64"
+              />
+            </div>
           </div>
           
           {/* View Toggle */}
