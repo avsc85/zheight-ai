@@ -31,7 +31,13 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Users, Trash2, Shield, User as UserIcon, Crown, Building, Clipboard } from "lucide-react";
+import { Users, Trash2, Shield, User as UserIcon, Crown, Building, Clipboard, Mail, KeyRound, MoreHorizontal } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -56,6 +62,7 @@ const UserManagement = () => {
   const [updatingUsers, setUpdatingUsers] = useState<Set<string>>(new Set());
   const [orphanedUsers, setOrphanedUsers] = useState<any[]>([]);
   const [isLoadingOrphaned, setIsLoadingOrphaned] = useState(false);
+  const [sendingPasswordReset, setSendingPasswordReset] = useState<Set<string>>(new Set());
 
   // Redirect if not authenticated or not admin
   useEffect(() => {
@@ -279,6 +286,67 @@ const UserManagement = () => {
     }
   };
 
+  const sendPasswordResetEmail = async (email: string, userId: string) => {
+    try {
+      setSendingPasswordReset(prev => new Set([...prev, userId]));
+      
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/password-reset`,
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Password reset email sent",
+        description: `A password reset link has been sent to ${email}.`,
+      });
+    } catch (error: any) {
+      console.error('Error sending password reset:', error);
+      toast({
+        title: "Failed to send password reset",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSendingPasswordReset(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(userId);
+        return newSet;
+      });
+    }
+  };
+
+  const resendInvitation = async (email: string, userId: string, userName: string) => {
+    try {
+      setSendingPasswordReset(prev => new Set([...prev, userId]));
+      
+      // For users who haven't signed in yet, send a magic link
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/password-reset`,
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Invitation resent",
+        description: `A new login/password setup link has been sent to ${email}.`,
+      });
+    } catch (error: any) {
+      console.error('Error resending invitation:', error);
+      toast({
+        title: "Failed to resend invitation",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSendingPasswordReset(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(userId);
+        return newSet;
+      });
+    }
+  };
+
   const getRoleIcon = (role: string) => {
     switch (role) {
       case 'admin': return <Crown className="w-4 h-4 text-amber-500" />;
@@ -377,6 +445,7 @@ const UserManagement = () => {
                     <TableHead>Company</TableHead>
                     <TableHead>Role</TableHead>
                     <TableHead>Last Sign In</TableHead>
+                    <TableHead>Password Actions</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -449,6 +518,48 @@ const UserManagement = () => {
                           ? new Date(user.last_sign_in_at).toLocaleString()
                           : 'Never'
                         }
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={sendingPasswordReset.has(user.id)}
+                              className="flex items-center gap-2"
+                            >
+                              {sendingPasswordReset.has(user.id) ? (
+                                <>
+                                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
+                                  Sending...
+                                </>
+                              ) : (
+                                <>
+                                  <KeyRound className="w-4 h-4" />
+                                  <MoreHorizontal className="w-3 h-3" />
+                                </>
+                              )}
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => sendPasswordResetEmail(user.email, user.id)}
+                              className="flex items-center gap-2 cursor-pointer"
+                            >
+                              <KeyRound className="w-4 h-4" />
+                              Send Password Reset
+                            </DropdownMenuItem>
+                            {!user.last_sign_in_at && (
+                              <DropdownMenuItem
+                                onClick={() => resendInvitation(user.email, user.id, user.full_name || '')}
+                                className="flex items-center gap-2 cursor-pointer"
+                              >
+                                <Mail className="w-4 h-4" />
+                                Resend Invitation
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                       <TableCell>
                         <AlertDialog>
