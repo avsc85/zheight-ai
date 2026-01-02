@@ -443,6 +443,7 @@ interface ProjectRowProps {
 }
 
 const ProjectRow = ({ project, allUsers, getStatusBadge, getLatestTask, updateTaskAR, navigate }: ProjectRowProps) => {
+  const { toast } = useToast();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [isEditingAR, setIsEditingAR] = useState(false);
   const [tempARId, setTempARId] = useState<string | null>(null);
