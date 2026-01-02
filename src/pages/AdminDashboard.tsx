@@ -114,6 +114,9 @@ const ProjectCard = ({ project, allUsers, getStatusBadge, getLatestTask, updateT
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [isEditingAR, setIsEditingAR] = useState(false);
   const [tempARId, setTempARId] = useState<string | null>(null);
+  const [isEditingDueDate, setIsEditingDueDate] = useState(false);
+  const [tempDueDate, setTempDueDate] = useState<string>("");
+  const { toast } = useToast();
   
   const latestTask = getLatestTask(project);
   const currentTask = selectedTaskId 
@@ -137,6 +140,48 @@ const ProjectCard = ({ project, allUsers, getStatusBadge, getLatestTask, updateT
     e.stopPropagation();
     setIsEditingAR(false);
     setTempARId(null);
+  };
+
+  const handleSaveDueDate = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (currentTask?.task_id && tempDueDate) {
+      await updateTaskDueDate(currentTask.task_id, tempDueDate);
+      setIsEditingDueDate(false);
+      setTempDueDate("");
+    }
+  };
+
+  const handleCancelDueDateEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsEditingDueDate(false);
+    setTempDueDate("");
+  };
+
+  const updateTaskDueDate = async (taskId: string, dueDate: string) => {
+    try {
+      // Update task due date - database trigger will handle email notification if AR is assigned
+      const { error: updateError } = await supabase
+        .from('project_tasks')
+        .update({ due_date: dueDate })
+        .eq('task_id', taskId);
+
+      if (updateError) throw updateError;
+
+      toast({
+        title: "Success",
+        description: "Task due date updated! Email notification will be sent to assigned AR.",
+      });
+
+      // Refresh the data to reflect changes across project and AR's tasks
+      window.location.reload();
+    } catch (error) {
+      console.error("Error updating due date:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update due date.",
+        variant: "destructive",
+      });
+    }
   };
 
   const assignableUsers = allUsers.filter(u => 
@@ -243,6 +288,63 @@ const ProjectCard = ({ project, allUsers, getStatusBadge, getLatestTask, updateT
             )}
           </div>
 
+          {/* Task Due Date - Editable */}
+          <div onClick={(e) => e.stopPropagation()}>
+            <p className="text-sm font-medium text-muted-foreground mb-2">Task Due Date</p>
+            {currentTask ? (
+              <div className="flex items-center gap-2">
+                {isEditingDueDate ? (
+                  <>
+                    <Input
+                      type="date"
+                      value={tempDueDate || currentTask.due_date || ""}
+                      onChange={(e) => setTempDueDate(e.target.value)}
+                      className="h-9 flex-1 bg-white"
+                    />
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-9 w-9 p-0 text-green-600"
+                      onClick={handleSaveDueDate}
+                    >
+                      <Save className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-9 w-9 p-0 text-red-600"
+                      onClick={handleCancelDueDateEdit}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex-1 px-3 py-2 bg-secondary rounded-md text-sm font-medium">
+                      {currentTask.due_date ? new Date(currentTask.due_date).toLocaleDateString() : "No date set"}
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-9 w-9 p-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsEditingDueDate(true);
+                        setTempDueDate(currentTask.due_date || "");
+                      }}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="px-3 py-2 bg-secondary rounded-md text-sm text-muted-foreground">
+                No task selected
+              </div>
+            )}
+          </div>
+
           {/* AR Assignment */}
           <div onClick={(e) => e.stopPropagation()}>
             <p className="text-sm font-medium text-muted-foreground mb-2">Assigned AR</p>
@@ -344,6 +446,8 @@ const ProjectRow = ({ project, allUsers, getStatusBadge, getLatestTask, updateTa
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [isEditingAR, setIsEditingAR] = useState(false);
   const [tempARId, setTempARId] = useState<string | null>(null);
+  const [isEditingDueDate, setIsEditingDueDate] = useState(false);
+  const [tempDueDate, setTempDueDate] = useState<string>("");
   
   const latestTask = getLatestTask(project);
   const currentTask = selectedTaskId 
@@ -367,6 +471,46 @@ const ProjectRow = ({ project, allUsers, getStatusBadge, getLatestTask, updateTa
     setTempARId(null);
   };
 
+  const handleSaveDueDate = async () => {
+    if (currentTask?.task_id && tempDueDate) {
+      await updateTaskDueDate(currentTask.task_id, tempDueDate);
+      setIsEditingDueDate(false);
+      setTempDueDate("");
+    }
+  };
+
+  const handleCancelDueDateEdit = () => {
+    setIsEditingDueDate(false);
+    setTempDueDate("");
+  };
+
+  const updateTaskDueDate = async (taskId: string, dueDate: string) => {
+    try {
+      // Update task due date - database trigger will handle email notification if AR is assigned
+      const { error: updateError } = await supabase
+        .from('project_tasks')
+        .update({ due_date: dueDate })
+        .eq('task_id', taskId);
+
+      if (updateError) throw updateError;
+
+      toast({
+        title: "Success",
+        description: "Task due date updated! Email notification will be sent to assigned AR.",
+      });
+
+      // Refresh the data to reflect changes across project and AR's tasks
+      window.location.reload();
+    } catch (error) {
+      console.error("Error updating due date:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update due date.",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Filter users: exclude PM and Admin roles
   const assignableUsers = allUsers.filter(u => 
     u.role !== 'pm' && u.role !== 'admin'
@@ -382,20 +526,6 @@ const ProjectRow = ({ project, allUsers, getStatusBadge, getLatestTask, updateTa
       </TableCell>
 
       <TableCell>{getStatusBadge(project.status)}</TableCell>
-      
-      {/* Due Date */}
-      <TableCell>
-        <div className="flex flex-col text-sm">
-          <span className="whitespace-nowrap">{project.expected_end_date || "N/A"}</span>
-          {project.days_remaining !== 0 && (
-            <span className={`text-xs whitespace-nowrap ${project.days_remaining < 0 ? "text-red-600" : "text-muted-foreground"}`}>
-              {project.days_remaining > 0 
-                ? `${project.days_remaining}d left` 
-                : `${Math.abs(project.days_remaining)}d overdue`}
-            </span>
-          )}
-        </div>
-      </TableCell>
 
       {/* Progress */}
       <TableCell>
@@ -443,6 +573,59 @@ const ProjectRow = ({ project, allUsers, getStatusBadge, getLatestTask, updateTa
           getTaskStatusBadge(currentTask.task_status)
         ) : (
           <span className="text-sm text-muted-foreground">-</span>
+        )}
+      </TableCell>
+
+      {/* Task Due Date - Editable */}
+      <TableCell>
+        {currentTask ? (
+          <div className="flex items-center gap-2">
+            {isEditingDueDate ? (
+              <>
+                <Input
+                  type="date"
+                  value={tempDueDate || currentTask.due_date || ""}
+                  onChange={(e) => setTempDueDate(e.target.value)}
+                  className="h-9 w-40 bg-white"
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 w-8 p-0 text-green-600"
+                  onClick={handleSaveDueDate}
+                >
+                  <Save className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 w-8 p-0 text-red-600"
+                  onClick={handleCancelDueDateEdit}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </>
+            ) : (
+              <>
+                <span className="text-sm font-medium min-w-[100px]">
+                  {currentTask.due_date ? new Date(currentTask.due_date).toLocaleDateString() : "No date set"}
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 w-8 p-0"
+                  onClick={() => {
+                    setIsEditingDueDate(true);
+                    setTempDueDate(currentTask.due_date || "");
+                  }}
+                >
+                  <Edit className="h-4 w-4" />
+                </Button>
+              </>
+            )}
+          </div>
+        ) : (
+          <span className="text-sm text-muted-foreground">No task selected</span>
         )}
       </TableCell>
 
@@ -928,10 +1111,10 @@ const AdminDashboard = () => {
                     <TableHead>Project Name</TableHead>
                     <TableHead>PM</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Due Date</TableHead>
                     <TableHead>Progress</TableHead>
                     <TableHead className="w-[220px]">Task Name</TableHead>
                     <TableHead>Task Status</TableHead>
+                    <TableHead>Task Due Date</TableHead>
                     <TableHead>Assigned AR</TableHead>
                     <TableHead>Action</TableHead>
                   </TableRow>
