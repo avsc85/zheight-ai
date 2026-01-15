@@ -1,4 +1,4 @@
-import { Bot, User, LogOut, Users, BarChart3 } from "lucide-react";
+import { Bot, User, LogOut, Users, BarChart3, ClipboardList } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import zHeightLogo from "@/assets/zheight-logo.png";
@@ -13,7 +13,7 @@ import {
 import { Link, useLocation } from "react-router-dom";
 
 export const Header = () => {
-  const { user, profile, signOut, isAuthenticated, isAdmin } = useAuth();
+  const { user, profile, signOut, isAuthenticated, isAdmin, isPM } = useAuth();
   const location = useLocation();
 
   const isActive = (path: string) => {
@@ -135,6 +135,17 @@ export const Header = () => {
                         <Link to="/admin/users" className="flex items-center">
                           <Users className="mr-2 h-4 w-4" />
                           <span>User Management</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                    </>
+                  )}
+                  {isPM && !isAdmin && (
+                    <>
+                      <DropdownMenuItem asChild>
+                        <Link to="/project-mgmt/pm-dashboard" className="flex items-center">
+                          <ClipboardList className="mr-2 h-4 w-4" />
+                          <span>PM Dashboard</span>
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
