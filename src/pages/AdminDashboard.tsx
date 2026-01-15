@@ -133,6 +133,15 @@ const ProjectCard = ({ project, allUsers, getStatusBadge, getLatestTask, updateT
   const handleSaveAR = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (currentTask?.task_id && tempARId) {
+      // Validation: Due date is required when assigning an AR
+      if (!currentTask.due_date) {
+        toast({
+          title: "Validation Error",
+          description: `Cannot assign AR without a due date. Please set a due date for "${currentTask.task_name}" first.`,
+          variant: "destructive",
+        });
+        return;
+      }
       await updateTaskAR(currentTask.task_id, tempARId);
       setIsEditingAR(false);
       setTempARId(null);
@@ -464,6 +473,15 @@ const ProjectRow = ({ project, allUsers, getStatusBadge, getLatestTask, updateTa
 
   const handleSaveAR = async () => {
     if (currentTask?.task_id && tempARId) {
+      // Validation: Due date is required when assigning an AR
+      if (!currentTask.due_date) {
+        toast({
+          title: "Validation Error",
+          description: `Cannot assign AR without a due date. Please set a due date for "${currentTask.task_name}" first.`,
+          variant: "destructive",
+        });
+        return;
+      }
       await updateTaskAR(currentTask.task_id, tempARId);
       setIsEditingAR(false);
       setTempARId(null);
