@@ -26,6 +26,7 @@ import {
   Plus
 } from "lucide-react";
 import { TaskFilterPanel, TaskFilters, applyTaskFilters, defaultTaskFilters } from "@/components/TaskFilterPanel";
+import { ProjectDateFilter, ProjectDateFilters, applyProjectDateFilters, defaultProjectDateFilters } from "@/components/ProjectDateFilter";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -37,6 +38,7 @@ interface ProjectSummary {
   project_manager_name: string;
   start_date: string;
   expected_end_date: string;
+  created_at?: string;
   hours_allocated: number;
   total_tasks: number;
   completed_tasks: number;
@@ -713,6 +715,7 @@ const PMDashboard = () => {
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [currentUserName, setCurrentUserName] = useState<string | null>(null);
   const [taskFilters, setTaskFilters] = useState<TaskFilters>(defaultTaskFilters);
+  const [dateFilters, setDateFilters] = useState<ProjectDateFilters>(defaultProjectDateFilters);
   const [statsOverview, setStatsOverview] = useState({
     totalProjects: 0,
     activeProjects: 0,
@@ -843,6 +846,7 @@ const PMDashboard = () => {
           project_manager_name: project.project_manager_name || "Unassigned",
           start_date: project.start_date,
           expected_end_date: project.expected_end_date,
+          created_at: project.created_at,
           hours_allocated: project.hours_allocated || 0,
           total_tasks: projectTasks.length,
           completed_tasks: completedTasks,
@@ -961,22 +965,25 @@ const PMDashboard = () => {
     }
   };
 
-  // Filter projects and tasks based on active filter, search term, and task filters
+  // Filter projects and tasks based on active filter, search term, date filters, and task filters
   useEffect(() => {
     const today = new Date();
     let projectsToFilter = projects;
     let tasksToFilter = allTasks;
 
+    // Apply date filter first
+    projectsToFilter = applyProjectDateFilters(projectsToFilter, dateFilters);
+
     // Apply filter based on active tab
     switch (activeFilter) {
       case 'active':
-        projectsToFilter = projects.filter(p => p.status === "active" || p.status === "urgent");
+        projectsToFilter = projectsToFilter.filter(p => p.status === "active" || p.status === "urgent");
         break;
       case 'completed':
-        projectsToFilter = projects.filter(p => p.status === "completed");
+        projectsToFilter = projectsToFilter.filter(p => p.status === "completed");
         break;
       case 'overdue_projects':
-        projectsToFilter = projects.filter(p => p.days_remaining < 0 && p.status !== "completed");
+        projectsToFilter = projectsToFilter.filter(p => p.days_remaining < 0 && p.status !== "completed");
         break;
       case 'total_tasks':
         // Show all tasks
@@ -1008,7 +1015,7 @@ const PMDashboard = () => {
 
     setFilteredProjects(projectsToFilter);
     setFilteredTasks(tasksToFilter);
-  }, [searchTerm, projects, allTasks, activeFilter, taskFilters]);
+  }, [searchTerm, projects, allTasks, activeFilter, taskFilters, dateFilters]);
 
   const isTaskFilter = activeFilter === 'total_tasks' || activeFilter === 'completed_tasks';
 
@@ -1155,6 +1162,10 @@ const PMDashboard = () => {
                 className="pl-10 w-64"
               />
             </div>
+            <ProjectDateFilter 
+              filters={dateFilters}
+              onFiltersChange={setDateFilters}
+            />
           </div>
           
           {/* View Toggle */}
