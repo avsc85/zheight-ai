@@ -25,6 +25,7 @@ import {
   X,
   Plus
 } from "lucide-react";
+import { TaskFilterPanel, TaskFilters, applyTaskFilters, defaultTaskFilters } from "@/components/TaskFilterPanel";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -711,6 +712,7 @@ const PMDashboard = () => {
   const [activeFilter, setActiveFilter] = useState<FilterTab>('total_projects');
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [currentUserName, setCurrentUserName] = useState<string | null>(null);
+  const [taskFilters, setTaskFilters] = useState<TaskFilters>(defaultTaskFilters);
   const [statsOverview, setStatsOverview] = useState({
     totalProjects: 0,
     activeProjects: 0,
@@ -959,7 +961,7 @@ const PMDashboard = () => {
     }
   };
 
-  // Filter projects and tasks based on active filter and search term
+  // Filter projects and tasks based on active filter, search term, and task filters
   useEffect(() => {
     const today = new Date();
     let projectsToFilter = projects;
@@ -987,6 +989,11 @@ const PMDashboard = () => {
         break;
     }
 
+    // Apply task filters when in task view
+    if (activeFilter === 'total_tasks' || activeFilter === 'completed_tasks') {
+      tasksToFilter = applyTaskFilters(tasksToFilter, taskFilters);
+    }
+
     // Apply search filter
     if (searchTerm) {
       projectsToFilter = projectsToFilter.filter(p =>
@@ -1001,7 +1008,7 @@ const PMDashboard = () => {
 
     setFilteredProjects(projectsToFilter);
     setFilteredTasks(tasksToFilter);
-  }, [searchTerm, projects, allTasks, activeFilter]);
+  }, [searchTerm, projects, allTasks, activeFilter, taskFilters]);
 
   const isTaskFilter = activeFilter === 'total_tasks' || activeFilter === 'completed_tasks';
 
@@ -1236,57 +1243,68 @@ const PMDashboard = () => {
           </>
         ) : (
           /* Tasks Table View */
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Task Name</TableHead>
-                    <TableHead>Project</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Due Date</TableHead>
-                    <TableHead>Assigned AR</TableHead>
-                    <TableHead>Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredTasks.map((task) => {
-                    const assignedAR = allUsers.find(u => u.id === task.assigned_ar_id);
-                    return (
-                      <TableRow 
-                        key={task.task_id} 
-                        className="cursor-pointer hover:bg-muted/50"
-                        onClick={() => navigate(`/project-mgmt/dashboard/${task.project_id}`)}
-                      >
-                        <TableCell className="font-medium">{task.task_name}</TableCell>
-                        <TableCell>{task.project_name}</TableCell>
-                        <TableCell>{getTaskStatusBadge(task.task_status || 'in_queue')}</TableCell>
-                        <TableCell>
-                          {task.due_date 
-                            ? new Date(task.due_date).toLocaleDateString() 
-                            : <span className="text-muted-foreground">No date</span>
-                          }
-                        </TableCell>
-                        <TableCell>{assignedAR?.name || <span className="text-muted-foreground">Unassigned</span>}</TableCell>
-                        <TableCell>
-                          <Button 
-                            size="sm" 
-                            variant="outline"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`/project-mgmt/dashboard/${task.project_id}`);
-                            }}
-                          >
-                            <BarChart3 className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+          <>
+            {/* Task Filter Panel */}
+            <div className="mb-4">
+              <TaskFilterPanel
+                filters={taskFilters}
+                onFiltersChange={setTaskFilters}
+                allUsers={allUsers}
+                projects={projects.map(p => ({ id: p.id, project_name: p.project_name }))}
+              />
+            </div>
+            <Card>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Task Name</TableHead>
+                      <TableHead>Project</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Due Date</TableHead>
+                      <TableHead>Assigned AR</TableHead>
+                      <TableHead>Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredTasks.map((task) => {
+                      const assignedAR = allUsers.find(u => u.id === task.assigned_ar_id);
+                      return (
+                        <TableRow 
+                          key={task.task_id} 
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() => navigate(`/project-mgmt/dashboard/${task.project_id}`)}
+                        >
+                          <TableCell className="font-medium">{task.task_name}</TableCell>
+                          <TableCell>{task.project_name}</TableCell>
+                          <TableCell>{getTaskStatusBadge(task.task_status || 'in_queue')}</TableCell>
+                          <TableCell>
+                            {task.due_date 
+                              ? new Date(task.due_date).toLocaleDateString() 
+                              : <span className="text-muted-foreground">No date</span>
+                            }
+                          </TableCell>
+                          <TableCell>{assignedAR?.name || <span className="text-muted-foreground">Unassigned</span>}</TableCell>
+                          <TableCell>
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/project-mgmt/dashboard/${task.project_id}`);
+                              }}
+                            >
+                              <BarChart3 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </>
         )}
 
         {isTaskFilter && filteredTasks.length === 0 && (
