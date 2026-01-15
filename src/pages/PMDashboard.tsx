@@ -698,7 +698,7 @@ const ProjectRow = ({ project, allUsers, getStatusBadge, getLatestTask, updateTa
   );
 };
 
-type FilterTab = 'total_projects' | 'active' | 'completed' | 'overdue_projects' | 'total_tasks' | 'completed_tasks' | 'overdue_tasks';
+type FilterTab = 'total_projects' | 'active' | 'completed' | 'overdue_projects' | 'total_tasks' | 'completed_tasks';
 
 const PMDashboard = () => {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
@@ -715,10 +715,11 @@ const PMDashboard = () => {
     totalProjects: 0,
     activeProjects: 0,
     completedProjects: 0,
+    overdueProjects: 0,
     totalTasks: 0,
     completedTasks: 0,
-    overdueTasks: 0,
   });
+
 
   const { toast } = useToast();
   const { user } = useAuth();
@@ -872,9 +873,9 @@ const PMDashboard = () => {
         totalProjects: projectSummaries.length,
         activeProjects: projectSummaries.filter(p => p.status === "active" || p.status === "urgent").length,
         completedProjects: projectSummaries.filter(p => p.status === "completed").length,
+        overdueProjects: projectSummaries.filter(p => p.days_remaining < 0 && p.status !== "completed").length,
         totalTasks,
         completedTasks: totalCompleted,
-        overdueTasks: totalOverdue,
       });
 
     } catch (error: any) {
@@ -981,11 +982,6 @@ const PMDashboard = () => {
       case 'completed_tasks':
         tasksToFilter = allTasks.filter(t => t.task_status === "completed");
         break;
-      case 'overdue_tasks':
-        tasksToFilter = allTasks.filter(t => 
-          t.due_date && new Date(t.due_date) < today && t.task_status !== "completed"
-        );
-        break;
       default:
         // total_projects - show all
         break;
@@ -1007,7 +1003,7 @@ const PMDashboard = () => {
     setFilteredTasks(tasksToFilter);
   }, [searchTerm, projects, allTasks, activeFilter]);
 
-  const isTaskFilter = activeFilter === 'total_tasks' || activeFilter === 'completed_tasks' || activeFilter === 'overdue_tasks';
+  const isTaskFilter = activeFilter === 'total_tasks' || activeFilter === 'completed_tasks';
 
   if (loading) {
     return (
@@ -1086,6 +1082,21 @@ const PMDashboard = () => {
           </Card>
 
           <Card 
+            className={`cursor-pointer transition-all hover:shadow-lg ${activeFilter === 'overdue_projects' ? 'ring-2 ring-red-500 bg-red-50' : ''}`}
+            onClick={() => setActiveFilter('overdue_projects')}
+          >
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Overdue</p>
+                  <h3 className="text-2xl font-bold text-red-600">{statsOverview.overdueProjects}</h3>
+                </div>
+                <AlertCircle className="h-8 w-8 text-red-500" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card 
             className={`cursor-pointer transition-all hover:shadow-lg ${activeFilter === 'total_tasks' ? 'ring-2 ring-purple-500 bg-purple-50' : ''}`}
             onClick={() => setActiveFilter('total_tasks')}
           >
@@ -1111,21 +1122,6 @@ const PMDashboard = () => {
                   <h3 className="text-2xl font-bold text-green-600">{statsOverview.completedTasks}</h3>
                 </div>
                 <CheckCircle2 className="h-8 w-8 text-green-500" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card 
-            className={`cursor-pointer transition-all hover:shadow-lg ${activeFilter === 'overdue_tasks' ? 'ring-2 ring-red-500 bg-red-50' : ''}`}
-            onClick={() => setActiveFilter('overdue_tasks')}
-          >
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Overdue</p>
-                  <h3 className="text-2xl font-bold text-red-600">{statsOverview.overdueTasks}</h3>
-                </div>
-                <AlertCircle className="h-8 w-8 text-red-500" />
               </div>
             </CardContent>
           </Card>
