@@ -698,12 +698,17 @@ const ProjectRow = ({ project, allUsers, getStatusBadge, getLatestTask, updateTa
   );
 };
 
+type FilterTab = 'total_projects' | 'active' | 'completed' | 'overdue_projects' | 'total_tasks' | 'completed_tasks' | 'overdue_tasks';
+
 const PMDashboard = () => {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [filteredProjects, setFilteredProjects] = useState<ProjectSummary[]>([]);
+  const [allTasks, setAllTasks] = useState<any[]>([]);
+  const [filteredTasks, setFilteredTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
+  const [activeFilter, setActiveFilter] = useState<FilterTab>('total_projects');
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [currentUserName, setCurrentUserName] = useState<string | null>(null);
   const [statsOverview, setStatsOverview] = useState({
@@ -848,8 +853,20 @@ const PMDashboard = () => {
         });
       }
 
+      // Collect all tasks with project info for task filtering
+      const allTasksWithProject = tasksData.map(task => {
+        const project = projectsData?.find(p => p.id === task.project_id);
+        return {
+          ...task,
+          project_name: project?.project_name || 'Unknown Project',
+          project_manager_name: project?.project_manager_name || 'Unassigned'
+        };
+      });
+
       setProjects(projectSummaries);
       setFilteredProjects(projectSummaries);
+      setAllTasks(allTasksWithProject);
+      setFilteredTasks(allTasksWithProject);
 
       setStatsOverview({
         totalProjects: projectSummaries.length,
@@ -941,18 +958,56 @@ const PMDashboard = () => {
     }
   };
 
-  // Filter projects when search term changes
+  // Filter projects and tasks based on active filter and search term
   useEffect(() => {
+    const today = new Date();
+    let projectsToFilter = projects;
+    let tasksToFilter = allTasks;
+
+    // Apply filter based on active tab
+    switch (activeFilter) {
+      case 'active':
+        projectsToFilter = projects.filter(p => p.status === "active" || p.status === "urgent");
+        break;
+      case 'completed':
+        projectsToFilter = projects.filter(p => p.status === "completed");
+        break;
+      case 'overdue_projects':
+        projectsToFilter = projects.filter(p => p.days_remaining < 0 && p.status !== "completed");
+        break;
+      case 'total_tasks':
+        // Show all tasks
+        break;
+      case 'completed_tasks':
+        tasksToFilter = allTasks.filter(t => t.task_status === "completed");
+        break;
+      case 'overdue_tasks':
+        tasksToFilter = allTasks.filter(t => 
+          t.due_date && new Date(t.due_date) < today && t.task_status !== "completed"
+        );
+        break;
+      default:
+        // total_projects - show all
+        break;
+    }
+
+    // Apply search filter
     if (searchTerm) {
-      const filtered = projects.filter(p =>
+      projectsToFilter = projectsToFilter.filter(p =>
         p.project_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.project_manager_name.toLowerCase().includes(searchTerm.toLowerCase())
       );
-      setFilteredProjects(filtered);
-    } else {
-      setFilteredProjects(projects);
+      tasksToFilter = tasksToFilter.filter(t =>
+        t.task_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        t.project_name?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
     }
-  }, [searchTerm, projects]);
+
+    setFilteredProjects(projectsToFilter);
+    setFilteredTasks(tasksToFilter);
+  }, [searchTerm, projects, allTasks, activeFilter]);
+
+  const isTaskFilter = activeFilter === 'total_tasks' || activeFilter === 'completed_tasks' || activeFilter === 'overdue_tasks';
 
   if (loading) {
     return (
@@ -983,9 +1038,12 @@ const PMDashboard = () => {
           <p className="text-muted-foreground">Overview of your assigned projects and tasks</p>
         </div>
 
-        {/* Stats Overview */}
+        {/* Stats Overview - Clickable Filter Tabs */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
-          <Card>
+          <Card 
+            className={`cursor-pointer transition-all hover:shadow-lg ${activeFilter === 'total_projects' ? 'ring-2 ring-primary bg-primary/5' : ''}`}
+            onClick={() => setActiveFilter('total_projects')}
+          >
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -997,7 +1055,10 @@ const PMDashboard = () => {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card 
+            className={`cursor-pointer transition-all hover:shadow-lg ${activeFilter === 'active' ? 'ring-2 ring-blue-500 bg-blue-50' : ''}`}
+            onClick={() => setActiveFilter('active')}
+          >
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -1009,7 +1070,10 @@ const PMDashboard = () => {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card 
+            className={`cursor-pointer transition-all hover:shadow-lg ${activeFilter === 'completed' ? 'ring-2 ring-green-500 bg-green-50' : ''}`}
+            onClick={() => setActiveFilter('completed')}
+          >
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -1021,7 +1085,10 @@ const PMDashboard = () => {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card 
+            className={`cursor-pointer transition-all hover:shadow-lg ${activeFilter === 'total_tasks' ? 'ring-2 ring-purple-500 bg-purple-50' : ''}`}
+            onClick={() => setActiveFilter('total_tasks')}
+          >
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -1033,7 +1100,10 @@ const PMDashboard = () => {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card 
+            className={`cursor-pointer transition-all hover:shadow-lg ${activeFilter === 'completed_tasks' ? 'ring-2 ring-green-500 bg-green-50' : ''}`}
+            onClick={() => setActiveFilter('completed_tasks')}
+          >
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -1045,7 +1115,10 @@ const PMDashboard = () => {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card 
+            className={`cursor-pointer transition-all hover:shadow-lg ${activeFilter === 'overdue_tasks' ? 'ring-2 ring-red-500 bg-red-50' : ''}`}
+            onClick={() => setActiveFilter('overdue_tasks')}
+          >
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -1102,63 +1175,128 @@ const PMDashboard = () => {
           </div>
         </div>
 
-        {/* Projects Grid View */}
-        {viewMode === "grid" && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-            {filteredProjects.map((project) => (
-              <ProjectCard
-                key={project.id}
-                project={project}
-                allUsers={allUsers}
-                getStatusBadge={getStatusBadge}
-                getLatestTask={getLatestTask}
-                updateTaskAR={updateTaskAR}
-                navigate={navigate}
-              />
-            ))}
-          </div>
-        )}
+        {/* Content based on filter type */}
+        {!isTaskFilter ? (
+          <>
+            {/* Projects Grid View */}
+            {viewMode === "grid" && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                {filteredProjects.map((project) => (
+                  <ProjectCard
+                    key={project.id}
+                    project={project}
+                    allUsers={allUsers}
+                    getStatusBadge={getStatusBadge}
+                    getLatestTask={getLatestTask}
+                    updateTaskAR={updateTaskAR}
+                    navigate={navigate}
+                  />
+                ))}
+              </div>
+            )}
 
-        {/* Projects Table View */}
-        {viewMode === "table" && (
+            {/* Projects Table View */}
+            {viewMode === "table" && (
+              <Card>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Project Name</TableHead>
+                        <TableHead>PM</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Progress</TableHead>
+                        <TableHead className="w-[220px]">Task Name</TableHead>
+                        <TableHead>Task Status</TableHead>
+                        <TableHead>Task Due Date</TableHead>
+                        <TableHead>Assigned AR</TableHead>
+                        <TableHead>Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredProjects.map((project) => (
+                        <ProjectRow
+                          key={project.id}
+                          project={project}
+                          allUsers={allUsers}
+                          getStatusBadge={getStatusBadge}
+                          getLatestTask={getLatestTask}
+                          updateTaskAR={updateTaskAR}
+                          navigate={navigate}
+                        />
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
+
+            {filteredProjects.length === 0 && (
+              <div className="text-center py-12">
+                <FolderKanban className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">No projects found</p>
+              </div>
+            )}
+          </>
+        ) : (
+          /* Tasks Table View */
           <Card>
             <CardContent className="p-0">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Project Name</TableHead>
-                    <TableHead>PM</TableHead>
+                    <TableHead>Task Name</TableHead>
+                    <TableHead>Project</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Progress</TableHead>
-                    <TableHead className="w-[220px]">Task Name</TableHead>
-                    <TableHead>Task Status</TableHead>
-                    <TableHead>Task Due Date</TableHead>
+                    <TableHead>Due Date</TableHead>
                     <TableHead>Assigned AR</TableHead>
                     <TableHead>Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredProjects.map((project) => (
-                    <ProjectRow
-                      key={project.id}
-                      project={project}
-                      allUsers={allUsers}
-                      getStatusBadge={getStatusBadge}
-                      getLatestTask={getLatestTask}
-                      updateTaskAR={updateTaskAR}
-                      navigate={navigate}
-                    />
-                  ))}
+                  {filteredTasks.map((task) => {
+                    const assignedAR = allUsers.find(u => u.id === task.assigned_ar_id);
+                    return (
+                      <TableRow 
+                        key={task.task_id} 
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => navigate(`/project-mgmt/dashboard/${task.project_id}`)}
+                      >
+                        <TableCell className="font-medium">{task.task_name}</TableCell>
+                        <TableCell>{task.project_name}</TableCell>
+                        <TableCell>{getTaskStatusBadge(task.task_status || 'in_queue')}</TableCell>
+                        <TableCell>
+                          {task.due_date 
+                            ? new Date(task.due_date).toLocaleDateString() 
+                            : <span className="text-muted-foreground">No date</span>
+                          }
+                        </TableCell>
+                        <TableCell>{assignedAR?.name || <span className="text-muted-foreground">Unassigned</span>}</TableCell>
+                        <TableCell>
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/project-mgmt/dashboard/${task.project_id}`);
+                            }}
+                          >
+                            <BarChart3 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>
           </Card>
         )}
 
-        {filteredProjects.length === 0 && (
+        {isTaskFilter && filteredTasks.length === 0 && (
           <div className="text-center py-12">
-            <FolderKanban className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <p className="text-muted-foreground">No projects found</p>
+            <BarChart3 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <p className="text-muted-foreground">No tasks found</p>
           </div>
         )}
       </div>
