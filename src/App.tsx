@@ -16,6 +16,7 @@ import ProjectBoard from "./pages/ProjectBoard";
 import ProjectSetup from "./pages/ProjectSetup";
 import ProjectTracking from "./pages/ProjectTracking";
 import AdminDashboard from "./pages/AdminDashboard";
+import PMDashboard from "./pages/PMDashboard";
 import ProjectDashboardView from "./pages/ProjectDashboardView";
 import NotFound from "./pages/NotFound";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -124,6 +125,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <AdminDashboard />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/project-mgmt/pm-dashboard" 
+              element={
+                <ProtectedRoute>
+                  <PMDashboard />
                 </ProtectedRoute>
               } 
             />
