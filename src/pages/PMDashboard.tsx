@@ -870,7 +870,6 @@ const PMDashboard = () => {
         let status = "active";
         if (completionPercentage === 100) status = "completed";
         else if (daysRemaining < 0) status = "overdue";
-        else if (daysRemaining <= 7) status = "urgent";
 
         totalTasks += projectTasks.length;
         totalCompleted += completedTasks;
@@ -913,7 +912,7 @@ const PMDashboard = () => {
 
       setStatsOverview({
         totalProjects: projectSummaries.length,
-        activeProjects: projectSummaries.filter(p => p.status === "active" || p.status === "urgent").length,
+        activeProjects: projectSummaries.filter(p => p.status === "active").length,
         completedProjects: projectSummaries.filter(p => p.status === "completed").length,
         overdueProjects: projectSummaries.filter(p => p.days_remaining < 0 && p.status !== "completed").length,
         totalTasks,
@@ -1013,7 +1012,7 @@ const PMDashboard = () => {
     // Apply filter based on active tab
     switch (activeFilter) {
       case 'active':
-        projectsToFilter = projectsToFilter.filter(p => p.status === "active" || p.status === "urgent");
+        projectsToFilter = projectsToFilter.filter(p => p.status === "active");
         break;
       case 'completed':
         projectsToFilter = projectsToFilter.filter(p => p.status === "completed");
