@@ -67,13 +67,34 @@ export const TaskCommentDialog = ({
     try {
       setLoading(true);
       
-      // For now, using localStorage as a simple storage
-      // In production, this should be a database table
-      const storedComments = localStorage.getItem(`task_comments_${taskId}`);
-      if (storedComments) {
-        setComments(JSON.parse(storedComments));
-      } else {
-        setComments([]);
+      // Fetch comments from the notes table
+      const { data: notesData, error } = await supabase
+        .from('notes')
+        .select('*')
+        .eq('task_id', taskId)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error("Error fetching notes:", error);
+        // Fallback to localStorage
+        const storedComments = localStorage.getItem(`task_comments_${taskId}`);
+        if (storedComments) {
+          setComments(JSON.parse(storedComments));
+        } else {
+          setComments([]);
+        }
+      } else if (notesData) {
+        // Transform notes data to comments format
+        const transformedComments: Comment[] = notesData.map(note => ({
+          id: note.comment_id,
+          task_id: note.task_id || '',
+          user_id: note.user_id || '',
+          user_name: 'AR', // Will be fetched separately if needed
+          user_role: 'ar1_planning',
+          comment: note.notes_tasks,
+          created_at: note.created_at || new Date().toISOString(),
+        }));
+        setComments(transformedComments);
       }
       
       setLoading(false);
@@ -96,31 +117,63 @@ export const TaskCommentDialog = ({
     try {
       setSubmitting(true);
 
-      const comment: Comment = {
-        id: `comment_${Date.now()}`,
+      // Insert comment into the notes table
+      const { data: insertedNote, error: insertError } = await supabase
+        .from('notes')
+        .insert({
+          task_id: taskId,
+          user_id: currentUserId,
+          notes_tasks: newComment.trim(),
+          timestamp: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (insertError) {
+        console.error("Error inserting note:", insertError);
+        // Fallback to localStorage
+        const comment: Comment = {
+          id: `comment_${Date.now()}`,
+          task_id: taskId,
+          user_id: currentUserId,
+          user_name: currentUserName,
+          user_role: currentUserRole,
+          comment: newComment.trim(),
+          created_at: new Date().toISOString(),
+        };
+
+        const storedComments = localStorage.getItem(`task_comments_${taskId}`);
+        const existingComments = storedComments ? JSON.parse(storedComments) : [];
+        const updatedComments = [...existingComments, comment];
+        localStorage.setItem(`task_comments_${taskId}`, JSON.stringify(updatedComments));
+        setComments(updatedComments);
+      } else {
+        // Also update the notes_tasks_ar field on the task
+        await supabase
+          .from('project_tasks')
+          .update({ notes_tasks_ar: newComment.trim() })
+          .eq('task_id', taskId);
+
+        // Refresh comments
+        await fetchComments();
+      }
+
+      setNewComment("");
+
+      // Send notification to task assignee
+      await sendNotification({
+        id: insertedNote?.comment_id || `comment_${Date.now()}`,
         task_id: taskId,
         user_id: currentUserId,
         user_name: currentUserName,
         user_role: currentUserRole,
         comment: newComment.trim(),
         created_at: new Date().toISOString(),
-      };
-
-      // Store in localStorage (in production, save to database)
-      const storedComments = localStorage.getItem(`task_comments_${taskId}`);
-      const existingComments = storedComments ? JSON.parse(storedComments) : [];
-      const updatedComments = [...existingComments, comment];
-      localStorage.setItem(`task_comments_${taskId}`, JSON.stringify(updatedComments));
-
-      setComments(updatedComments);
-      setNewComment("");
-
-      // Send notification to task assignee
-      await sendNotification(comment);
+      });
 
       toast({
         title: "Comment Posted",
-        description: "Your comment has been added and the assignee has been notified.",
+        description: "Your comment has been added and saved.",
       });
 
       // Call the callback if provided (for mandatory comments)

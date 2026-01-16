@@ -44,6 +44,7 @@ interface TaskActivity {
   latest_comment?: string;
   latest_comment_by?: string;
   latest_comment_at?: string;
+  notes_tasks_ar?: string;
 }
 
 interface StatusChange {
@@ -163,7 +164,7 @@ const TeamActivityDashboard = () => {
     try {
       setLoading(true);
 
-      // Fetch all tasks with AR assignments
+      // Fetch all tasks with AR assignments including AR notes
       const { data: tasksData, error: tasksError } = await supabase
         .from('project_tasks')
         .select(`
@@ -175,6 +176,7 @@ const TeamActivityDashboard = () => {
           assigned_ar_id,
           created_at,
           updated_at,
+          notes_tasks_ar,
           projects:project_id (
             project_name
           )
@@ -200,23 +202,28 @@ const TeamActivityDashboard = () => {
 
       setAllProjects(projectsList?.map(p => ({ id: p.id, name: p.project_name })) || []);
 
-      // Transform data
+      // Transform data - prioritize AR notes from database
       const transformedTasks: TaskActivity[] = (tasksData || []).map(task => {
         const ar = arProfiles?.find(a => a.user_id === task.assigned_ar_id);
         
-        // Get latest comment from localStorage
-        const storedComments = localStorage.getItem(`task_comments_${task.task_id}`);
-        let latestComment = null;
-        let latestCommentBy = null;
-        let latestCommentAt = null;
+        // Use notes_tasks_ar from database as primary source for AR comment
+        const arComment = task.notes_tasks_ar || null;
         
-        if (storedComments) {
-          const comments = JSON.parse(storedComments);
-          if (comments.length > 0) {
-            const latest = comments[comments.length - 1];
-            latestComment = latest.comment;
-            latestCommentBy = latest.user_name;
-            latestCommentAt = latest.created_at;
+        // Fallback to localStorage for legacy comments
+        let latestComment = arComment;
+        let latestCommentBy = ar?.name || 'AR';
+        let latestCommentAt = task.updated_at;
+        
+        if (!latestComment) {
+          const storedComments = localStorage.getItem(`task_comments_${task.task_id}`);
+          if (storedComments) {
+            const comments = JSON.parse(storedComments);
+            if (comments.length > 0) {
+              const latest = comments[comments.length - 1];
+              latestComment = latest.comment;
+              latestCommentBy = latest.user_name;
+              latestCommentAt = latest.created_at;
+            }
           }
         }
         
@@ -236,6 +243,7 @@ const TeamActivityDashboard = () => {
           latest_comment: latestComment,
           latest_comment_by: latestCommentBy,
           latest_comment_at: latestCommentAt,
+          notes_tasks_ar: task.notes_tasks_ar,
         };
       });
 
@@ -487,7 +495,7 @@ const TeamActivityDashboard = () => {
                       <TableHead className="w-[180px]">Project</TableHead>
                       <TableHead className="w-[140px]">Assigned To</TableHead>
                       <TableHead className="w-[120px]">Status</TableHead>
-                      <TableHead className="w-[250px]">Latest Comment</TableHead>
+                      <TableHead className="w-[250px]">AR Comment</TableHead>
                       <TableHead className="w-[140px]">Due Date</TableHead>
                       <TableHead className="w-[140px]">Last Updated</TableHead>
                       <TableHead className="w-[200px]">Actions</TableHead>
@@ -516,8 +524,8 @@ const TeamActivityDashboard = () => {
                           <TableCell>{getStatusBadge(task.task_status)}</TableCell>
                           <TableCell>
                             {task.latest_comment ? (
-                              <div className="space-y-1">
-                                <p className="text-sm line-clamp-2 text-foreground">
+                              <div className="space-y-1 bg-blue-50 p-2 rounded border border-blue-100">
+                                <p className="text-sm line-clamp-2 text-foreground font-medium">
                                   {task.latest_comment}
                                 </p>
                                 <p className="text-xs text-muted-foreground">
@@ -525,7 +533,7 @@ const TeamActivityDashboard = () => {
                                 </p>
                               </div>
                             ) : (
-                              <span className="text-xs text-muted-foreground italic">No comments</span>
+                              <span className="text-xs text-orange-600 italic font-medium">⚠️ No AR comment</span>
                             )}
                           </TableCell>
                           <TableCell>
@@ -643,7 +651,7 @@ const TeamActivityDashboard = () => {
                       <TableHead>Task Name</TableHead>
                       <TableHead>Project</TableHead>
                       <TableHead>Completed By</TableHead>
-                      <TableHead className="w-[300px]">Comment</TableHead>
+                      <TableHead className="w-[300px]">AR Comment</TableHead>
                       <TableHead>Completed At</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
@@ -656,8 +664,8 @@ const TeamActivityDashboard = () => {
                         <TableCell>{task.assigned_ar_name}</TableCell>
                         <TableCell>
                           {task.latest_comment ? (
-                            <div className="space-y-1">
-                              <p className="text-sm line-clamp-2 text-foreground">
+                            <div className="space-y-1 bg-green-50 p-2 rounded border border-green-100">
+                              <p className="text-sm line-clamp-2 text-foreground font-medium">
                                 {task.latest_comment}
                               </p>
                               <p className="text-xs text-muted-foreground">
@@ -665,7 +673,7 @@ const TeamActivityDashboard = () => {
                               </p>
                             </div>
                           ) : (
-                            <span className="text-xs text-muted-foreground italic">No comment provided</span>
+                            <span className="text-xs text-orange-600 italic font-medium">⚠️ No AR comment provided</span>
                           )}
                         </TableCell>
                         <TableCell>
