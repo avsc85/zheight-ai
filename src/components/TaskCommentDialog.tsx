@@ -244,16 +244,17 @@ export const TaskCommentDialog = ({
     return null;
   };
 
+  // Handle cancel - allows closing without comment, task stays in old status
+  const handleCancel = () => {
+    setNewComment("");
+    onOpenChange(false);
+  };
+
   return (
     <Dialog open={open} onOpenChange={(isOpen) => {
-      // Prevent closing if mandatory and no comment submitted
-      if (!isOpen && isMandatory && comments.length === 0) {
-        toast({
-          title: "Comment Required",
-          description: mandatoryPrompt || "Please add a comment before proceeding.",
-          variant: "destructive",
-        });
-        return;
+      // Always allow closing - the status change will be cancelled in the parent component
+      if (!isOpen) {
+        setNewComment("");
       }
       onOpenChange(isOpen);
     }}>
@@ -343,7 +344,16 @@ export const TaskCommentDialog = ({
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="gap-2">
+          {isMandatory && (
+            <Button
+              variant="outline"
+              onClick={handleCancel}
+              className="text-muted-foreground"
+            >
+              Cancel (Keep Current Status)
+            </Button>
+          )}
           {!isMandatory && (
             <Button
               variant="outline"
