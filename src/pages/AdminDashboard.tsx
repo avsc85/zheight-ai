@@ -205,7 +205,15 @@ const ProjectCard = ({ project, allUsers, getStatusBadge, getLatestTask, updateT
       <CardHeader>
         <div className="flex items-start justify-between">
           <div className="flex-1">
-            <CardTitle className="text-lg mb-2">{project.project_name}</CardTitle>
+            <CardTitle 
+              className="text-lg mb-2 cursor-pointer hover:text-primary hover:underline transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/project-mgmt/dashboard/${project.id}`);
+              }}
+            >
+              {project.project_name}
+            </CardTitle>
             <CardDescription className="flex items-center gap-2">
               <Users className="h-4 w-4" />
               {project.project_manager_name}
@@ -540,7 +548,17 @@ const ProjectRow = ({ project, allUsers, getStatusBadge, getLatestTask, updateTa
 
   return (
     <TableRow className="hover:bg-accent">
-      <TableCell className="font-medium">{project.project_name}</TableCell>
+      <TableCell className="font-medium">
+        <span 
+          className="cursor-pointer hover:text-primary hover:underline transition-colors"
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(`/project-mgmt/dashboard/${project.id}`);
+          }}
+        >
+          {project.project_name}
+        </span>
+      </TableCell>
       
       {/* PM Column - Read Only */}
       <TableCell>
