@@ -17,6 +17,8 @@ import ProjectSetup from "./pages/ProjectSetup";
 import ProjectTracking from "./pages/ProjectTracking";
 import AdminDashboard from "./pages/AdminDashboard";
 import PMDashboard from "./pages/PMDashboard";
+import ARDashboard from "./pages/ARDashboard";
+import TeamActivityDashboard from "./pages/TeamActivityDashboard";
 import ProjectDashboardView from "./pages/ProjectDashboardView";
 import NotFound from "./pages/NotFound";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -133,6 +135,22 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <PMDashboard />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/project-mgmt/ar-dashboard" 
+              element={
+                <ProtectedRoute>
+                  <ARDashboard />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/project-mgmt/team-activity" 
+              element={
+                <ProtectedRoute>
+                  <TeamActivityDashboard />
                 </ProtectedRoute>
               } 
             />

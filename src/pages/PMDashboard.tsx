@@ -23,7 +23,10 @@ import {
   Edit,
   Save,
   X,
-  Plus
+  Plus,
+  Download,
+  Activity,
+  Shield
 } from "lucide-react";
 import { TaskFilterPanel, TaskFilters, applyTaskFilters, defaultTaskFilters } from "@/components/TaskFilterPanel";
 import { ProjectDateFilter, ProjectDateFilters, applyProjectDateFilters, defaultProjectDateFilters } from "@/components/ProjectDateFilter";
@@ -48,10 +51,110 @@ interface ProjectSummary {
   completion_percentage: number;
   days_remaining: number;
   status: string;
+  health_score: number;
   tasks?: any[];
 }
 
 // Helper functions
+const calculateHealthScore = (project: ProjectSummary): number => {
+  // Health Score = (Completeness × 0.4) + (On-Time × 0.35) + (Resources × 0.25)
+  const completeness = project.completion_percentage;
+  const onTime = Math.max(0, 100 - (project.overdue_tasks / Math.max(project.total_tasks, 1)) * 200);
+  const resources = project.total_tasks > 0 ? Math.min(100, (project.completed_tasks + project.in_progress_tasks) / project.total_tasks * 100) : 50;
+  
+  return Math.round((completeness * 0.4) + (onTime * 0.35) + (resources * 0.25));
+};
+
+const getHealthScoreBadge = (score: number) => {
+  if (score >= 80) {
+    return (
+      <Badge className="bg-green-100 text-green-800 border-green-200">
+        <Activity className="h-3 w-3 mr-1" />
+        Excellent ({score})
+      </Badge>
+    );
+  } else if (score >= 60) {
+    return (
+      <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">
+        <Activity className="h-3 w-3 mr-1" />
+        Good ({score})
+      </Badge>
+    );
+  } else if (score >= 40) {
+    return (
+      <Badge className="bg-orange-100 text-orange-800 border-orange-200">
+        <AlertCircle className="h-3 w-3 mr-1" />
+        At Risk ({score})
+      </Badge>
+    );
+  } else {
+    return (
+      <Badge className="bg-red-100 text-red-800 border-red-200">
+        <Shield className="h-3 w-3 mr-1" />
+        Critical ({score})
+      </Badge>
+    );
+  }
+};
+
+const isProjectAtRisk = (project: ProjectSummary): boolean => {
+  return (
+    project.health_score < 60 ||
+    project.overdue_tasks > 0 ||
+    (project.days_remaining < 7 && project.completion_percentage < 70) ||
+    project.in_queue_tasks > project.total_tasks * 0.5
+  );
+};
+
+const exportToCSV = (projects: ProjectSummary[]) => {
+  const headers = [
+    'Project Name',
+    'PM',
+    'Status',
+    'Health Score',
+    'Progress %',
+    'Total Tasks',
+    'Completed',
+    'In Progress',
+    'In Queue',
+    'Overdue',
+    'Days Remaining',
+    'Start Date',
+    'End Date'
+  ];
+
+  const rows = projects.map(p => [
+    p.project_name,
+    p.project_manager_name,
+    p.status,
+    p.health_score,
+    p.completion_percentage,
+    p.total_tasks,
+    p.completed_tasks,
+    p.in_progress_tasks,
+    p.in_queue_tasks,
+    p.overdue_tasks,
+    p.days_remaining,
+    p.start_date,
+    p.expected_end_date
+  ]);
+
+  const csvContent = [
+    headers.join(','),
+    ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+  ].join('\n');
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.setAttribute('href', url);
+  link.setAttribute('download', `pm_dashboard_${new Date().toISOString().split('T')[0]}.csv`);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
 const getStatusBadge = (status: string) => {
   const variants: Record<string, "done" | "started" | "queue" | "blocked"> = {
     completed: "done",
@@ -196,26 +299,41 @@ const ProjectCard = ({ project, allUsers, getStatusBadge, getLatestTask, updateT
     u.role !== 'pm' && u.role !== 'admin'
   );
 
+  const isAtRisk = isProjectAtRisk(project);
+  
   return (
-    <Card className="hover:shadow-lg transition-shadow">
+    <Card className={`hover:shadow-lg transition-all ${
+      isAtRisk ? 'border-2 border-orange-300 bg-orange-50/30' : ''
+    }`}>
       <CardHeader>
         <div className="flex items-start justify-between">
           <div className="flex-1">
-            <CardTitle 
-              className="text-lg mb-2 cursor-pointer hover:text-primary hover:underline transition-colors"
-              onClick={(e) => {
-                e.stopPropagation();
-                navigate(`/project-mgmt/setup/${project.id}`);
-              }}
-            >
-              {project.project_name}
-            </CardTitle>
+            <div className="flex items-center gap-2 mb-2">
+              <CardTitle 
+                className="text-lg cursor-pointer hover:text-primary hover:underline transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/project-mgmt/setup/${project.id}`);
+                }}
+              >
+                {project.project_name}
+              </CardTitle>
+              {isAtRisk && (
+                <Badge variant="blocked" className="text-xs">
+                  <AlertCircle className="h-3 w-3 mr-1" />
+                  At Risk
+                </Badge>
+              )}
+            </div>
             <CardDescription className="flex items-center gap-2">
               <Users className="h-4 w-4" />
               {project.project_manager_name}
             </CardDescription>
           </div>
-          {getStatusBadge(project.status)}
+          <div className="flex flex-col gap-2">
+            {getStatusBadge(project.status)}
+            {getHealthScoreBadge(project.health_score)}
+          </div>
         </div>
       </CardHeader>
       <CardContent>
@@ -474,6 +592,8 @@ const ProjectRow = ({ project, allUsers, getStatusBadge, getLatestTask, updateTa
   const currentAR = currentTask?.assigned_ar_id 
     ? allUsers.find(u => u.id === currentTask.assigned_ar_id)
     : null;
+    
+  const isAtRisk = isProjectAtRisk(project);
 
   const handleSaveAR = async () => {
     if (currentTask?.task_id && tempARId) {
@@ -540,17 +660,22 @@ const ProjectRow = ({ project, allUsers, getStatusBadge, getLatestTask, updateTa
   );
 
   return (
-    <TableRow className="hover:bg-accent">
+    <TableRow className={`hover:bg-accent ${isAtRisk ? 'bg-orange-50/40' : ''}`}>
       <TableCell className="font-medium">
-        <span 
-          className="cursor-pointer hover:text-primary hover:underline transition-colors"
-          onClick={(e) => {
-            e.stopPropagation();
-            navigate(`/project-mgmt/setup/${project.id}`);
-          }}
-        >
-          {project.project_name}
-        </span>
+        <div className="flex items-center gap-2">
+          <span 
+            className="cursor-pointer hover:text-primary hover:underline transition-colors"
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(`/project-mgmt/setup/${project.id}`);
+            }}
+          >
+            {project.project_name}
+          </span>
+          {isAtRisk && (
+            <AlertCircle className="h-4 w-4 text-orange-500" />
+          )}
+        </div>
       </TableCell>
       
       <TableCell>
@@ -558,6 +683,8 @@ const ProjectRow = ({ project, allUsers, getStatusBadge, getLatestTask, updateTa
       </TableCell>
 
       <TableCell>{getStatusBadge(project.status)}</TableCell>
+
+      <TableCell>{getHealthScoreBadge(project.health_score)}</TableCell>
 
       <TableCell>
         <div className="flex items-center gap-2">
@@ -737,7 +864,7 @@ const ProjectRow = ({ project, allUsers, getStatusBadge, getLatestTask, updateTa
   );
 };
 
-type FilterTab = 'total_projects' | 'active' | 'completed' | 'overdue_projects' | 'total_tasks' | 'completed_tasks';
+type FilterTab = 'total_projects' | 'active' | 'completed' | 'overdue_projects' | 'at_risk' | 'total_tasks' | 'completed_tasks';
 
 const PMDashboard = () => {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
@@ -757,6 +884,7 @@ const PMDashboard = () => {
     activeProjects: 0,
     completedProjects: 0,
     overdueProjects: 0,
+    atRiskProjects: 0,
     totalTasks: 0,
     completedTasks: 0,
   });
@@ -875,7 +1003,7 @@ const PMDashboard = () => {
         totalCompleted += completedTasks;
         totalOverdue += overdueTasks;
 
-        projectSummaries.push({
+        const projectData = {
           id: project.id,
           project_name: project.project_name,
           project_manager_name: project.project_manager_name || "Unassigned",
@@ -891,8 +1019,13 @@ const PMDashboard = () => {
           completion_percentage: completionPercentage,
           days_remaining: daysRemaining,
           status,
+          health_score: 0,
           tasks: projectTasks
-        });
+        };
+        
+        // Calculate health score
+        projectData.health_score = calculateHealthScore(projectData);
+        projectSummaries.push(projectData);
       }
 
       // Collect all tasks with project info for task filtering
@@ -915,6 +1048,7 @@ const PMDashboard = () => {
         activeProjects: projectSummaries.filter(p => p.status === "active").length,
         completedProjects: projectSummaries.filter(p => p.status === "completed").length,
         overdueProjects: projectSummaries.filter(p => p.days_remaining < 0 && p.status !== "completed").length,
+        atRiskProjects: projectSummaries.filter(p => isProjectAtRisk(p)).length,
         totalTasks,
         completedTasks: totalCompleted,
       });
@@ -1020,6 +1154,9 @@ const PMDashboard = () => {
       case 'overdue_projects':
         projectsToFilter = projectsToFilter.filter(p => p.days_remaining < 0 && p.status !== "completed");
         break;
+      case 'at_risk':
+        projectsToFilter = projectsToFilter.filter(p => isProjectAtRisk(p));
+        break;
       case 'total_tasks':
         // Show all tasks
         break;
@@ -1084,7 +1221,7 @@ const PMDashboard = () => {
         </div>
 
         {/* Stats Overview - Clickable Filter Tabs */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-4 mb-8">
           <Card 
             className={`cursor-pointer transition-all hover:shadow-lg ${activeFilter === 'total_projects' ? 'ring-2 ring-primary bg-primary/5' : ''}`}
             onClick={() => setActiveFilter('total_projects')}
@@ -1146,6 +1283,21 @@ const PMDashboard = () => {
           </Card>
 
           <Card 
+            className={`cursor-pointer transition-all hover:shadow-lg ${activeFilter === 'at_risk' ? 'ring-2 ring-orange-500 bg-orange-50' : ''}`}
+            onClick={() => setActiveFilter('at_risk')}
+          >
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">At Risk</p>
+                  <h3 className="text-2xl font-bold text-orange-600">{statsOverview.atRiskProjects}</h3>
+                </div>
+                <Shield className="h-8 w-8 text-orange-500" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card 
             className={`cursor-pointer transition-all hover:shadow-lg ${activeFilter === 'total_tasks' ? 'ring-2 ring-purple-500 bg-purple-50' : ''}`}
             onClick={() => setActiveFilter('total_tasks')}
           >
@@ -1177,8 +1329,8 @@ const PMDashboard = () => {
         </div>
 
         {/* Search and Actions */}
-        <div className="mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+        <div className="mb-6 flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-3">
             <Button
               variant="default"
               size="sm"
@@ -1188,7 +1340,17 @@ const PMDashboard = () => {
               <Plus className="h-4 w-4" />
               New Project
             </Button>
-            <div className="relative max-w-md">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => exportToCSV(filteredProjects)}
+              className="flex items-center gap-2"
+              disabled={filteredProjects.length === 0}
+            >
+              <Download className="h-4 w-4" />
+              Export CSV
+            </Button>
+            <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search projects..."
@@ -1251,15 +1413,16 @@ const PMDashboard = () => {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Project Name</TableHead>
-                        <TableHead>PM</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Progress</TableHead>
+                        <TableHead className="w-[250px]">Project Name</TableHead>
+                        <TableHead className="w-[140px]">PM</TableHead>
+                        <TableHead className="w-[110px]">Status</TableHead>
+                        <TableHead className="w-[110px]">Health</TableHead>
+                        <TableHead className="w-[140px]">Progress</TableHead>
                         <TableHead className="w-[220px]">Task Name</TableHead>
-                        <TableHead>Task Status</TableHead>
-                        <TableHead>Task Due Date</TableHead>
-                        <TableHead>Assigned AR</TableHead>
-                        <TableHead>Action</TableHead>
+                        <TableHead className="w-[120px]">Task Status</TableHead>
+                        <TableHead className="w-[150px]">Task Due Date</TableHead>
+                        <TableHead className="w-[180px]">Assigned AR</TableHead>
+                        <TableHead className="w-[80px]">Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>

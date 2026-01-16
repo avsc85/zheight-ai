@@ -1,13 +1,15 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUserRole } from "@/hooks/useUserRole";
 import { Header } from "@/components/Header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Calendar, BarChart3, KanbanSquare, ArrowRight } from "lucide-react";
+import { Calendar, BarChart3, KanbanSquare, ArrowRight, Activity, Users } from "lucide-react";
 
 const ProjectManagement = () => {
   const { isAuthenticated, loading, profile } = useAuth();
+  const { isPM, isAdmin } = useUserRole();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -76,7 +78,7 @@ const ProjectManagement = () => {
           </div>
 
           {/* Navigation Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <Card className="group hover:shadow-lg transition-all duration-300 border-border/50 hover:border-primary/30">
               <CardHeader className="pb-4">
                 <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center mb-3 group-hover:bg-primary/20 transition-colors">
@@ -141,6 +143,30 @@ const ProjectManagement = () => {
                 </Button>
               </CardContent>
             </Card>
+
+            {/* New Team Activity Dashboard Card */}
+            {(isPM || isAdmin) && (
+              <Card className="group hover:shadow-lg transition-all duration-300 border-border/50 hover:border-blue-500/30">
+                <CardHeader className="pb-4">
+                  <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center mb-3 group-hover:bg-blue-500/20 transition-colors">
+                    <Activity className="h-5 w-5 text-blue-500" />
+                  </div>
+                  <CardTitle className="text-lg text-foreground">Team Activity</CardTitle>
+                  <CardDescription className="text-muted-foreground">
+                    Real-time view of AR work and task status
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <Button 
+                    onClick={() => navigate('/project-mgmt/team-activity')}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    View Activity
+                    <ArrowRight className="h-4 w-4 ml-2" />
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
       </main>
