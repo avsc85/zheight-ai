@@ -209,7 +209,7 @@ const ProjectCard = ({ project, allUsers, getStatusBadge, getLatestTask, updateT
               className="text-lg mb-2 cursor-pointer hover:text-primary hover:underline transition-colors"
               onClick={(e) => {
                 e.stopPropagation();
-                navigate(`/project-mgmt/dashboard/${project.id}`);
+                navigate(`/project-mgmt/setup/${project.id}`);
               }}
             >
               {project.project_name}
@@ -553,7 +553,7 @@ const ProjectRow = ({ project, allUsers, getStatusBadge, getLatestTask, updateTa
           className="cursor-pointer hover:text-primary hover:underline transition-colors"
           onClick={(e) => {
             e.stopPropagation();
-            navigate(`/project-mgmt/dashboard/${project.id}`);
+            navigate(`/project-mgmt/setup/${project.id}`);
           }}
         >
           {project.project_name}
