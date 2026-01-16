@@ -6,7 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MapPin, Clock, Edit, Save, X, GripVertical } from "lucide-react";
+import { MapPin, Clock, Edit, Save, X, GripVertical, MessageSquare } from "lucide-react";
+import { TaskCommentDialog } from "@/components/TaskCommentDialog";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -49,6 +50,7 @@ interface Task {
   projectId: string;
   completionDate?: string;
   milestoneNumber: number;
+  arComment?: string;
 }
 
 const DroppableColumn = ({ children, id, className }: { children: React.ReactNode; id: string; className?: string }) => {
@@ -61,12 +63,13 @@ const DroppableColumn = ({ children, id, className }: { children: React.ReactNod
   );
 };
 
-const SortableTaskCard = ({ task, onUpdateNotes, onUpdateStatus, currentUserId, userRole }: { 
+const SortableTaskCard = ({ task, onUpdateNotes, onUpdateStatus, currentUserId, userRole, onStatusChangeWithComment }: { 
   task: Task; 
   onUpdateNotes: (taskId: string, notes: string, type: 'ar' | 'pm') => void;
   onUpdateStatus: (taskId: string, status: Task['status']) => void;
   currentUserId: string;
   userRole: string | null;
+  onStatusChangeWithComment: (taskId: string, newStatus: Task['status']) => void;
 }) => {
   const {
     attributes,
@@ -92,18 +95,20 @@ const SortableTaskCard = ({ task, onUpdateNotes, onUpdateStatus, currentUserId, 
         currentUserId={currentUserId}
         userRole={userRole}
         dragHandleProps={listeners}
+        onStatusChangeWithComment={onStatusChangeWithComment}
       />
     </div>
   );
 };
 
-const TaskCard = ({ task, onUpdateNotes, onUpdateStatus, currentUserId, userRole, dragHandleProps }: { 
+const TaskCard = ({ task, onUpdateNotes, onUpdateStatus, currentUserId, userRole, dragHandleProps, onStatusChangeWithComment }: { 
   task: Task; 
   onUpdateNotes: (taskId: string, notes: string, type: 'ar' | 'pm') => void;
   onUpdateStatus: (taskId: string, status: Task['status']) => void;
   currentUserId: string;
   userRole: string | null;
   dragHandleProps?: any;
+  onStatusChangeWithComment?: (taskId: string, newStatus: Task['status']) => void;
 }) => {
   const [isEditingARNotes, setIsEditingARNotes] = useState(false);
   const [isEditingPMNotes, setIsEditingPMNotes] = useState(false);
@@ -172,7 +177,18 @@ const TaskCard = ({ task, onUpdateNotes, onUpdateStatus, currentUserId, userRole
           {getPriorityBadge()}
           <div className="flex items-center gap-2">
             {canEditStatus && (
-              <Select value={task.status} onValueChange={(value) => onUpdateStatus(task.id, value as Task['status'])}>
+              <Select 
+                value={task.status} 
+                onValueChange={(value) => {
+                  const newStatus = value as Task['status'];
+                  // Use comment-required handler for completed/blocked
+                  if ((newStatus === 'completed' || newStatus === 'blocked') && onStatusChangeWithComment) {
+                    onStatusChangeWithComment(task.id, newStatus);
+                  } else {
+                    onUpdateStatus(task.id, newStatus);
+                  }
+                }}
+              >
                 <SelectTrigger className="h-6 w-24 text-xs">
                   <SelectValue />
                 </SelectTrigger>
@@ -238,7 +254,7 @@ const TaskCard = ({ task, onUpdateNotes, onUpdateStatus, currentUserId, userRole
           {/* AR Notes Section */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-medium text-muted-foreground">AR Notes:</label>
+              <label className="text-xs font-medium text-muted-foreground">AR Comment:</label>
               {canEditARNotes && !isEditingARNotes && (
                 <Button
                   variant="ghost"
@@ -257,7 +273,7 @@ const TaskCard = ({ task, onUpdateNotes, onUpdateStatus, currentUserId, userRole
                   value={editedARNotes}
                   onChange={(e) => setEditedARNotes(e.target.value)}
                   className="text-xs min-h-16 resize-none"
-                  placeholder="Add AR notes..."
+                  placeholder="Add AR comment..."
                 />
                 <div className="flex gap-2">
                   <Button
@@ -288,7 +304,7 @@ const TaskCard = ({ task, onUpdateNotes, onUpdateStatus, currentUserId, userRole
                   </p>
                 ) : (
                   <p className="text-xs text-muted-foreground/60 italic">
-                    {canEditARNotes ? "Click edit to add AR notes..." : "No AR notes"}
+                    {canEditARNotes ? "Click edit to add AR comment..." : "No AR comment"}
                   </p>
                 )}
               </div>
@@ -368,6 +384,12 @@ const ProjectBoard = () => {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [selectedARFilter, setSelectedARFilter] = useState<string>('current');
   const [allARUsers, setAllARUsers] = useState<any[]>([]);
+  
+  // Mandatory comment dialog state
+  const [commentDialogOpen, setCommentDialogOpen] = useState(false);
+  const [pendingStatusChange, setPendingStatusChange] = useState<{taskId: string; newStatus: Task['status']} | null>(null);
+  const [selectedTaskForComment, setSelectedTaskForComment] = useState<Task | null>(null);
+  
   const { toast } = useToast();
   const { user, userRole } = useAuth();
   
@@ -682,6 +704,31 @@ const ProjectBoard = () => {
     }
   };
 
+  // Handle status change that requires mandatory comment (completed/blocked)
+  const handleStatusChangeWithComment = (taskId: string, newStatus: Task['status']) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    // For completed or blocked status, require a comment
+    if (newStatus === 'completed' || newStatus === 'blocked') {
+      setSelectedTaskForComment(task);
+      setPendingStatusChange({ taskId, newStatus });
+      setCommentDialogOpen(true);
+    } else {
+      // For other statuses, update directly
+      handleUpdateStatus(taskId, newStatus);
+    }
+  };
+
+  // Called after mandatory comment is submitted
+  const handleCommentSubmitted = () => {
+    if (pendingStatusChange) {
+      handleUpdateStatus(pendingStatusChange.taskId, pendingStatusChange.newStatus);
+      setPendingStatusChange(null);
+      setSelectedTaskForComment(null);
+    }
+  };
+
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string);
   };
@@ -709,7 +756,8 @@ const ProjectBoard = () => {
     
     if (activeTask && newStatus && activeTask.status !== newStatus) {
       console.log('Updating task from drag:', { taskId: activeTask.id, oldStatus: activeTask.status, newStatus });
-      handleUpdateStatus(activeTask.id, newStatus);
+      // Use the comment-required handler for completed/blocked
+      handleStatusChangeWithComment(activeTask.id, newStatus);
     }
   };
 
@@ -925,8 +973,9 @@ const ProjectBoard = () => {
                               task={task} 
                               onUpdateNotes={handleUpdateNotes}
                               onUpdateStatus={handleUpdateStatus}
-                               currentUserId={user?.id || ''}
-                               userRole={userRole?.role || null}
+                              currentUserId={user?.id || ''}
+                              userRole={userRole?.role || null}
+                              onStatusChangeWithComment={handleStatusChangeWithComment}
                             />
                           ))}
                         </div>
@@ -944,12 +993,40 @@ const ProjectBoard = () => {
                     onUpdateStatus={handleUpdateStatus}
                     currentUserId={user?.id || ''}
                     userRole={userRole?.role || null}
+                    onStatusChangeWithComment={handleStatusChangeWithComment}
                   />
                 ) : null}
               </DragOverlay>
             </DndContext>
           )}
         </div>
+
+        {/* Mandatory Comment Dialog for Status Changes */}
+        {selectedTaskForComment && (
+          <TaskCommentDialog
+            open={commentDialogOpen}
+            onOpenChange={(open) => {
+              if (!open && pendingStatusChange) {
+                // If dialog is closed without submitting, cancel the status change
+                setPendingStatusChange(null);
+                setSelectedTaskForComment(null);
+              }
+              setCommentDialogOpen(open);
+            }}
+            taskId={selectedTaskForComment.id}
+            taskName={`${selectedTaskForComment.project} - ${selectedTaskForComment.task}`}
+            currentUserId={user?.id || ''}
+            currentUserName={currentUserProfile?.name || 'Unknown'}
+            currentUserRole={userRole?.role || 'ar1_planning'}
+            isMandatory={true}
+            mandatoryPrompt={
+              pendingStatusChange?.newStatus === 'completed'
+                ? "Please describe what work was completed on this task. This comment is required for PM/Admin approval."
+                : "Please explain why this task is blocked. This helps PM/Admin understand the issue."
+            }
+            onCommentSubmitted={handleCommentSubmitted}
+          />
+        )}
       </main>
     </div>
   );
