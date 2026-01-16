@@ -17,10 +17,12 @@ import {
   User,
   Calendar,
   ThumbsUp,
+  ThumbsDown,
   MessageSquare,
   Filter,
   Download,
-  RefreshCw
+  RefreshCw,
+  XCircle
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -40,6 +42,8 @@ interface TaskActivity {
   created_at: string;
   updated_at: string | null;
   pm_approved: boolean;
+  approval_status: 'pending' | 'approved' | 'rejected';
+  previous_status: string | null;
   last_status_change: string | null;
   latest_comment?: string;
   latest_comment_by?: string;
@@ -76,6 +80,33 @@ const getStatusBadge = (status: string) => {
       {labels[status] || status}
     </Badge>
   );
+};
+
+const getApprovalStatusBadge = (approvalStatus: 'pending' | 'approved' | 'rejected') => {
+  switch (approvalStatus) {
+    case 'approved':
+      return (
+        <Badge className="bg-green-500 text-white hover:bg-green-600">
+          <CheckCircle2 className="h-3 w-3 mr-1" />
+          Approved
+        </Badge>
+      );
+    case 'rejected':
+      return (
+        <Badge className="bg-red-500 text-white hover:bg-red-600">
+          <XCircle className="h-3 w-3 mr-1" />
+          Rejected
+        </Badge>
+      );
+    case 'pending':
+    default:
+      return (
+        <Badge className="bg-orange-500 text-white hover:bg-orange-600">
+          <Clock className="h-3 w-3 mr-1" />
+          Pending
+        </Badge>
+      );
+  }
 };
 
 const exportToCSV = (tasks: TaskActivity[]) => {
@@ -164,7 +195,7 @@ const TeamActivityDashboard = () => {
     try {
       setLoading(true);
 
-      // Fetch all tasks with AR assignments including AR notes
+      // Fetch all tasks with AR assignments including AR notes and approval status
       const { data: tasksData, error: tasksError } = await supabase
         .from('project_tasks')
         .select(`
@@ -177,6 +208,8 @@ const TeamActivityDashboard = () => {
           created_at,
           updated_at,
           notes_tasks_ar,
+          approval_status,
+          previous_status,
           projects:project_id (
             project_name
           )
@@ -233,12 +266,14 @@ const TeamActivityDashboard = () => {
           task_status: task.task_status || 'in_queue',
           due_date: task.due_date,
           project_id: task.project_id,
-          project_name: task.projects?.project_name || 'Unknown Project',
+          project_name: (task.projects as any)?.project_name || 'Unknown Project',
           assigned_ar_id: task.assigned_ar_id,
           assigned_ar_name: ar?.name || null,
           created_at: task.created_at,
           updated_at: task.updated_at,
-          pm_approved: false,
+          pm_approved: (task as any).approval_status === 'approved',
+          approval_status: ((task as any).approval_status || 'pending') as 'pending' | 'approved' | 'rejected',
+          previous_status: (task as any).previous_status || null,
           last_status_change: task.updated_at,
           latest_comment: latestComment,
           latest_comment_by: latestCommentBy,
@@ -271,7 +306,7 @@ const TeamActivityDashboard = () => {
         totalTasks: transformedTasks.length,
         inProgress: transformedTasks.filter(t => t.task_status === 'started').length,
         completed: transformedTasks.filter(t => t.task_status === 'completed').length,
-        needsApproval: transformedTasks.filter(t => t.task_status === 'completed' && !t.pm_approved).length,
+        needsApproval: transformedTasks.filter(t => t.task_status === 'completed' && t.approval_status === 'pending').length,
       });
 
       setLoading(false);
@@ -288,8 +323,14 @@ const TeamActivityDashboard = () => {
 
   const approveTask = async (taskId: string) => {
     try {
-      // Here you would update a pm_approved field in the database
-      // For now, just show success message
+      // Update approval_status in database
+      const { error } = await supabase
+        .from('project_tasks')
+        .update({ approval_status: 'approved' })
+        .eq('task_id', taskId);
+
+      if (error) throw error;
+
       toast({
         title: "Task Approved",
         description: "Task has been approved successfully!",
@@ -297,15 +338,54 @@ const TeamActivityDashboard = () => {
       
       // Update local state
       setTasks(tasks.map(t => 
-        t.task_id === taskId ? { ...t, pm_approved: true } : t
+        t.task_id === taskId ? { ...t, pm_approved: true, approval_status: 'approved' as const } : t
       ));
       setFilteredTasks(filteredTasks.map(t => 
-        t.task_id === taskId ? { ...t, pm_approved: true } : t
+        t.task_id === taskId ? { ...t, pm_approved: true, approval_status: 'approved' as const } : t
       ));
     } catch (error) {
       toast({
         title: "Error",
         description: "Failed to approve task.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const rejectTask = async (taskId: string, previousStatus: string | null) => {
+    try {
+      // Reject and move back to previous status
+      const rollbackStatus = previousStatus || 'started';
+      
+      const { error } = await supabase
+        .from('project_tasks')
+        .update({ 
+          approval_status: 'rejected',
+          task_status: rollbackStatus,
+        })
+        .eq('task_id', taskId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Task Rejected",
+        description: `Task has been rejected and moved back to "${rollbackStatus}" status.`,
+      });
+      
+      // Update local state
+      setTasks(tasks.map(t => 
+        t.task_id === taskId ? { ...t, approval_status: 'rejected' as const, task_status: rollbackStatus } : t
+      ));
+      setFilteredTasks(filteredTasks.map(t => 
+        t.task_id === taskId ? { ...t, approval_status: 'rejected' as const, task_status: rollbackStatus } : t
+      ));
+      
+      // Refresh data to update stats
+      fetchTeamActivity();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to reject task.",
         variant: "destructive",
       });
     }
@@ -550,7 +630,7 @@ const TeamActivityDashboard = () => {
                             </span>
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -563,30 +643,31 @@ const TeamActivityDashboard = () => {
                                 <MessageSquare className="h-3 w-3" />
                                 Comment
                               </Button>
-                              {isCompleted && !task.pm_approved && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => approveTask(task.task_id)}
-                                  className="flex items-center gap-1 text-green-600 hover:text-green-700"
-                                >
-                                  <ThumbsUp className="h-3 w-3" />
-                                  Approve
-                                </Button>
+                              {isCompleted && task.approval_status === 'pending' && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => approveTask(task.task_id)}
+                                    className="flex items-center gap-1 text-green-600 hover:text-green-700"
+                                  >
+                                    <ThumbsUp className="h-3 w-3" />
+                                    Approve
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => rejectTask(task.task_id, task.previous_status)}
+                                    className="flex items-center gap-1 text-red-600 hover:text-red-700"
+                                  >
+                                    <ThumbsDown className="h-3 w-3" />
+                                    Reject
+                                  </Button>
+                                </>
                               )}
-                              {task.pm_approved && (
-                                <Badge variant="done" className="text-xs">
-                                  <CheckCircle2 className="h-3 w-3 mr-1" />
-                                  Approved
-                                </Badge>
+                              {isCompleted && task.approval_status !== 'pending' && (
+                                getApprovalStatusBadge(task.approval_status)
                               )}
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => navigate(`/project-mgmt/dashboard/${task.project_id}`)}
-                              >
-                                View
-                              </Button>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -651,17 +732,19 @@ const TeamActivityDashboard = () => {
                       <TableHead>Task Name</TableHead>
                       <TableHead>Project</TableHead>
                       <TableHead>Completed By</TableHead>
+                      <TableHead>Approval Status</TableHead>
                       <TableHead className="w-[300px]">AR Comment</TableHead>
                       <TableHead>Completed At</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredTasks.filter(t => t.task_status === 'completed' && !t.pm_approved).map((task) => (
+                    {filteredTasks.filter(t => t.task_status === 'completed' && t.approval_status === 'pending').map((task) => (
                       <TableRow key={task.task_id} className="hover:bg-accent">
                         <TableCell className="font-medium">{task.task_name}</TableCell>
                         <TableCell>{task.project_name}</TableCell>
                         <TableCell>{task.assigned_ar_name}</TableCell>
+                        <TableCell>{getApprovalStatusBadge(task.approval_status)}</TableCell>
                         <TableCell>
                           {task.latest_comment ? (
                             <div className="space-y-1 bg-green-50 p-2 rounded border border-green-100">
@@ -691,10 +774,11 @@ const TeamActivityDashboard = () => {
                             </Button>
                             <Button
                               size="sm"
-                              variant="outline"
-                              onClick={() => navigate(`/project-mgmt/dashboard/${task.project_id}`)}
+                              variant="destructive"
+                              onClick={() => rejectTask(task.task_id, task.previous_status)}
                             >
-                              View Details
+                              <ThumbsDown className="h-4 w-4 mr-1" />
+                              Reject
                             </Button>
                           </div>
                         </TableCell>
@@ -702,7 +786,7 @@ const TeamActivityDashboard = () => {
                     ))}
                   </TableBody>
                 </Table>
-                {filteredTasks.filter(t => t.task_status === 'completed' && !t.pm_approved).length === 0 && (
+                {filteredTasks.filter(t => t.task_status === 'completed' && t.approval_status === 'pending').length === 0 && (
                   <div className="text-center py-12 text-muted-foreground">
                     <CheckCircle2 className="h-12 w-12 mx-auto mb-4 text-green-500" />
                     <p>No tasks need approval</p>

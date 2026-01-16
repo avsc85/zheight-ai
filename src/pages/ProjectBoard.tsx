@@ -51,6 +51,8 @@ interface Task {
   completionDate?: string;
   milestoneNumber: number;
   arComment?: string;
+  approvalStatus?: 'pending' | 'approved' | 'rejected';
+  previousStatus?: string;
 }
 
 const DroppableColumn = ({ children, id, className }: { children: React.ReactNode; id: string; className?: string }) => {
@@ -122,6 +124,33 @@ const TaskCard = ({ task, onUpdateNotes, onUpdateStatus, currentUserId, userRole
     return null;
   };
 
+  const getApprovalStatusBadge = () => {
+    if (task.status !== 'completed') return null;
+    
+    const status = task.approvalStatus || 'pending';
+    switch (status) {
+      case 'approved':
+        return (
+          <Badge className="bg-green-500 text-white hover:bg-green-600 text-xs">
+            ✓ Approved
+          </Badge>
+        );
+      case 'rejected':
+        return (
+          <Badge className="bg-red-500 text-white hover:bg-red-600 text-xs">
+            ✗ Rejected
+          </Badge>
+        );
+      case 'pending':
+      default:
+        return (
+          <Badge className="bg-orange-500 text-white hover:bg-orange-600 text-xs">
+            ⏳ Pending Approval
+          </Badge>
+        );
+    }
+  };
+
   const getStatusColor = () => {
     switch (task.status) {
       case 'started': return 'border-l-status-started';
@@ -173,6 +202,10 @@ const TaskCard = ({ task, onUpdateNotes, onUpdateStatus, currentUserId, userRole
   return (
     <Card className={`mb-4 border-l-4 ${getStatusColor()} hover:shadow-md transition-shadow`}>
       <CardContent className="p-4">
+        {/* Approval Status Badge for completed tasks */}
+        {task.status === 'completed' && (
+          <div className="mb-2">{getApprovalStatusBadge()}</div>
+        )}
         <div className="flex items-start justify-between mb-2">
           {getPriorityBadge()}
           <div className="flex items-center gap-2">
@@ -662,12 +695,25 @@ const ProjectBoard = () => {
         throw new Error(`Invalid status: ${status}`);
       }
       
+      // Get the current task's status to store as previous_status
+      const currentTask = tasks.find(t => t.id === taskId);
+      const previousStatus = currentTask?.status || 'in_queue';
+      
+      // Prepare update object
+      const updateData: Record<string, any> = { 
+        task_status: dbStatus,
+        completion_date: dbStatus === 'completed' ? new Date().toISOString().split('T')[0] : null
+      };
+      
+      // When moving to completed, store previous status and reset approval status to pending
+      if (dbStatus === 'completed') {
+        updateData.previous_status = previousStatus;
+        updateData.approval_status = 'pending';
+      }
+      
       const { data, error } = await supabase
         .from('project_tasks')
-        .update({ 
-          task_status: dbStatus,
-          completion_date: dbStatus === 'completed' ? new Date().toISOString().split('T')[0] : null
-        })
+        .update(updateData)
         .eq('task_id', taskId)
         .select('*')
         .single();
@@ -679,13 +725,15 @@ const ProjectBoard = () => {
 
       console.log('Status update successful:', data);
 
-      // Update local state with completion date
+      // Update local state with completion date and approval status
       setTasks(prevTasks => 
         prevTasks.map(task => 
           task.id === taskId ? { 
             ...task, 
             status,
-            completionDate: data.completion_date
+            completionDate: data.completion_date,
+            approvalStatus: (data as any).approval_status || task.approvalStatus,
+            previousStatus: (data as any).previous_status || task.previousStatus,
           } : task
         )
       );

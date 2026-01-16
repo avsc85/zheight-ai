@@ -550,6 +550,7 @@ export type Database = {
       project_tasks: {
         Row: {
           allocated_due_date: string | null
+          approval_status: string | null
           assigned_ar_id: string | null
           assigned_skip_flag: string | null
           completion_date: string | null
@@ -561,6 +562,7 @@ export type Database = {
           notes_tasks: string | null
           notes_tasks_ar: string | null
           notes_tasks_pm: string | null
+          previous_status: string | null
           project_id: string
           task_id: string
           task_name: string
@@ -570,6 +572,7 @@ export type Database = {
         }
         Insert: {
           allocated_due_date?: string | null
+          approval_status?: string | null
           assigned_ar_id?: string | null
           assigned_skip_flag?: string | null
           completion_date?: string | null
@@ -581,6 +584,7 @@ export type Database = {
           notes_tasks?: string | null
           notes_tasks_ar?: string | null
           notes_tasks_pm?: string | null
+          previous_status?: string | null
           project_id: string
           task_id?: string
           task_name: string
@@ -590,6 +594,7 @@ export type Database = {
         }
         Update: {
           allocated_due_date?: string | null
+          approval_status?: string | null
           assigned_ar_id?: string | null
           assigned_skip_flag?: string | null
           completion_date?: string | null
@@ -601,6 +606,7 @@ export type Database = {
           notes_tasks?: string | null
           notes_tasks_ar?: string | null
           notes_tasks_pm?: string | null
+          previous_status?: string | null
           project_id?: string
           task_id?: string
           task_name?: string
