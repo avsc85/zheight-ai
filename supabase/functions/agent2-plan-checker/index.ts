@@ -122,7 +122,7 @@ async function convertPDFToBase64(pdfBytes: Uint8Array): Promise<string | null> 
     
     for (let i = 0; i < pdfBytes.length; i += CHUNK_SIZE) {
       const chunk = pdfBytes.subarray(i, i + CHUNK_SIZE);
-      binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+      binaryString += String.fromCharCode(...Array.from(chunk));
     }
     
     const base64 = btoa(binaryString);
