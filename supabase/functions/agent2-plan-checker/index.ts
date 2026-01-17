@@ -111,13 +111,21 @@ async function uploadPDFToStorage(
   return signedData.signedUrl;
 }
 
-// Convert PDF to base64 for API processing
+// Convert PDF to base64 for API processing (chunked to avoid stack overflow)
 async function convertPDFToBase64(pdfBytes: Uint8Array): Promise<string | null> {
   try {
     console.log('Converting PDF to base64...');
     
-    // Convert to base64 for GPT Vision processing
-    const base64 = btoa(String.fromCharCode(...pdfBytes));
+    // Convert to base64 using chunked approach to avoid stack overflow on large files
+    const CHUNK_SIZE = 8192;
+    let binaryString = '';
+    
+    for (let i = 0; i < pdfBytes.length; i += CHUNK_SIZE) {
+      const chunk = pdfBytes.subarray(i, i + CHUNK_SIZE);
+      binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+    }
+    
+    const base64 = btoa(binaryString);
     const dataUrl = `data:application/pdf;base64,${base64}`;
     
     console.log('PDF converted to data URL');
