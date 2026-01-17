@@ -136,9 +136,9 @@ async function convertPDFToBase64(pdfBytes: Uint8Array): Promise<string | null> 
   }
 }
 
-// Extract city from PDF first page image using OpenAI GPT-5 Vision
+// Extract city from PDF first page image using OpenAI GPT-4o Vision
 async function extractCityFromPDFImage(imageDataUrl: string, openAIApiKey: string): Promise<string | null> {
-  console.log('Extracting city from PDF page image via OpenAI GPT-5 Vision...');
+  console.log('Extracting city from PDF page image via OpenAI GPT-4o Vision...');
   
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -148,7 +148,7 @@ async function extractCityFromPDFImage(imageDataUrl: string, openAIApiKey: strin
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-5-2025-08-07',
+        model: 'gpt-4o',
         messages: [
           {
             role: 'user',
