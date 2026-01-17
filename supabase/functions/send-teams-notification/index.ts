@@ -10,7 +10,9 @@ interface TeamsNotificationPayload {
   taskId: string;
   taskName: string;
   projectName: string;
+  projectId?: string;
   arName: string;
+  pmName?: string;
   newStatus: string;
   previousStatus?: string;
   comment?: string;
@@ -36,57 +38,90 @@ serve(async (req) => {
     const payload: TeamsNotificationPayload = await req.json();
     console.log("Received notification payload:", payload);
 
-    const { taskId, taskName, projectName, arName, newStatus, previousStatus, comment, approvalStatus } = payload;
+    const { taskId, taskName, projectName, projectId, arName, pmName, newStatus, previousStatus, comment, approvalStatus } = payload;
 
-    // Determine status emoji and color
+    // Format status for display
+    const formatStatus = (status: string) => {
+      if (!status) return "Unknown";
+      return status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+    };
+
+    // Determine status emoji
     const getStatusEmoji = (status: string) => {
       switch (status?.toLowerCase()) {
         case "completed": return "✅";
         case "started": return "🚀";
-        case "not started": return "⏳";
-        case "on hold": return "⏸️";
+        case "in_queue": return "📋";
+        case "blocked": return "🚫";
         default: return "📋";
       }
     };
 
-    const getApprovalEmoji = (status: string) => {
+    // Determine theme color based on status
+    const getThemeColor = (status: string) => {
       switch (status?.toLowerCase()) {
-        case "approved": return "👍";
-        case "rejected": return "👎";
-        case "pending": return "⏳";
-        default: return "";
+        case "completed": return "00C853"; // Green
+        case "started": return "2196F3"; // Blue
+        case "blocked": return "F44336"; // Red
+        default: return "FF9800"; // Orange
       }
     };
 
-    // Build Microsoft Teams Adaptive Card
+    // Build positive, professional greeting
+    const greeting = pmName ? `Hi ${pmName},` : "Hi Team,";
+    
+    // Build positive status message
+    const getStatusMessage = (status: string, taskName: string, arName: string) => {
+      switch (status?.toLowerCase()) {
+        case "completed":
+          return `Great news! **${arName}** has completed the task "${taskName}". 🎉`;
+        case "started":
+          return `**${arName}** has started working on "${taskName}". Work is in progress! 💪`;
+        case "blocked":
+          return `**${arName}** has flagged "${taskName}" as blocked and needs attention. ⚠️`;
+        default:
+          return `Task "${taskName}" has been updated by **${arName}**.`;
+      }
+    };
+
+    // Build Microsoft Teams Adaptive Card with professional greeting
     const teamsMessage = {
       "@type": "MessageCard",
       "@context": "http://schema.org/extensions",
-      themeColor: newStatus === "completed" ? "00C853" : newStatus === "started" ? "2196F3" : "FF9800",
+      themeColor: getThemeColor(newStatus),
       summary: `Task Update: ${taskName}`,
       sections: [
         {
+          activityTitle: greeting,
+          activitySubtitle: getStatusMessage(newStatus, taskName, arName || "An AR"),
+          markdown: true,
+        },
+        {
           activityTitle: `${getStatusEmoji(newStatus)} Task Status Update`,
-          activitySubtitle: `Project: **${projectName}**`,
           facts: [
+            { name: "📁 Project", value: `**${projectName}**` },
             { name: "📌 Task", value: taskName },
             { name: "👤 Updated By", value: arName || "Unknown" },
-            { name: "📊 New Status", value: `${getStatusEmoji(newStatus)} ${newStatus?.charAt(0).toUpperCase() + newStatus?.slice(1) || "Unknown"}` },
-            ...(previousStatus ? [{ name: "📋 Previous Status", value: `${getStatusEmoji(previousStatus)} ${previousStatus?.charAt(0).toUpperCase() + previousStatus?.slice(1)}` }] : []),
-            ...(approvalStatus ? [{ name: "✔️ Approval Status", value: `${getApprovalEmoji(approvalStatus)} ${approvalStatus?.charAt(0).toUpperCase() + approvalStatus?.slice(1)}` }] : []),
+            { name: "📊 New Status", value: `${getStatusEmoji(newStatus)} ${formatStatus(newStatus)}` },
+            ...(previousStatus ? [{ name: "📋 Previous Status", value: `${getStatusEmoji(previousStatus)} ${formatStatus(previousStatus)}` }] : []),
           ],
           markdown: true,
         },
         ...(comment ? [{
-          activityTitle: "💬 Comment",
-          text: comment,
+          activityTitle: "💬 AR Comment",
+          text: `> ${comment}`,
+          markdown: true,
+        }] : []),
+        ...(newStatus === 'completed' ? [{
+          activityTitle: "⏳ Action Required",
+          text: "Please review and approve this task completion.",
           markdown: true,
         }] : []),
       ],
       potentialAction: [
         {
           "@type": "OpenUri",
-          name: "View Task Details",
+          name: "View in Dashboard",
           targets: [
             { os: "default", uri: `https://zheight-ai.lovable.app/team-activity` }
           ]

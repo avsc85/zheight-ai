@@ -53,6 +53,7 @@ interface Task {
   arComment?: string;
   approvalStatus?: 'pending' | 'approved' | 'rejected';
   previousStatus?: string;
+  pmName?: string;
 }
 
 const DroppableColumn = ({ children, id, className }: { children: React.ReactNode; id: string; className?: string }) => {
@@ -680,7 +681,8 @@ const ProjectBoard = () => {
       arAssignedName: task.assigned_ar_id ? arNames[task.assigned_ar_id] : undefined,
       projectId: task.project_id,
       completionDate: task.completion_date,
-      milestoneNumber: task.milestone_number || 0
+      milestoneNumber: task.milestone_number || 0,
+      pmName: task.projects?.project_manager_name || undefined
     }));
     
     console.log('Formatted tasks:', formattedTasks);
@@ -736,7 +738,9 @@ const ProjectBoard = () => {
           taskId,
           taskName: task.task,
           projectName: task.project,
+          projectId: task.projectId,
           arName: currentUserProfile?.name || 'Unknown AR',
+          pmName: task.pmName || undefined,
           newStatus,
           previousStatus,
           comment,
