@@ -678,7 +678,38 @@ const ProjectBoard = () => {
     }
   };
 
-  const handleUpdateStatus = async (taskId: string, status: Task['status']) => {
+  // Send Microsoft Teams notification for task status updates
+  const sendTeamsNotification = async (taskId: string, newStatus: string, previousStatus: string, comment?: string) => {
+    try {
+      const task = tasks.find(t => t.id === taskId);
+      if (!task) return;
+
+      console.log('Sending Teams notification for task:', taskId, 'status:', newStatus);
+      
+      const { data, error } = await supabase.functions.invoke('send-teams-notification', {
+        body: {
+          taskId,
+          taskName: task.task,
+          projectName: task.project,
+          arName: currentUserProfile?.name || 'Unknown AR',
+          newStatus,
+          previousStatus,
+          comment,
+          approvalStatus: newStatus === 'completed' ? 'pending' : undefined,
+        }
+      });
+
+      if (error) {
+        console.error('Error sending Teams notification:', error);
+      } else {
+        console.log('Teams notification sent successfully:', data);
+      }
+    } catch (error) {
+      console.error('Failed to send Teams notification:', error);
+    }
+  };
+
+  const handleUpdateStatus = async (taskId: string, status: Task['status'], comment?: string) => {
     try {
       console.log('Updating task status:', { taskId, status, currentUserId: user?.id, userRole: userRole?.role });
       
@@ -725,6 +756,11 @@ const ProjectBoard = () => {
 
       console.log('Status update successful:', data);
 
+      // Send Teams notification for completed or blocked tasks
+      if (status === 'completed' || status === 'blocked') {
+        sendTeamsNotification(taskId, status, previousStatus, comment);
+      }
+
       // Update local state with completion date and approval status
       setTasks(prevTasks => 
         prevTasks.map(task => 
@@ -769,9 +805,9 @@ const ProjectBoard = () => {
   };
 
   // Called after mandatory comment is submitted
-  const handleCommentSubmitted = () => {
+  const handleCommentSubmitted = (comment?: string) => {
     if (pendingStatusChange) {
-      handleUpdateStatus(pendingStatusChange.taskId, pendingStatusChange.newStatus);
+      handleUpdateStatus(pendingStatusChange.taskId, pendingStatusChange.newStatus, comment);
       setPendingStatusChange(null);
       setSelectedTaskForComment(null);
     }
