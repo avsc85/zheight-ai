@@ -36,7 +36,7 @@ interface TaskCommentDialogProps {
   currentUserRole: string;
   isMandatory?: boolean;
   mandatoryPrompt?: string;
-  onCommentSubmitted?: () => void;
+  onCommentSubmitted?: (comment?: string) => void;
 }
 
 export const TaskCommentDialog = ({
@@ -176,9 +176,9 @@ export const TaskCommentDialog = ({
         description: "Your comment has been added and saved.",
       });
 
-      // Call the callback if provided (for mandatory comments)
+      // Call the callback if provided (for mandatory comments) - pass the comment text
       if (onCommentSubmitted) {
-        onCommentSubmitted();
+        onCommentSubmitted(newComment.trim());
       }
 
       // Close dialog if mandatory (after status update will happen)

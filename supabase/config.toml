@@ -25,8 +25,8 @@ verify_jwt = true
 [functions.get-users-with-auth]
 verify_jwt = true
 
-[functions.send-task-assignment-email]
+[functions.send-teams-notification]
 verify_jwt = false
 
-[functions.process-email-queue]
+[functions.daily-task-digest]
 verify_jwt = false
