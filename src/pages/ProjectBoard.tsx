@@ -190,14 +190,52 @@ const TaskCard = ({ task, onUpdateNotes, onUpdateStatus, currentUserId, userRole
     isTaskAssignedToUser: task.arAssigned === currentUserId
   });
   
+  // Check if user is AR (not PM or Admin)
+  const isARUser = userRole === 'ar1_planning' || userRole === 'ar2_field';
+  const isPMOrAdmin = userRole === 'pm' || userRole === 'admin';
+  
   // AR users can edit AR notes if task is assigned to them
   const canEditARNotes = task.arAssigned === currentUserId && 
     (userRole === 'ar1_planning' || userRole === 'ar2_field' || userRole === 'admin');
   // Only admin can edit PM notes on AR Board (PMs have view-only access here)
   const canEditPMNotes = userRole === 'admin';  
-  // Only AR users assigned to the task can edit status (PMs have view-only access)
-  const canEditStatus = task.arAssigned === currentUserId && 
-    (userRole === 'ar1_planning' || userRole === 'ar2_field' || userRole === 'admin');
+  
+  // Status edit permissions:
+  // - AR users can only edit if task is assigned to them AND task is not completed
+  // - PM/Admin can always edit status
+  const canEditStatus = isPMOrAdmin || 
+    (task.arAssigned === currentUserId && isARUser && task.status !== 'completed');
+
+  // Get allowed status options based on role and current status
+  const getAllowedStatuses = () => {
+    // PM and Admin can change to any status (rollback allowed)
+    if (isPMOrAdmin) {
+      return ['in_queue', 'started', 'completed', 'blocked'];
+    }
+    
+    // AR users can only move forward (one-way flow)
+    // in_queue → started → completed (blocked allowed from any state)
+    switch (task.status) {
+      case 'in_queue':
+        return ['in_queue', 'started', 'blocked']; // Can move to started or blocked
+      case 'started':
+        return ['started', 'completed', 'blocked']; // Can complete or block
+      case 'completed':
+        return ['completed']; // Cannot change - read-only
+      case 'blocked':
+        return ['blocked', 'started']; // Can unblock by moving to started
+      default:
+        return ['in_queue', 'started', 'blocked'];
+    }
+  };
+
+  const allowedStatuses = getAllowedStatuses();
+  const statusLabels: Record<string, string> = {
+    'in_queue': 'In Queue',
+    'started': 'Started',
+    'completed': 'Completed',
+    'blocked': 'Blocked'
+  };
 
   return (
     <Card className={`mb-4 border-l-4 ${getStatusColor()} hover:shadow-md transition-shadow`}>
@@ -226,12 +264,19 @@ const TaskCard = ({ task, onUpdateNotes, onUpdateStatus, currentUserId, userRole
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="in_queue">In Queue</SelectItem>
-                  <SelectItem value="started">Started</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="blocked">Blocked</SelectItem>
+                  {allowedStatuses.map(status => (
+                    <SelectItem key={status} value={status}>
+                      {statusLabels[status]}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
+            )}
+            {/* Show read-only status badge for AR users on completed tasks */}
+            {!canEditStatus && isARUser && task.status === 'completed' && (
+              <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-300">
+                ✓ Completed (Read-only)
+              </Badge>
             )}
             {dragHandleProps && (
               <Button
@@ -756,8 +801,14 @@ const ProjectBoard = () => {
 
       console.log('Status update successful:', data);
 
-      // Send Teams notification for completed or blocked tasks
-      if (status === 'completed' || status === 'blocked') {
+      // Send Teams notification for ALL valid status transitions
+      // Valid transitions: in_queue → started, started → completed, any → blocked
+      const isValidTransition = 
+        (previousStatus === 'in_queue' && status === 'started') ||
+        (previousStatus === 'started' && status === 'completed') ||
+        status === 'blocked';
+      
+      if (isValidTransition) {
         sendTeamsNotification(taskId, status, previousStatus, comment);
       }
 
@@ -839,6 +890,37 @@ const ProjectBoard = () => {
     const newStatus = statusMapping[overColumnId];
     
     if (activeTask && newStatus && activeTask.status !== newStatus) {
+      // Check if user is AR and validate one-way flow
+      const currentRole = userRole?.role;
+      const isARUser = currentRole === 'ar1_planning' || currentRole === 'ar2_field';
+      
+      if (isARUser) {
+        // Validate one-way status flow for AR users
+        const isValidTransition = 
+          (activeTask.status === 'in_queue' && (newStatus === 'started' || newStatus === 'blocked')) ||
+          (activeTask.status === 'started' && (newStatus === 'completed' || newStatus === 'blocked')) ||
+          (activeTask.status === 'blocked' && newStatus === 'started');
+        
+        if (!isValidTransition) {
+          toast({
+            title: "Invalid Status Change",
+            description: "You can only move tasks forward. Contact PM/Admin to rollback status.",
+            variant: "destructive",
+          });
+          return;
+        }
+        
+        // Block AR from changing completed tasks
+        if (activeTask.status === 'completed') {
+          toast({
+            title: "Task is Read-Only",
+            description: "Completed tasks cannot be modified by AR. Contact PM/Admin.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+      
       console.log('Updating task from drag:', { taskId: activeTask.id, oldStatus: activeTask.status, newStatus });
       // Use the comment-required handler for completed/blocked
       handleStatusChangeWithComment(activeTask.id, newStatus);
