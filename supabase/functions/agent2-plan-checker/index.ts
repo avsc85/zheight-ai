@@ -1,7 +1,7 @@
-import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.56.0';
-import { PDFDocument } from 'https://esm.sh/pdf-lib@1.17.1';
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+// Note: pdf-lib import removed - using simple PDF processing approach
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -111,36 +111,19 @@ async function uploadPDFToStorage(
   return signedData.signedUrl;
 }
 
-// Convert PDF first page to PNG image as base64 data URL
-async function convertPDFFirstPageToImage(pdfBytes: Uint8Array): Promise<string | null> {
+// Convert PDF to base64 for API processing
+async function convertPDFToBase64(pdfBytes: Uint8Array): Promise<string | null> {
   try {
-    console.log('Converting PDF first page to image...');
+    console.log('Converting PDF to base64...');
     
-    // Load the PDF
-    const pdfDoc = await PDFDocument.load(pdfBytes);
-    
-    if (pdfDoc.getPageCount() === 0) {
-      console.error('PDF has no pages');
-      return null;
-    }
-
-    // Create a new PDF with only the first page
-    const singlePagePdf = await PDFDocument.create();
-    const [firstPage] = await singlePagePdf.copyPages(pdfDoc, [0]);
-    singlePagePdf.addPage(firstPage);
-    
-    // Save as bytes
-    const singlePageBytes = await singlePagePdf.save();
-    
-    // Convert to base64 for GPT-5 Vision
-    // Note: GPT-5 Vision can handle PDF format directly, we just need it as base64
-    const base64 = btoa(String.fromCharCode(...singlePageBytes));
+    // Convert to base64 for GPT Vision processing
+    const base64 = btoa(String.fromCharCode(...pdfBytes));
     const dataUrl = `data:application/pdf;base64,${base64}`;
     
-    console.log('PDF first page converted to data URL');
+    console.log('PDF converted to data URL');
     return dataUrl;
   } catch (error) {
-    console.error('Error converting PDF to image:', error);
+    console.error('Error converting PDF to base64:', error);
     return null;
   }
 }
@@ -330,15 +313,15 @@ serve(async (req) => {
     const firstFile = files[0];
     await uploadPDFToStorage(firstFile, user.id, supabase);
     
-    // Step 2: Convert first page to image and extract city
+    // Step 2: Convert PDF to base64 and extract city
     const pdfBytes = new Uint8Array(await firstFile.arrayBuffer());
-    const firstPageImage = await convertPDFFirstPageToImage(pdfBytes);
+    const pdfBase64 = await convertPDFToBase64(pdfBytes);
     
     let extractedCity: string | null = null;
-    if (firstPageImage) {
-      extractedCity = await extractCityFromPDFImage(firstPageImage, openAIApiKey);
+    if (pdfBase64) {
+      extractedCity = await extractCityFromPDFImage(pdfBase64, openAIApiKey);
     } else {
-      console.log('Failed to convert PDF to image, skipping city extraction');
+      console.log('Failed to convert PDF to base64, skipping city extraction');
     }
     
     console.log('City detection result:', extractedCity || 'Not detected');
