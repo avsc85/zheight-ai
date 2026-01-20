@@ -713,15 +713,19 @@ const ProjectSetup = () => {
 
       } else {
         // Create new project with start_date set to today
-        console.log('Inserting project with data:', { ...projectData, user_id: user.id });
+        // Convert empty strings to null for UUID fields
+        const projectInsertData = {
+          ...projectData,
+          ar_planning_id: projectData.ar_planning_id || null,
+          ar_field_id: projectData.ar_field_id || null,
+          user_id: user.id,
+          start_date: new Date().toISOString().split('T')[0]  // Set to today's date
+        };
+        console.log('Inserting project with data:', projectInsertData);
         
         const { data: project, error: projectError } = await supabase
           .from('projects')
-          .insert({
-            ...projectData,
-            user_id: user.id,
-            start_date: new Date().toISOString().split('T')[0]  // Set to today's date
-          })
+          .insert(projectInsertData)
           .select()
           .single();
 
