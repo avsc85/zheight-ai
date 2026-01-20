@@ -713,9 +713,12 @@ const ProjectSetup = () => {
 
       } else {
         // Create new project with start_date set to today
-        // Convert empty strings to null for UUID fields
+        // Convert empty strings to null for UUID and date fields
         const projectInsertData = {
-          ...projectData,
+          project_name: projectData.project_name,
+          project_manager_name: projectData.project_manager_name || null,
+          expected_end_date: projectData.expected_end_date || null,
+          hours_allocated: projectData.hours_allocated,
           ar_planning_id: projectData.ar_planning_id || null,
           ar_field_id: projectData.ar_field_id || null,
           user_id: user.id,
@@ -737,16 +740,17 @@ const ProjectSetup = () => {
         console.log('Project created successfully:', project);
 
         // Insert tasks with auto-assignment logic
+        // Convert empty strings to null for UUID fields
         const tasksToInsert = tasks.map((task, index) => ({
           project_id: project.id,
           milestone_number: index + 1,
           task_name: task.task_name,
-          assigned_ar_id: task.assigned_ar_id,
+          assigned_ar_id: task.assigned_ar_id || null,
           // Auto-set assigned_skip_flag: 'Y' if AR assigned, 'N' if not assigned
           assigned_skip_flag: task.assigned_ar_id ? 'Y' : 'N',
           due_date: task.due_date || null,
           hours: task.hours,
-          notes_tasks: task.notes_tasks,
+          notes_tasks: task.notes_tasks || null,
           task_status: 'in_queue'
         }));
 
