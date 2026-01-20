@@ -631,13 +631,20 @@ const ProjectSetup = () => {
     setLoading(true);
     try {
       if (editMode && projectId) {
-        // Update existing project
+        // Update existing project - convert empty strings to null for UUID and date fields
+        const projectUpdateData = {
+          project_name: projectData.project_name,
+          project_manager_name: projectData.project_manager_name || null,
+          expected_end_date: projectData.expected_end_date || null,
+          hours_allocated: projectData.hours_allocated,
+          ar_planning_id: projectData.ar_planning_id || null,
+          ar_field_id: projectData.ar_field_id || null,
+          updated_at: new Date().toISOString()
+        };
+        
         const { error: projectError } = await supabase
           .from('projects')
-          .update({
-            ...projectData,
-            updated_at: new Date().toISOString()
-          })
+          .update(projectUpdateData)
           .eq('id', projectId);
 
         if (projectError) throw projectError;
@@ -659,16 +666,17 @@ const ProjectSetup = () => {
 
           if (existingTask) {
             // UPDATE existing task - only columns that may have changed
+            // Convert empty strings to null for UUID fields
             const { error: updateError } = await supabase
               .from('project_tasks')
               .update({
                 milestone_number: i + 1,
                 task_name: task.task_name,
-                assigned_ar_id: task.assigned_ar_id,
+                assigned_ar_id: task.assigned_ar_id || null,
                 assigned_skip_flag: task.assigned_ar_id ? 'Y' : 'N',
                 due_date: task.due_date || null,
                 hours: task.hours,
-                notes_tasks: task.notes_tasks,
+                notes_tasks: task.notes_tasks || null,
                 // DO NOT update task_status - preserve existing status
               })
               .eq('task_id', existingTask.task_id);
@@ -676,17 +684,18 @@ const ProjectSetup = () => {
             if (updateError) throw updateError;
           } else {
             // INSERT new task (if tasks array is longer than existing tasks)
+            // Convert empty strings to null for UUID fields
             const { error: insertError } = await supabase
               .from('project_tasks')
               .insert({
                 project_id: projectId,
                 milestone_number: i + 1,
                 task_name: task.task_name,
-                assigned_ar_id: task.assigned_ar_id,
+                assigned_ar_id: task.assigned_ar_id || null,
                 assigned_skip_flag: task.assigned_ar_id ? 'Y' : 'N',
                 due_date: task.due_date || null,
                 hours: task.hours,
-                notes_tasks: task.notes_tasks,
+                notes_tasks: task.notes_tasks || null,
                 task_status: 'in_queue'
               });
 
