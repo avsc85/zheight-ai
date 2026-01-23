@@ -726,41 +726,54 @@ const ProjectBoard = () => {
   };
 
   // Send Microsoft Teams notification for task status updates
-  const sendTeamsNotification = async (taskId: string, newStatus: string, previousStatus: string, comment?: string) => {
+  const sendTeamsNotification = async (task: Task, newStatus: string, previousStatus: string, comment?: string) => {
     try {
-      const task = tasks.find(t => t.id === taskId);
-      if (!task) return;
-
-      console.log('Sending Teams notification for task:', taskId, 'status:', newStatus);
+      console.log('ProjectBoard: Sending Teams notification for task:', task.id, 'status:', newStatus, 'previousStatus:', previousStatus);
+      
+      const notificationPayload = {
+        taskId: task.id,
+        taskName: task.task,
+        projectName: task.project,
+        projectId: task.projectId,
+        arName: currentUserProfile?.name || 'Unknown AR',
+        pmName: task.pmName || undefined,
+        newStatus,
+        previousStatus,
+        comment,
+        approvalStatus: newStatus === 'completed' ? 'pending' : undefined,
+      };
+      
+      console.log('ProjectBoard: Teams notification payload:', notificationPayload);
       
       const { data, error } = await supabase.functions.invoke('send-teams-notification', {
-        body: {
-          taskId,
-          taskName: task.task,
-          projectName: task.project,
-          projectId: task.projectId,
-          arName: currentUserProfile?.name || 'Unknown AR',
-          pmName: task.pmName || undefined,
-          newStatus,
-          previousStatus,
-          comment,
-          approvalStatus: newStatus === 'completed' ? 'pending' : undefined,
-        }
+        body: notificationPayload
       });
 
       if (error) {
-        console.error('Error sending Teams notification:', error);
+        console.error('ProjectBoard: Error sending Teams notification:', error);
       } else {
-        console.log('Teams notification sent successfully:', data);
+        console.log('ProjectBoard: Teams notification sent successfully:', data);
       }
     } catch (error) {
-      console.error('Failed to send Teams notification:', error);
+      console.error('ProjectBoard: Failed to send Teams notification:', error);
     }
   };
 
   const handleUpdateStatus = async (taskId: string, status: Task['status'], comment?: string) => {
+    // Find task BEFORE updating to ensure we have the data for notification
+    const currentTask = tasks.find(t => t.id === taskId);
+    if (!currentTask) {
+      console.error('ProjectBoard: Task not found for status update:', taskId);
+      toast({
+        title: "Error",
+        description: "Task not found.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     try {
-      console.log('Updating task status:', { taskId, status, currentUserId: user?.id, userRole: userRole?.role });
+      console.log('ProjectBoard: Updating task status:', { taskId, status, currentUserId: user?.id, userRole: userRole?.role });
       
       // Map frontend status to database status values
       const statusMapping = {
@@ -775,9 +788,7 @@ const ProjectBoard = () => {
         throw new Error(`Invalid status: ${status}`);
       }
       
-      // Get the current task's status to store as previous_status
-      const currentTask = tasks.find(t => t.id === taskId);
-      const previousStatus = currentTask?.status || 'in_queue';
+      const previousStatus = currentTask.status || 'in_queue';
       
       // Prepare update object
       const updateData: Record<string, any> = { 
@@ -791,6 +802,8 @@ const ProjectBoard = () => {
         updateData.approval_status = 'pending';
       }
       
+      console.log('ProjectBoard: Sending update to database:', updateData);
+      
       const { data, error } = await supabase
         .from('project_tasks')
         .update(updateData)
@@ -799,11 +812,11 @@ const ProjectBoard = () => {
         .single();
 
       if (error) {
-        console.error('Database error updating status:', error);
+        console.error('ProjectBoard: Database error updating status:', error);
         throw error;
       }
 
-      console.log('Status update successful:', data);
+      console.log('ProjectBoard: Status update successful:', data);
 
       // Send Teams notification for ALL valid status transitions
       // Valid transitions: in_queue → started, started → completed, any → blocked
@@ -812,8 +825,11 @@ const ProjectBoard = () => {
         (previousStatus === 'started' && status === 'completed') ||
         status === 'blocked';
       
+      console.log('ProjectBoard: Checking notification transition:', { previousStatus, status, isValidTransition });
+      
       if (isValidTransition) {
-        sendTeamsNotification(taskId, status, previousStatus, comment);
+        // Pass the task object directly for notification
+        await sendTeamsNotification(currentTask, status, previousStatus, comment);
       }
 
       // Update local state with completion date and approval status
