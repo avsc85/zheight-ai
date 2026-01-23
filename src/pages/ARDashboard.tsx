@@ -160,7 +160,8 @@ const ARDashboard = () => {
   const [commentDialogOpen, setCommentDialogOpen] = useState(false);
   const [selectedTaskForComment, setSelectedTaskForComment] = useState<TaskItem | null>(null);
   const [userRole, setUserRole] = useState<string>('');
-  const [pendingStatusUpdate, setPendingStatusUpdate] = useState<{taskId: string, newStatus: string} | null>(null);
+  const [currentUserName, setCurrentUserName] = useState<string>('');
+  const [pendingStatusUpdate, setPendingStatusUpdate] = useState<{taskId: string, newStatus: string, previousStatus: string} | null>(null);
   const [stats, setStats] = useState({
     total: 0,
     inQueue: 0,
@@ -184,12 +185,13 @@ const ARDashboard = () => {
     try {
       const { data: profile } = await supabase
         .from('profiles')
-        .select('role')
+        .select('role, name')
         .eq('user_id', user?.id)
         .single();
       
       if (profile) {
         setUserRole(profile.role);
+        setCurrentUserName(profile.name || user?.email || 'Unknown AR');
       }
     } catch (error) {
       console.error("Error fetching user role:", error);
@@ -277,15 +279,70 @@ const ARDashboard = () => {
     }
   };
 
-  const updateTaskStatus = async (taskId: string, newStatus: string) => {
+  // Send Microsoft Teams notification for task status updates
+  const sendTeamsNotification = async (taskId: string, newStatus: string, previousStatus: string, comment?: string) => {
+    try {
+      const task = tasks.find(t => t.task_id === taskId);
+      if (!task) return;
+
+      console.log('Sending Teams notification for task:', taskId, 'status:', newStatus);
+      
+      const { data, error } = await supabase.functions.invoke('send-teams-notification', {
+        body: {
+          taskId,
+          taskName: task.task_name,
+          projectName: task.project_name,
+          projectId: task.project_id,
+          arName: currentUserName || 'Unknown AR',
+          pmName: task.project_manager_name || undefined,
+          newStatus,
+          previousStatus,
+          comment,
+          approvalStatus: newStatus === 'completed' ? 'pending' : undefined,
+        }
+      });
+
+      if (error) {
+        console.error('Error sending Teams notification:', error);
+      } else {
+        console.log('Teams notification sent successfully:', data);
+      }
+    } catch (error) {
+      console.error('Failed to send Teams notification:', error);
+    }
+  };
+
+  const updateTaskStatus = async (taskId: string, newStatus: string, previousStatus: string, comment?: string) => {
     setUpdatingTaskId(taskId);
     try {
+      // Prepare update data
+      const updateData: Record<string, any> = { 
+        task_status: newStatus,
+        completion_date: newStatus === 'completed' ? new Date().toISOString().split('T')[0] : null
+      };
+
+      // When moving to completed, store previous status and reset approval status to pending
+      if (newStatus === 'completed') {
+        updateData.previous_status = previousStatus;
+        updateData.approval_status = 'pending';
+      }
+
       const { error } = await supabase
         .from('project_tasks')
-        .update({ task_status: newStatus })
+        .update(updateData)
         .eq('task_id', taskId);
 
       if (error) throw error;
+
+      // Send Teams notification for valid status transitions
+      const isValidTransition = 
+        (previousStatus === 'in_queue' && newStatus === 'started') ||
+        (previousStatus === 'started' && newStatus === 'completed') ||
+        newStatus === 'blocked';
+      
+      if (isValidTransition) {
+        sendTeamsNotification(taskId, newStatus, previousStatus, comment);
+      }
 
       toast({
         title: "Success",
@@ -307,20 +364,22 @@ const ARDashboard = () => {
   };
 
   const handleStatusChangeWithComment = (task: TaskItem, newStatus: string) => {
+    const previousStatus = task.task_status;
+    
     // Only require comment when completing a task
     if (newStatus === 'completed') {
       setSelectedTaskForComment(task);
-      setPendingStatusUpdate({ taskId: task.task_id, newStatus });
+      setPendingStatusUpdate({ taskId: task.task_id, newStatus, previousStatus });
       setCommentDialogOpen(true);
     } else {
-      updateTaskStatus(task.task_id, newStatus);
+      updateTaskStatus(task.task_id, newStatus, previousStatus);
     }
   };
 
-  const handleCommentSubmitted = () => {
+  const handleCommentSubmitted = (comment?: string) => {
     // After comment is submitted, proceed with status update if pending
     if (pendingStatusUpdate) {
-      updateTaskStatus(pendingStatusUpdate.taskId, pendingStatusUpdate.newStatus);
+      updateTaskStatus(pendingStatusUpdate.taskId, pendingStatusUpdate.newStatus, pendingStatusUpdate.previousStatus, comment);
     }
   };
 
