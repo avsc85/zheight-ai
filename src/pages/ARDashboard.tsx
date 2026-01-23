@@ -280,40 +280,55 @@ const ARDashboard = () => {
   };
 
   // Send Microsoft Teams notification for task status updates
-  const sendTeamsNotification = async (taskId: string, newStatus: string, previousStatus: string, comment?: string) => {
+  const sendTeamsNotification = async (task: TaskItem, newStatus: string, previousStatus: string, comment?: string) => {
     try {
-      const task = tasks.find(t => t.task_id === taskId);
-      if (!task) return;
-
-      console.log('Sending Teams notification for task:', taskId, 'status:', newStatus);
+      console.log('ARDashboard: Sending Teams notification for task:', task.task_id, 'status:', newStatus, 'previousStatus:', previousStatus);
+      
+      const notificationPayload = {
+        taskId: task.task_id,
+        taskName: task.task_name,
+        projectName: task.project_name,
+        projectId: task.project_id,
+        arName: currentUserName || 'Unknown AR',
+        pmName: task.project_manager_name || undefined,
+        newStatus,
+        previousStatus,
+        comment,
+        approvalStatus: newStatus === 'completed' ? 'pending' : undefined,
+      };
+      
+      console.log('ARDashboard: Teams notification payload:', notificationPayload);
       
       const { data, error } = await supabase.functions.invoke('send-teams-notification', {
-        body: {
-          taskId,
-          taskName: task.task_name,
-          projectName: task.project_name,
-          projectId: task.project_id,
-          arName: currentUserName || 'Unknown AR',
-          pmName: task.project_manager_name || undefined,
-          newStatus,
-          previousStatus,
-          comment,
-          approvalStatus: newStatus === 'completed' ? 'pending' : undefined,
-        }
+        body: notificationPayload
       });
 
       if (error) {
-        console.error('Error sending Teams notification:', error);
+        console.error('ARDashboard: Error sending Teams notification:', error);
       } else {
-        console.log('Teams notification sent successfully:', data);
+        console.log('ARDashboard: Teams notification sent successfully:', data);
       }
     } catch (error) {
-      console.error('Failed to send Teams notification:', error);
+      console.error('ARDashboard: Failed to send Teams notification:', error);
     }
   };
 
   const updateTaskStatus = async (taskId: string, newStatus: string, previousStatus: string, comment?: string) => {
     setUpdatingTaskId(taskId);
+    
+    // Find task BEFORE updating to ensure we have the data for notification
+    const task = tasks.find(t => t.task_id === taskId);
+    if (!task) {
+      console.error('ARDashboard: Task not found for notification:', taskId);
+      toast({
+        title: "Error",
+        description: "Task not found.",
+        variant: "destructive",
+      });
+      setUpdatingTaskId(null);
+      return;
+    }
+    
     try {
       // Prepare update data
       const updateData: Record<string, any> = { 
@@ -327,6 +342,8 @@ const ARDashboard = () => {
         updateData.approval_status = 'pending';
       }
 
+      console.log('ARDashboard: Updating task status:', { taskId, newStatus, previousStatus, updateData });
+
       const { error } = await supabase
         .from('project_tasks')
         .update(updateData)
@@ -334,14 +351,19 @@ const ARDashboard = () => {
 
       if (error) throw error;
 
+      console.log('ARDashboard: Task status updated successfully');
+
       // Send Teams notification for valid status transitions
       const isValidTransition = 
         (previousStatus === 'in_queue' && newStatus === 'started') ||
         (previousStatus === 'started' && newStatus === 'completed') ||
         newStatus === 'blocked';
       
+      console.log('ARDashboard: Checking notification transition:', { previousStatus, newStatus, isValidTransition });
+      
       if (isValidTransition) {
-        sendTeamsNotification(taskId, newStatus, previousStatus, comment);
+        // Send notification with the task data we already have
+        await sendTeamsNotification(task, newStatus, previousStatus, comment);
       }
 
       toast({
@@ -352,7 +374,7 @@ const ARDashboard = () => {
       fetchMyTasks();
       setPendingStatusUpdate(null);
     } catch (error) {
-      console.error("Error updating task:", error);
+      console.error("ARDashboard: Error updating task:", error);
       toast({
         title: "Error",
         description: "Failed to update task status.",
