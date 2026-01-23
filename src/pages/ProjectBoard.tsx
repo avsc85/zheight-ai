@@ -728,14 +728,30 @@ const ProjectBoard = () => {
   // Send Microsoft Teams notification for task status updates
   const sendTeamsNotification = async (task: Task, newStatus: string, previousStatus: string, comment?: string) => {
     try {
-      console.log('ProjectBoard: Sending Teams notification for task:', task.id, 'status:', newStatus, 'previousStatus:', previousStatus);
+      // Get AR name - use current profile or fetch if missing
+      let arName = currentUserProfile?.name;
+      if (!arName && user?.id) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('name')
+          .eq('user_id', user.id)
+          .single();
+        arName = profile?.name || user?.email || 'Unknown AR';
+      }
+      
+      console.log('ProjectBoard: === TEAMS NOTIFICATION START ===');
+      console.log('ProjectBoard: Task ID:', task.id);
+      console.log('ProjectBoard: Task Name:', task.task);
+      console.log('ProjectBoard: New Status:', newStatus);
+      console.log('ProjectBoard: Previous Status:', previousStatus);
+      console.log('ProjectBoard: AR Name:', arName);
       
       const notificationPayload = {
         taskId: task.id,
         taskName: task.task,
         projectName: task.project,
         projectId: task.projectId,
-        arName: currentUserProfile?.name || 'Unknown AR',
+        arName: arName || 'Unknown AR',
         pmName: task.pmName || undefined,
         newStatus,
         previousStatus,
@@ -743,19 +759,29 @@ const ProjectBoard = () => {
         approvalStatus: newStatus === 'completed' ? 'pending' : undefined,
       };
       
-      console.log('ProjectBoard: Teams notification payload:', notificationPayload);
+      console.log('ProjectBoard: Notification payload:', JSON.stringify(notificationPayload, null, 2));
       
       const { data, error } = await supabase.functions.invoke('send-teams-notification', {
         body: notificationPayload
       });
 
       if (error) {
-        console.error('ProjectBoard: Error sending Teams notification:', error);
+        console.error('ProjectBoard: ERROR sending Teams notification:', error);
+        toast({
+          title: "Teams Notification Failed",
+          description: `Could not send notification: ${error.message}`,
+          variant: "destructive",
+        });
       } else {
-        console.log('ProjectBoard: Teams notification sent successfully:', data);
+        console.log('ProjectBoard: SUCCESS - Teams notification sent:', data);
+        toast({
+          title: "Teams Notified",
+          description: "Status change notification sent to Teams.",
+        });
       }
+      console.log('ProjectBoard: === TEAMS NOTIFICATION END ===');
     } catch (error) {
-      console.error('ProjectBoard: Failed to send Teams notification:', error);
+      console.error('ProjectBoard: EXCEPTION in Teams notification:', error);
     }
   };
 
@@ -825,11 +851,14 @@ const ProjectBoard = () => {
         (previousStatus === 'started' && status === 'completed') ||
         status === 'blocked';
       
-      console.log('ProjectBoard: Checking notification transition:', { previousStatus, status, isValidTransition });
+      console.log('ProjectBoard: Transition check:', { previousStatus, status, isValidTransition });
       
       if (isValidTransition) {
-        // Pass the task object directly for notification
+        console.log('ProjectBoard: ✓ Valid transition - sending notification');
         await sendTeamsNotification(currentTask, status, previousStatus, comment);
+      } else {
+        console.log('ProjectBoard: ✗ Invalid transition - no notification sent');
+        console.log('ProjectBoard: Allowed transitions: in_queue→started, started→completed, any→blocked');
       }
 
       // Update local state with completion date and approval status

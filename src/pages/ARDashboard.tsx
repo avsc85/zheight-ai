@@ -282,14 +282,30 @@ const ARDashboard = () => {
   // Send Microsoft Teams notification for task status updates
   const sendTeamsNotification = async (task: TaskItem, newStatus: string, previousStatus: string, comment?: string) => {
     try {
-      console.log('ARDashboard: Sending Teams notification for task:', task.task_id, 'status:', newStatus, 'previousStatus:', previousStatus);
+      // Get AR name - use current state or fetch if missing
+      let arName = currentUserName;
+      if (!arName && user?.id) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('name')
+          .eq('user_id', user.id)
+          .single();
+        arName = profile?.name || user?.email || 'Unknown AR';
+      }
+      
+      console.log('ARDashboard: === TEAMS NOTIFICATION START ===');
+      console.log('ARDashboard: Task ID:', task.task_id);
+      console.log('ARDashboard: Task Name:', task.task_name);
+      console.log('ARDashboard: New Status:', newStatus);
+      console.log('ARDashboard: Previous Status:', previousStatus);
+      console.log('ARDashboard: AR Name:', arName);
       
       const notificationPayload = {
         taskId: task.task_id,
         taskName: task.task_name,
         projectName: task.project_name,
         projectId: task.project_id,
-        arName: currentUserName || 'Unknown AR',
+        arName: arName || 'Unknown AR',
         pmName: task.project_manager_name || undefined,
         newStatus,
         previousStatus,
@@ -297,19 +313,29 @@ const ARDashboard = () => {
         approvalStatus: newStatus === 'completed' ? 'pending' : undefined,
       };
       
-      console.log('ARDashboard: Teams notification payload:', notificationPayload);
+      console.log('ARDashboard: Notification payload:', JSON.stringify(notificationPayload, null, 2));
       
       const { data, error } = await supabase.functions.invoke('send-teams-notification', {
         body: notificationPayload
       });
 
       if (error) {
-        console.error('ARDashboard: Error sending Teams notification:', error);
+        console.error('ARDashboard: ERROR sending Teams notification:', error);
+        toast({
+          title: "Teams Notification Failed",
+          description: `Could not send notification: ${error.message}`,
+          variant: "destructive",
+        });
       } else {
-        console.log('ARDashboard: Teams notification sent successfully:', data);
+        console.log('ARDashboard: SUCCESS - Teams notification sent:', data);
+        toast({
+          title: "Teams Notified",
+          description: "Status change notification sent to Teams.",
+        });
       }
+      console.log('ARDashboard: === TEAMS NOTIFICATION END ===');
     } catch (error) {
-      console.error('ARDashboard: Failed to send Teams notification:', error);
+      console.error('ARDashboard: EXCEPTION in Teams notification:', error);
     }
   };
 
@@ -359,11 +385,14 @@ const ARDashboard = () => {
         (previousStatus === 'started' && newStatus === 'completed') ||
         newStatus === 'blocked';
       
-      console.log('ARDashboard: Checking notification transition:', { previousStatus, newStatus, isValidTransition });
+      console.log('ARDashboard: Transition check:', { previousStatus, newStatus, isValidTransition });
       
       if (isValidTransition) {
-        // Send notification with the task data we already have
+        console.log('ARDashboard: ✓ Valid transition - sending notification');
         await sendTeamsNotification(task, newStatus, previousStatus, comment);
+      } else {
+        console.log('ARDashboard: ✗ Invalid transition - no notification sent');
+        console.log('ARDashboard: Allowed transitions: in_queue→started, started→completed, any→blocked');
       }
 
       toast({
