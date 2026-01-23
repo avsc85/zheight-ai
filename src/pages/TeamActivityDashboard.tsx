@@ -178,13 +178,40 @@ const TeamActivityDashboard = () => {
 
   const fetchARs = async () => {
     try {
-      const { data: users } = await supabase
-        .from('profiles')
-        .select('user_id, name, role')
+      // Fetch AR users from user_roles table (roles are stored there, not in profiles)
+      const { data: userRoles, error: rolesError } = await supabase
+        .from('user_roles')
+        .select('user_id, role')
         .in('role', ['ar1_planning', 'ar2_field']);
 
-      if (users) {
-        setAllARs(users.map(u => ({ id: u.user_id, name: u.name })));
+      if (rolesError) {
+        console.error("Error fetching AR roles:", rolesError);
+        return;
+      }
+
+      if (userRoles && userRoles.length > 0) {
+        // Get profile names for these AR users
+        const userIds = userRoles.map(r => r.user_id);
+        const { data: profiles, error: profilesError } = await supabase
+          .from('profiles')
+          .select('user_id, name')
+          .in('user_id', userIds);
+
+        if (profilesError) {
+          console.error("Error fetching AR profiles:", profilesError);
+          return;
+        }
+
+        const arList = userRoles.map(role => {
+          const profile = profiles?.find(p => p.user_id === role.user_id);
+          return {
+            id: role.user_id,
+            name: profile?.name || 'Unknown AR'
+          };
+        }).filter(ar => ar.name !== 'Unknown AR'); // Only show ARs with names
+
+        console.log('Team Activity: Loaded ARs for filter:', arList);
+        setAllARs(arList);
       }
     } catch (error) {
       console.error("Error fetching ARs:", error);
