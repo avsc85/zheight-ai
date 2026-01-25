@@ -16,7 +16,7 @@ const ComplianceChat = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([{
     id: '1',
     role: 'assistant',
-    content: 'Hello! I\'m your Building Code Compliance AI assistant. I can help answer questions about California building codes, local ordinances, and compliance requirements. How can I help you today?',
+    content: 'Hello! 👋 Welcome to zHeight Support. I\'m here to help you with any questions about our platform, features, project management tools, plan checking, feasibility analysis, and more. How can I assist you today?',
   }]);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -87,9 +87,9 @@ const ComplianceChat = () => {
       
       <div className="container mx-auto px-4 py-8 max-w-6xl">
         <div className="mb-6">
-          <h1 className="text-3xl font-bold mb-2">AI Compliance Assistant</h1>
+          <h1 className="text-3xl font-bold mb-2">zHeight Support</h1>
           <p className="text-muted-foreground">
-            Get instant answers about building codes, ordinances, and compliance requirements
+            Get instant help with platform features, project management, and more
           </p>
         </div>
 
@@ -100,9 +100,9 @@ const ComplianceChat = () => {
                 <Bot className="w-6 h-6 text-primary" />
               </div>
               <div>
-                <CardTitle>AI Support Assistant</CardTitle>
+                <CardTitle>zHeight Support Assistant</CardTitle>
                 <CardDescription>
-                  Powered by OpenAI with building code knowledge base
+                  Powered by AI with zHeight knowledge base
                 </CardDescription>
               </div>
             </div>
@@ -159,7 +159,7 @@ const ComplianceChat = () => {
           <div className="border-t p-4">
             <form onSubmit={handleSendMessage} className="flex gap-2">
               <Input
-                placeholder="Ask about building codes, ordinances, or compliance requirements..."
+                placeholder="Ask us anything about zHeight..."
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 disabled={isLoading}
@@ -174,7 +174,7 @@ const ComplianceChat = () => {
               </Button>
             </form>
             <p className="text-xs text-muted-foreground mt-2">
-              Tip: Ask specific questions about code sections, requirements, or compliance procedures
+              Tip: Ask about features, how to use tools, project management, or any platform questions
             </p>
           </div>
         </Card>
