@@ -91,39 +91,78 @@ function deduplicateChunks(docs: RetrievedDoc[]): RetrievedDoc[] {
   });
 }
 
-// Keyword-based fallback search when vector search returns no/few results
-async function keywordFallbackSearch(supabase: any, query: string, limit: number): Promise<RetrievedDoc[]> {
-  const keywords = extractKeywords(query);
-  if (keywords.length === 0) return [];
+// Hybrid search using optimized database function (vector + lexical)
+async function hybridSearchDocuments(
+  supabase: any,
+  query: string,
+  queryEmbedding: number[],
+  limit: number = 8
+): Promise<RetrievedDoc[]> {
+  const { data, error } = await supabase.rpc('hybrid_search', {
+    query_text: query,
+    query_embedding: queryEmbedding,
+    match_threshold: 0.2,
+    match_count: limit * 2,
+    lexical_weight: 0.35, // 35% lexical, 65% semantic
+  });
   
-  // Build ILIKE conditions for top keywords
-  const searchTerms = keywords.slice(0, 3);
-  const conditions = searchTerms.map(term => `content ILIKE '%${term}%'`).join(' OR ');
-  
-  const { data, error } = await supabase
-    .from('document_embeddings')
-    .select('content, document_id')
-    .or(conditions)
-    .limit(limit);
-    
-  if (error || !data) {
-    console.log('Keyword fallback search error:', error);
+  if (error) {
+    console.error('Hybrid search error:', error);
     return [];
   }
   
-  // Assign relevance scores based on keyword matches
-  return data.map((doc: any) => {
-    const content = doc.content.toLowerCase();
-    const matchCount = searchTerms.filter(t => content.includes(t)).length;
-    return {
-      content: doc.content,
-      similarity: 0.5 + (matchCount * 0.1), // Base score + match bonus
-      document_id: doc.document_id
-    };
-  });
+  return (data || []).map((doc: any) => ({
+    content: doc.content,
+    similarity: doc.rank_score || doc.similarity,
+    document_id: doc.document_id,
+  }));
 }
 
-// Search for similar documents using vector similarity with optimizations
+// Full-text search using GIN index (fast lexical fallback)
+async function fullTextSearch(
+  supabase: any,
+  query: string,
+  limit: number
+): Promise<RetrievedDoc[]> {
+  const keywords = extractKeywords(query);
+  if (keywords.length === 0) return [];
+  
+  // Build tsquery: word1 | word2 | word3 (OR search)
+  const tsquery = keywords.slice(0, 5).join(' | ');
+  
+  const { data, error } = await supabase.rpc('match_documents_by_text', {
+    search_query: tsquery,
+    match_count: limit,
+  });
+  
+  if (error) {
+    // Fallback to ILIKE if RPC doesn't exist
+    console.log('FTS RPC failed, using ILIKE fallback:', error.message);
+    const orConditions = keywords.slice(0, 3).map(k => `content.ilike.%${k}%`).join(',');
+    
+    const { data: iData, error: iError } = await supabase
+      .from('document_embeddings')
+      .select('content, document_id')
+      .or(orConditions)
+      .limit(limit);
+      
+    if (iError || !iData) return [];
+    
+    return iData.map((doc: any) => ({
+      content: doc.content,
+      similarity: 0.5,
+      document_id: doc.document_id,
+    }));
+  }
+  
+  return (data || []).map((doc: any) => ({
+    content: doc.content,
+    similarity: doc.rank || 0.6,
+    document_id: doc.document_id,
+  }));
+}
+
+// Search for similar documents using optimized hybrid approach
 async function searchSimilarDocuments(
   supabase: any,
   query: string,
@@ -132,30 +171,40 @@ async function searchSimilarDocuments(
   const startTime = Date.now();
   
   try {
-    // Get Lovable API key from environment
     const lovableKey = Deno.env.get('LOVABLE_API_KEY');
-    if (!lovableKey) {
-      console.error('LOVABLE_API_KEY not set');
-      return [];
+    const openaiKey = Deno.env.get('OPENAI_API_KEY');
+    
+    let queryEmbedding: number[] | null = null;
+    
+    // Try Lovable AI Gateway first
+    if (lovableKey) {
+      try {
+        const embeddingResponse = await fetch('https://ai.gateway.lovable.dev/v1/embeddings', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${lovableKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'text-embedding-3-small',
+            input: query,
+          }),
+        });
+
+        if (embeddingResponse.ok) {
+          const embeddingData = await embeddingResponse.json();
+          queryEmbedding = embeddingData.data[0].embedding;
+        } else {
+          console.log('⚠️ Lovable embedding failed, trying OpenAI...');
+        }
+      } catch (e) {
+        console.log('⚠️ Lovable embedding error:', e);
+      }
     }
-
-    // Generate embedding using Lovable AI Gateway (faster)
-    const embeddingResponse = await fetch('https://ai.gateway.lovable.dev/v1/embeddings', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${lovableKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'text-embedding-3-small',
-        input: query,
-      }),
-    });
-
-    if (!embeddingResponse.ok) {
-      // Fallback to OpenAI if Lovable gateway fails
-      const openaiKey = Deno.env.get('OPENAI_API_KEY');
-      if (openaiKey) {
+    
+    // Fallback to OpenAI if Lovable fails
+    if (!queryEmbedding && openaiKey) {
+      try {
         const fallbackResponse = await fetch('https://api.openai.com/v1/embeddings', {
           method: 'POST',
           headers: {
@@ -168,66 +217,28 @@ async function searchSimilarDocuments(
           }),
         });
         
-        if (!fallbackResponse.ok) {
-          console.error('Fallback embedding failed:', await fallbackResponse.text());
-          return [];
+        if (fallbackResponse.ok) {
+          const fallbackData = await fallbackResponse.json();
+          queryEmbedding = fallbackData.data[0].embedding;
         }
-        
-        const fallbackData = await fallbackResponse.json();
-        const queryEmbedding = fallbackData.data[0].embedding;
-        
-        const { data, error } = await supabase.rpc('match_documents', {
-          query_embedding: queryEmbedding,
-          match_threshold: 0.25, // Very low threshold - rely on reranking
-          match_count: limit * 3, // Fetch more for better reranking
-        });
-        
-        if (error) {
-          console.error('Vector search error:', error);
-          return [];
-        }
-        
-        let results = data || [];
-        
-        // If vector search returns few results, supplement with keyword search
-        if (results.length < 3) {
-          console.log('📝 Vector results low, adding keyword fallback...');
-          const keywordResults = await keywordFallbackSearch(supabase, query, limit);
-          results = [...results, ...keywordResults];
-        }
-        
-        const reranked = rerankDocuments(results, query);
-        const deduped = deduplicateChunks(reranked);
-        
-        console.log(`⚡ Retrieval (fallback) took ${Date.now() - startTime}ms, found ${deduped.length} chunks`);
-        return deduped.slice(0, limit).map(doc => doc.content);
+      } catch (e) {
+        console.log('⚠️ OpenAI embedding error:', e);
       }
-      console.error('Failed to generate embedding:', await embeddingResponse.text());
-      return [];
     }
-
-    const embeddingData = await embeddingResponse.json();
-    const queryEmbedding = embeddingData.data[0].embedding;
-
-    // Search with very low threshold - rely on reranking to filter
-    const { data, error } = await supabase.rpc('match_documents', {
-      query_embedding: queryEmbedding,
-      match_threshold: 0.25, // Very low threshold - reranking filters
-      match_count: limit * 3, // Fetch more for better reranking
-    });
-
-    if (error) {
-      console.error('Vector search error:', error);
-      return [];
-    }
-
-    let results = data || [];
     
-    // If vector search returns few results, supplement with keyword search
+    let results: RetrievedDoc[] = [];
+    
+    // If we have embedding, use hybrid search
+    if (queryEmbedding) {
+      results = await hybridSearchDocuments(supabase, query, queryEmbedding, limit);
+      console.log(`🔍 Hybrid search returned ${results.length} results`);
+    }
+    
+    // If hybrid returns few results or no embedding, use full-text search
     if (results.length < 3) {
-      console.log('📝 Vector results low, adding keyword fallback...');
-      const keywordResults = await keywordFallbackSearch(supabase, query, limit);
-      results = [...results, ...keywordResults];
+      console.log('📝 Adding full-text search results...');
+      const ftsResults = await fullTextSearch(supabase, query, limit);
+      results = [...results, ...ftsResults];
     }
 
     // Apply reranking and deduplication

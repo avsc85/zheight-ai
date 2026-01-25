@@ -323,6 +323,7 @@ export type Database = {
         Row: {
           chunk_index: number
           content: string
+          content_tsv: unknown
           created_at: string
           document_id: string
           embedding: string | null
@@ -331,6 +332,7 @@ export type Database = {
         Insert: {
           chunk_index: number
           content: string
+          content_tsv?: unknown
           created_at?: string
           document_id: string
           embedding?: string | null
@@ -339,6 +341,7 @@ export type Database = {
         Update: {
           chunk_index?: number
           content?: string
+          content_tsv?: unknown
           created_at?: string
           document_id?: string
           embedding?: string | null
@@ -921,6 +924,22 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      hybrid_search: {
+        Args: {
+          lexical_weight?: number
+          match_count?: number
+          match_threshold?: number
+          query_embedding: string
+          query_text: string
+        }
+        Returns: {
+          content: string
+          document_id: string
+          id: string
+          rank_score: number
+          similarity: number
+        }[]
       }
       is_assigned_pm: { Args: { project_id_param: string }; Returns: boolean }
       match_documents: {
