@@ -27,7 +27,7 @@ const AIKnowledgeBase = () => {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [folder, setFolder] = useState("Building Codes");
+  const [folder, setFolder] = useState("General");
   const { toast } = useToast();
   const { role } = useUserRole();
   const isAdmin = role === 'admin';
@@ -94,7 +94,7 @@ const AIKnowledgeBase = () => {
       });
 
       setSelectedFile(null);
-      setFolder("Building Codes");
+      setFolder("General");
       
       // Refresh document list
       setTimeout(fetchDocuments, 1000);
@@ -175,9 +175,9 @@ const AIKnowledgeBase = () => {
       
       <div className="container mx-auto px-4 py-8 max-w-7xl">
         <div className="mb-6">
-          <h1 className="text-3xl font-bold mb-2">AI Knowledge Base Management</h1>
+          <h1 className="text-3xl font-bold mb-2">zHeight Knowledge Base</h1>
           <p className="text-muted-foreground">
-            Upload building codes, ordinances, and compliance documents for the AI chatbot
+            Upload company documentation, guides, and resources for the AI support assistant
           </p>
         </div>
 
@@ -191,7 +191,7 @@ const AIKnowledgeBase = () => {
                   Upload Documents
                 </CardTitle>
                 <CardDescription>
-                  Add PDF, TXT, DOCX, or image files to the AI knowledge base
+                  Add PDF, TXT, DOCX, or image files to the zHeight knowledge base
                 </CardDescription>
               </CardHeader>
             <CardContent>
@@ -218,7 +218,7 @@ const AIKnowledgeBase = () => {
                     id="folder"
                     value={folder}
                     onChange={(e) => setFolder(e.target.value)}
-                    placeholder="e.g., Building Codes, Zoning, Fire Safety"
+                    placeholder="e.g., General, Product Guides, FAQs, Policies"
                     disabled={uploading}
                   />
                 </div>
@@ -253,7 +253,7 @@ const AIKnowledgeBase = () => {
                 Knowledge Base Documents ({documents.length})
               </CardTitle>
               <CardDescription>
-                Manage uploaded documents for AI chatbot training
+                Manage uploaded documents for zHeight Support Assistant
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -328,9 +328,9 @@ const AIKnowledgeBase = () => {
               <div className="flex-1">
                 <h3 className="font-semibold mb-1 text-blue-900">How it works</h3>
                 <ul className="text-sm text-blue-800 space-y-1">
-                  <li>• {isAdmin ? 'Admins upload' : 'Admins manage'} building codes, ordinances, and compliance documents</li>
+                  <li>• {isAdmin ? 'Admins upload' : 'Admins manage'} company guides, FAQs, policies, and product documentation</li>
                   <li>• Documents are automatically chunked and indexed for AI search</li>
-                  <li>• All users can use the AI chatbot to ask questions about these documents</li>
+                  <li>• The zHeight Support Assistant uses these documents to answer user questions</li>
                   <li>• Supported formats: PDF, TXT, DOCX, JPG, PNG (any file with text)</li>
                 </ul>
               </div>
