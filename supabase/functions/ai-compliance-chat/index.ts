@@ -16,30 +16,67 @@ interface ChatMessage {
   content: string;
 }
 
+interface RetrievedDoc {
+  content: string;
+  similarity: number;
+  document_id: string;
+}
+
 // Generate a simple session ID
 function generateSessionId(): string {
   return `session_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
 }
 
-// Search for similar documents using vector similarity
+// Rerank documents using semantic relevance scoring
+function rerankDocuments(docs: RetrievedDoc[], query: string): RetrievedDoc[] {
+  const queryTerms = query.toLowerCase().split(/\s+/).filter(t => t.length > 2);
+  
+  return docs.map(doc => {
+    const content = doc.content.toLowerCase();
+    // Calculate keyword overlap score
+    const keywordScore = queryTerms.reduce((score, term) => {
+      return score + (content.includes(term) ? 0.1 : 0);
+    }, 0);
+    
+    // Boost similarity with keyword relevance
+    const boostedSimilarity = doc.similarity + Math.min(keywordScore, 0.2);
+    return { ...doc, similarity: boostedSimilarity };
+  }).sort((a, b) => b.similarity - a.similarity);
+}
+
+// Deduplicate similar content chunks
+function deduplicateChunks(docs: RetrievedDoc[]): RetrievedDoc[] {
+  const seen = new Set<string>();
+  return docs.filter(doc => {
+    // Create a simple hash of the first 100 chars to detect duplicates
+    const contentKey = doc.content.substring(0, 100).toLowerCase().replace(/\s+/g, ' ');
+    if (seen.has(contentKey)) return false;
+    seen.add(contentKey);
+    return true;
+  });
+}
+
+// Search for similar documents using vector similarity with optimizations
 async function searchSimilarDocuments(
   supabase: any,
   query: string,
-  limit: number = 5
+  limit: number = 8
 ): Promise<string[]> {
+  const startTime = Date.now();
+  
   try {
-    // Get OpenAI API key from environment
-    const openaiKey = Deno.env.get('OPENAI_API_KEY');
-    if (!openaiKey) {
-      console.error('OPENAI_API_KEY not set');
+    // Get Lovable API key from environment
+    const lovableKey = Deno.env.get('LOVABLE_API_KEY');
+    if (!lovableKey) {
+      console.error('LOVABLE_API_KEY not set');
       return [];
     }
 
-    // Generate embedding for the query
-    const embeddingResponse = await fetch('https://api.openai.com/v1/embeddings', {
+    // Generate embedding using Lovable AI Gateway (faster)
+    const embeddingResponse = await fetch('https://ai.gateway.lovable.dev/v1/embeddings', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${openaiKey}`,
+        'Authorization': `Bearer ${lovableKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -49,6 +86,46 @@ async function searchSimilarDocuments(
     });
 
     if (!embeddingResponse.ok) {
+      // Fallback to OpenAI if Lovable gateway fails
+      const openaiKey = Deno.env.get('OPENAI_API_KEY');
+      if (openaiKey) {
+        const fallbackResponse = await fetch('https://api.openai.com/v1/embeddings', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${openaiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'text-embedding-3-small',
+            input: query,
+          }),
+        });
+        
+        if (!fallbackResponse.ok) {
+          console.error('Fallback embedding failed:', await fallbackResponse.text());
+          return [];
+        }
+        
+        const fallbackData = await fallbackResponse.json();
+        const queryEmbedding = fallbackData.data[0].embedding;
+        
+        const { data, error } = await supabase.rpc('match_documents', {
+          query_embedding: queryEmbedding,
+          match_threshold: 0.4, // Lower threshold for broader results
+          match_count: limit * 2, // Fetch more for reranking
+        });
+        
+        if (error) {
+          console.error('Vector search error:', error);
+          return [];
+        }
+        
+        const reranked = rerankDocuments(data || [], query);
+        const deduped = deduplicateChunks(reranked);
+        
+        console.log(`⚡ Retrieval (fallback) took ${Date.now() - startTime}ms`);
+        return deduped.slice(0, limit).map(doc => doc.content);
+      }
       console.error('Failed to generate embedding:', await embeddingResponse.text());
       return [];
     }
@@ -56,11 +133,11 @@ async function searchSimilarDocuments(
     const embeddingData = await embeddingResponse.json();
     const queryEmbedding = embeddingData.data[0].embedding;
 
-    // Search for similar documents using the match_documents function
+    // Search with lower threshold and higher count for reranking
     const { data, error } = await supabase.rpc('match_documents', {
       query_embedding: queryEmbedding,
-      match_threshold: 0.5,
-      match_count: limit,
+      match_threshold: 0.4, // Lower threshold captures more potential matches
+      match_count: limit * 2, // Fetch more for reranking
     });
 
     if (error) {
@@ -68,71 +145,94 @@ async function searchSimilarDocuments(
       return [];
     }
 
-    return data?.map((doc: any) => doc.content) || [];
+    // Apply reranking and deduplication
+    const reranked = rerankDocuments(data || [], query);
+    const deduped = deduplicateChunks(reranked);
+    
+    console.log(`⚡ Retrieval took ${Date.now() - startTime}ms, found ${deduped.length} unique chunks`);
+    return deduped.slice(0, limit).map(doc => doc.content);
   } catch (error) {
     console.error('Error in searchSimilarDocuments:', error);
     return [];
   }
 }
 
-// Generate chat response using OpenRouter (cheaper and better models)
+// Generate chat response using Lovable AI Gateway
 async function generateChatResponse(
   message: string,
   context: string[],
   conversationHistory: ChatMessage[]
 ): Promise<string> {
-  const openrouterKey = Deno.env.get('OPENROUTER_API_KEY');
-  if (!openrouterKey) {
-    throw new Error('OPENROUTER_API_KEY not configured');
+  const lovableKey = Deno.env.get('LOVABLE_API_KEY');
+  if (!lovableKey) {
+    throw new Error('LOVABLE_API_KEY not configured');
   }
 
-  // Build system prompt with context
-  const systemPrompt = `You are an expert Building Code Compliance AI assistant for ZHeight AI. 
-You help architects, project managers, and building professionals understand California building codes, local ordinances, and compliance requirements.
+  // Build optimized system prompt with context
+  const contextText = context.length > 0 
+    ? `## Knowledge Base Context\n\n${context.map((c, i) => `[${i + 1}] ${c}`).join('\n\n---\n\n')}`
+    : '';
 
-${context.length > 0 ? `Here is relevant information from the knowledge base:
+  const systemPrompt = `You are the zHeight Support Assistant, a helpful AI that answers questions about the zHeight platform.
 
-${context.join('\n\n')}
+## About zHeight
+zHeight is an AI-powered platform for architectural project management, plan checking, feasibility analysis, and compliance workflows. Key features include:
+- Project Management: Track projects, tasks, milestones, and team assignments
+- AI Plan Checker: Automated review of architectural plans for code compliance
+- Feasibility Analysis: Evaluate project feasibility based on zoning and regulations
+- Knowledge Base: Centralized documentation for compliance and building codes
+- Team Collaboration: Assign tasks to project managers and architectural reviewers
 
-Use this information to provide accurate, specific answers. If the information isn't in the knowledge base, say so and provide general guidance if possible.` : 'No specific context was found in the knowledge base. Provide general guidance based on common building code knowledge, but acknowledge the limitation.'}
+${contextText}
 
-Guidelines:
-- Be professional, clear, and concise
-- Cite specific code sections when available
-- Explain complex requirements in simple terms
-- If unsure, acknowledge uncertainty
-- Focus on California Residential Code and local ordinances`;
+## Response Guidelines
+- Be helpful, friendly, and professional
+- Provide clear, concise answers
+- If information is in the context, cite it specifically
+- If unsure, acknowledge the limitation and offer to help find more information
+- Focus on helping users understand and use zHeight effectively
+- Keep responses focused and actionable`;
 
   const messages: ChatMessage[] = [
     { role: 'system', content: systemPrompt },
-    ...conversationHistory.slice(-10), // Last 10 messages for context
+    ...conversationHistory.slice(-8), // Last 8 messages for faster processing
     { role: 'user', content: message },
   ];
 
+  const startTime = Date.now();
+
   try {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${openrouterKey}`,
+        'Authorization': `Bearer ${lovableKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://zheight-ai.com', // Optional
-        'X-Title': 'ZHeight AI Compliance Chat', // Optional
       },
       body: JSON.stringify({
-        model: 'anthropic/claude-3.5-sonnet', // Better and cheaper than GPT-4
+        model: 'google/gemini-3-flash-preview', // Fast and capable
         messages: messages,
         temperature: 0.7,
-        max_tokens: 1000,
+        max_tokens: 800, // Optimized for faster responses
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('OpenRouter API error:', errorText);
+      console.error('Lovable AI error:', errorText);
+      
+      // Handle rate limits
+      if (response.status === 429) {
+        return "I'm experiencing high demand right now. Please try again in a moment.";
+      }
+      if (response.status === 402) {
+        return "The AI service is temporarily unavailable. Please try again later.";
+      }
+      
       throw new Error('Failed to generate response');
     }
 
     const data = await response.json();
+    console.log(`🤖 AI response generated in ${Date.now() - startTime}ms`);
     return data.choices[0].message.content;
   } catch (error) {
     console.error('Error generating chat response:', error);
@@ -145,6 +245,8 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
+
+  const requestStart = Date.now();
 
   try {
     const { message, sessionId }: ChatRequest = await req.json();
@@ -164,49 +266,52 @@ Deno.serve(async (req) => {
     // Get or create session
     let currentSessionId = sessionId || generateSessionId();
     
-    if (!sessionId) {
-      await supabase.from('chat_sessions').insert({
-        id: currentSessionId,
-      });
-    }
+    // Run session creation and message saving in parallel with retrieval
+    const sessionPromise = !sessionId 
+      ? supabase.from('chat_sessions').insert({ id: currentSessionId })
+      : Promise.resolve();
 
-    // Save user message
-    await supabase.from('chat_messages').insert({
+    const saveUserMsgPromise = supabase.from('chat_messages').insert({
       session_id: currentSessionId,
       role: 'user',
       content: message,
     });
 
-    // Get conversation history
-    const { data: historyData } = await supabase
+    // Start retrieval immediately (don't wait for DB ops)
+    const contextPromise = searchSimilarDocuments(supabase, message, 6);
+
+    // Get conversation history in parallel
+    const historyPromise = supabase
       .from('chat_messages')
       .select('role, content')
       .eq('session_id', currentSessionId)
       .order('created_at', { ascending: true })
-      .limit(20);
+      .limit(16);
+
+    // Wait for all parallel operations
+    const [, , context, { data: historyData }] = await Promise.all([
+      sessionPromise,
+      saveUserMsgPromise,
+      contextPromise,
+      historyPromise,
+    ]);
+
+    console.log(`💬 Query: "${message.substring(0, 50)}..."`);
+    console.log(`📚 Retrieved ${context.length} context chunks`);
 
     const conversationHistory: ChatMessage[] = historyData || [];
 
-    // Search for relevant context
-    console.log(`💬 User message: "${message}"`);
-    const context = await searchSimilarDocuments(supabase, message, 5);
-    
-    if (context.length === 0) {
-      console.warn('⚠️ No relevant context found for query');
-    } else {
-      console.log(`✅ Retrieved ${context.length} relevant chunks`);
-    }
-
-    // Generate response using OpenAI
+    // Generate response
     const assistantMessage = await generateChatResponse(message, context, conversationHistory);
-    console.log(`🤖 Assistant response generated`);
 
-    // Save assistant message
-    await supabase.from('chat_messages').insert({
+    // Save assistant message (don't await - fire and forget for speed)
+    supabase.from('chat_messages').insert({
       session_id: currentSessionId,
       role: 'assistant',
       content: assistantMessage,
-    });
+    }).then(() => {}).catch(e => console.error('Failed to save assistant message:', e));
+
+    console.log(`⏱️ Total request time: ${Date.now() - requestStart}ms`);
 
     return new Response(
       JSON.stringify({
@@ -220,7 +325,7 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         error: 'Failed to process chat message',
-        message: 'I apologize, but I encountered an error processing your message. Please try again.',
+        message: 'I apologize, but I encountered an error. Please try again.',
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
