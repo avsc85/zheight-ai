@@ -58,10 +58,11 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
 // Admin-only route protection
 const AdminRoute = ({ children }: { children: React.ReactNode }) => {
-  const { user, loading } = useAuth();
-  const { role } = useUserRole();
+  const { user, loading: authLoading } = useAuth();
+  const { role, loading: roleLoading } = useUserRole();
 
-  if (loading) {
+  // Wait for both auth and role to load
+  if (authLoading || roleLoading) {
     return (
       <div className="min-h-screen bg-gradient-subtle flex items-center justify-center">
         <p className="text-muted-foreground">Loading...</p>
