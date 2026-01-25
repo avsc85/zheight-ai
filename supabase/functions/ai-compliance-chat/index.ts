@@ -27,19 +27,54 @@ function generateSessionId(): string {
   return `session_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
 }
 
-// Rerank documents using semantic relevance scoring
+// Synonym map for common query variations
+const synonymMap: Record<string, string[]> = {
+  'founded': ['founder', 'co-founder', 'cofounded'],
+  'founder': ['founded', 'co-founder', 'ceo', 'leadership'],
+  'cofounder': ['co-founder', 'cofounded', 'founder'],
+  'ceo': ['founder', 'leadership', 'leader'],
+  'services': ['offering', 'provide', 'features'],
+  'price': ['cost', 'pricing', 'fee', 'rate'],
+  'contact': ['email', 'phone', 'reach'],
+};
+
+// Extract important keywords from query (ignore common words) + expand synonyms
+function extractKeywords(query: string): string[] {
+  const stopWords = new Set(['what', 'is', 'the', 'who', 'are', 'and', 'of', 'in', 'to', 'for', 'a', 'an', 'does', 'can', 'how', 'tell', 'me', 'about']);
+  const baseTerms = query.toLowerCase()
+    .split(/\s+/)
+    .filter(t => t.length > 2 && !stopWords.has(t));
+  
+  // Expand with synonyms
+  const expanded = new Set(baseTerms);
+  for (const term of baseTerms) {
+    if (synonymMap[term]) {
+      synonymMap[term].forEach(syn => expanded.add(syn));
+    }
+  }
+  
+  return Array.from(expanded);
+}
+
+// Rerank documents using semantic relevance scoring with stronger keyword boost
 function rerankDocuments(docs: RetrievedDoc[], query: string): RetrievedDoc[] {
-  const queryTerms = query.toLowerCase().split(/\s+/).filter(t => t.length > 2);
+  const queryTerms = extractKeywords(query);
   
   return docs.map(doc => {
     const content = doc.content.toLowerCase();
-    // Calculate keyword overlap score
-    const keywordScore = queryTerms.reduce((score, term) => {
-      return score + (content.includes(term) ? 0.1 : 0);
-    }, 0);
     
-    // Boost similarity with keyword relevance
-    const boostedSimilarity = doc.similarity + Math.min(keywordScore, 0.2);
+    // Calculate keyword overlap score - stronger boost for exact matches
+    let keywordScore = 0;
+    for (const term of queryTerms) {
+      if (content.includes(term)) {
+        // Higher boost for important terms like names
+        const boost = term.length > 5 ? 0.15 : 0.1;
+        keywordScore += boost;
+      }
+    }
+    
+    // Boost similarity with keyword relevance (allow higher boost)
+    const boostedSimilarity = doc.similarity + Math.min(keywordScore, 0.35);
     return { ...doc, similarity: boostedSimilarity };
   }).sort((a, b) => b.similarity - a.similarity);
 }
@@ -53,6 +88,38 @@ function deduplicateChunks(docs: RetrievedDoc[]): RetrievedDoc[] {
     if (seen.has(contentKey)) return false;
     seen.add(contentKey);
     return true;
+  });
+}
+
+// Keyword-based fallback search when vector search returns no/few results
+async function keywordFallbackSearch(supabase: any, query: string, limit: number): Promise<RetrievedDoc[]> {
+  const keywords = extractKeywords(query);
+  if (keywords.length === 0) return [];
+  
+  // Build ILIKE conditions for top keywords
+  const searchTerms = keywords.slice(0, 3);
+  const conditions = searchTerms.map(term => `content ILIKE '%${term}%'`).join(' OR ');
+  
+  const { data, error } = await supabase
+    .from('document_embeddings')
+    .select('content, document_id')
+    .or(conditions)
+    .limit(limit);
+    
+  if (error || !data) {
+    console.log('Keyword fallback search error:', error);
+    return [];
+  }
+  
+  // Assign relevance scores based on keyword matches
+  return data.map((doc: any) => {
+    const content = doc.content.toLowerCase();
+    const matchCount = searchTerms.filter(t => content.includes(t)).length;
+    return {
+      content: doc.content,
+      similarity: 0.5 + (matchCount * 0.1), // Base score + match bonus
+      document_id: doc.document_id
+    };
   });
 }
 
@@ -111,8 +178,8 @@ async function searchSimilarDocuments(
         
         const { data, error } = await supabase.rpc('match_documents', {
           query_embedding: queryEmbedding,
-          match_threshold: 0.4, // Lower threshold for broader results
-          match_count: limit * 2, // Fetch more for reranking
+          match_threshold: 0.25, // Very low threshold - rely on reranking
+          match_count: limit * 3, // Fetch more for better reranking
         });
         
         if (error) {
@@ -120,10 +187,19 @@ async function searchSimilarDocuments(
           return [];
         }
         
-        const reranked = rerankDocuments(data || [], query);
+        let results = data || [];
+        
+        // If vector search returns few results, supplement with keyword search
+        if (results.length < 3) {
+          console.log('📝 Vector results low, adding keyword fallback...');
+          const keywordResults = await keywordFallbackSearch(supabase, query, limit);
+          results = [...results, ...keywordResults];
+        }
+        
+        const reranked = rerankDocuments(results, query);
         const deduped = deduplicateChunks(reranked);
         
-        console.log(`⚡ Retrieval (fallback) took ${Date.now() - startTime}ms`);
+        console.log(`⚡ Retrieval (fallback) took ${Date.now() - startTime}ms, found ${deduped.length} chunks`);
         return deduped.slice(0, limit).map(doc => doc.content);
       }
       console.error('Failed to generate embedding:', await embeddingResponse.text());
@@ -133,11 +209,11 @@ async function searchSimilarDocuments(
     const embeddingData = await embeddingResponse.json();
     const queryEmbedding = embeddingData.data[0].embedding;
 
-    // Search with lower threshold and higher count for reranking
+    // Search with very low threshold - rely on reranking to filter
     const { data, error } = await supabase.rpc('match_documents', {
       query_embedding: queryEmbedding,
-      match_threshold: 0.4, // Lower threshold captures more potential matches
-      match_count: limit * 2, // Fetch more for reranking
+      match_threshold: 0.25, // Very low threshold - reranking filters
+      match_count: limit * 3, // Fetch more for better reranking
     });
 
     if (error) {
@@ -145,8 +221,17 @@ async function searchSimilarDocuments(
       return [];
     }
 
+    let results = data || [];
+    
+    // If vector search returns few results, supplement with keyword search
+    if (results.length < 3) {
+      console.log('📝 Vector results low, adding keyword fallback...');
+      const keywordResults = await keywordFallbackSearch(supabase, query, limit);
+      results = [...results, ...keywordResults];
+    }
+
     // Apply reranking and deduplication
-    const reranked = rerankDocuments(data || [], query);
+    const reranked = rerankDocuments(results, query);
     const deduped = deduplicateChunks(reranked);
     
     console.log(`⚡ Retrieval took ${Date.now() - startTime}ms, found ${deduped.length} unique chunks`);
