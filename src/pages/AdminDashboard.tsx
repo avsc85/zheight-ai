@@ -111,9 +111,10 @@ interface ProjectCardProps {
   getLatestTask: (project: ProjectSummary) => any;
   updateTaskAR: (taskId: string, arId: string) => Promise<void>;
   navigate: any;
+  onRefresh: () => void;
 }
 
-const ProjectCard = ({ project, allUsers, getStatusBadge, getLatestTask, updateTaskAR, navigate }: ProjectCardProps) => {
+const ProjectCard = ({ project, allUsers, getStatusBadge, getLatestTask, updateTaskAR, navigate, onRefresh }: ProjectCardProps) => {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [isEditingAR, setIsEditingAR] = useState(false);
   const [tempARId, setTempARId] = useState<string | null>(null);
@@ -184,8 +185,8 @@ const ProjectCard = ({ project, allUsers, getStatusBadge, getLatestTask, updateT
         description: "Task due date updated! Email notification will be sent to assigned AR.",
       });
 
-      // Refresh the data to reflect changes across project and AR's tasks
-      window.location.reload();
+      // Refresh the data without full page reload
+      onRefresh();
     } catch (error) {
       console.error("Error updating due date:", error);
       toast({
@@ -460,9 +461,10 @@ interface ProjectRowProps {
   getLatestTask: (project: ProjectSummary) => any;
   updateTaskAR: (taskId: string, arId: string) => Promise<void>;
   navigate: any;
+  onRefresh: () => void;
 }
 
-const ProjectRow = ({ project, allUsers, getStatusBadge, getLatestTask, updateTaskAR, navigate }: ProjectRowProps) => {
+const ProjectRow = ({ project, allUsers, getStatusBadge, getLatestTask, updateTaskAR, navigate, onRefresh }: ProjectRowProps) => {
   const { toast } = useToast();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [isEditingAR, setIsEditingAR] = useState(false);
@@ -529,8 +531,8 @@ const ProjectRow = ({ project, allUsers, getStatusBadge, getLatestTask, updateTa
         description: "Task due date updated! Email notification will be sent to assigned AR.",
       });
 
-      // Refresh the data to reflect changes across project and AR's tasks
-      window.location.reload();
+      // Refresh the data without full page reload
+      onRefresh();
     } catch (error) {
       console.error("Error updating due date:", error);
       toast({
@@ -1221,6 +1223,7 @@ const AdminDashboard = () => {
                     getLatestTask={getLatestTask}
                     updateTaskAR={updateTaskAR}
                     navigate={navigate}
+                    onRefresh={fetchAllProjects}
                   />
                 ))}
               </div>
@@ -1254,6 +1257,7 @@ const AdminDashboard = () => {
                           getLatestTask={getLatestTask}
                           updateTaskAR={updateTaskAR}
                           navigate={navigate}
+                          onRefresh={fetchAllProjects}
                         />
                       ))}
                     </TableBody>
