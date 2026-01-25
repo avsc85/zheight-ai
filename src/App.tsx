@@ -20,8 +20,11 @@ import PMDashboard from "./pages/PMDashboard";
 import ARDashboard from "./pages/ARDashboard";
 import TeamActivityDashboard from "./pages/TeamActivityDashboard";
 import ProjectDashboardView from "./pages/ProjectDashboardView";
+import ComplianceChat from "./pages/ComplianceChat";
+import AIKnowledgeBase from "./pages/AIKnowledgeBase";
 import NotFound from "./pages/NotFound";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { useUserRole } from "@/hooks/useUserRole";
 
 // Configure QueryClient with optimal caching defaults
 const queryClient = new QueryClient({
@@ -48,6 +51,30 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
   if (!user) {
     return <Navigate to="/auth" replace />;
+  }
+
+  return <>{children}</>;
+};
+
+// Admin-only route protection
+const AdminRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading } = useAuth();
+  const { role } = useUserRole();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-subtle flex items-center justify-center">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/auth" replace />;
+  }
+
+  if (role !== 'admin') {
+    return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;
@@ -160,6 +187,22 @@ const App = () => (
                 <ProtectedRoute>
                   <ProjectDashboardView />
                 </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/ai-compliance-chat" 
+              element={
+                <ProtectedRoute>
+                  <ComplianceChat />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/ai-knowledge-base" 
+              element={
+                <AdminRoute>
+                  <AIKnowledgeBase />
+                </AdminRoute>
               } 
             />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

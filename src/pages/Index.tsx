@@ -3,7 +3,7 @@ import { Header } from "@/components/Header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { Bot, FileCheck, Folder, Calculator, Zap, ArrowRight } from "lucide-react";
+import { Bot, FileCheck, Folder, Calculator, Zap, ArrowRight, MessageSquare } from "lucide-react";
 
 const Index = () => {
   const { user } = useAuth();
@@ -128,13 +128,34 @@ const Index = () => {
             </CardContent>
           </Card>
 
-          {/* AI Agent 4 - Coming Soon */}
+          {/* AI Agent 4 - Compliance Chat */}
+          <Card className="group hover:shadow-lg transition-all duration-300 border-border/50 hover:border-primary/30">
+            <CardHeader className="pb-4">
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center mb-3 group-hover:bg-primary/20 transition-colors">
+                <MessageSquare className="h-5 w-5 text-primary" />
+              </div>
+              <CardTitle className="text-lg text-foreground">Agent 4: Compliance Chat</CardTitle>
+              <CardDescription className="text-muted-foreground">
+                AI chatbot for building code and compliance questions
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <Link to="/ai-compliance-chat">
+                <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground group-hover:shadow-primary transition-shadow">
+                  Ask Questions
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+
+          {/* AI Agent 5 - Coming Soon */}
           <Card className="group border-border/30 opacity-60">
             <CardHeader className="pb-4">
               <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center mb-3">
                 <Zap className="h-5 w-5 text-muted-foreground" />
               </div>
-              <CardTitle className="text-lg text-muted-foreground">Agent 4: Title 24</CardTitle>
+              <CardTitle className="text-lg text-muted-foreground">Agent 5: Title 24</CardTitle>
               <CardDescription className="text-muted-foreground">
                 California Title 24 energy compliance analysis
               </CardDescription>

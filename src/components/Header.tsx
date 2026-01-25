@@ -1,4 +1,4 @@
-import { Bot, User, LogOut, Users, BarChart3, ClipboardList, ListChecks } from "lucide-react";
+import { Bot, User, LogOut, Users, BarChart3, ClipboardList, ListChecks, MessageSquare, Database } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import zHeightLogo from "@/assets/zheight-logo.png";
@@ -23,6 +23,7 @@ export const Header = () => {
     if (path === '/project-mgmt' && location.pathname.startsWith('/project-mgmt')) return true;
     if (path === '/ai-plan-checker' && location.pathname === '/ai-plan-checker') return true;
     if (path === '/ai-feasibility' && location.pathname === '/ai-feasibility') return true;
+    if (path === '/ai-compliance-chat' && location.pathname === '/ai-compliance-chat') return true;
     return false;
   };
 
@@ -86,6 +87,18 @@ export const Header = () => {
                     AI Feasibility
                   </Button>
                 </Link>
+                <Link to="/ai-compliance-chat">
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    className={`font-medium text-header-foreground/80 hover:text-header-foreground hover:bg-header-foreground/10 ${
+                      isActive('/ai-compliance-chat') ? 'bg-header-foreground/10 text-header-foreground' : ''
+                    }`}
+                  >
+                    <MessageSquare className="w-4 h-4 mr-1" />
+                    AI Chat
+                  </Button>
+                </Link>
               </nav>
             )}
           </div>
@@ -137,6 +150,12 @@ export const Header = () => {
                         <Link to="/admin/users" className="flex items-center">
                           <Users className="mr-2 h-4 w-4" />
                           <span>User Management</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link to="/ai-knowledge-base" className="flex items-center">
+                          <Database className="mr-2 h-4 w-4" />
+                          <span>AI Knowledge Base</span>
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
