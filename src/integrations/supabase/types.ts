@@ -955,6 +955,15 @@ export type Database = {
           similarity: number
         }[]
       }
+      match_documents_by_text: {
+        Args: { match_count?: number; search_query: string }
+        Returns: {
+          content: string
+          document_id: string
+          id: string
+          rank: number
+        }[]
+      }
       process_emails_safely: { Args: never; Returns: Json }
       process_pending_emails_batch: { Args: never; Returns: Json }
       restore_deleted_project: {
