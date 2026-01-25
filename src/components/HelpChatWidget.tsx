@@ -17,7 +17,7 @@ export const HelpChatWidget = () => {
     {
       id: "welcome",
       role: "assistant",
-      content: "Hi! 👋 I'm your zHeight assistant. Ask me anything about building codes, compliance requirements, or regulations!",
+      content: "Hi! 👋 Welcome to zHeight Support. I'm here to help you with any questions about our platform, features, project management, plan checking, compliance tools, and more. How can I assist you today?",
     },
   ]);
   const [input, setInput] = useState("");
@@ -114,8 +114,8 @@ export const HelpChatWidget = () => {
               <MessageCircle className="h-4 w-4 text-primary-foreground" />
             </div>
             <div>
-              <h3 className="font-semibold text-primary-foreground text-sm">zHeight Assistant</h3>
-              <p className="text-xs text-primary-foreground/70">Ask about codes & compliance</p>
+              <h3 className="font-semibold text-primary-foreground text-sm">zHeight Support</h3>
+              <p className="text-xs text-primary-foreground/70">We're here to help!</p>
             </div>
           </div>
 
@@ -155,7 +155,7 @@ export const HelpChatWidget = () => {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Ask about building codes..."
+              placeholder="Ask us anything..."
               className="flex-1 text-sm"
               disabled={isLoading}
             />
