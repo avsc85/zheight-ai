@@ -39,12 +39,12 @@ const AIKnowledgeBase = () => {
   const fetchDocuments = async () => {
     try {
       const { data, error } = await supabase
-        .from('documents')
+        .from('documents' as any)
         .select('*')
         .order('uploaded_at', { ascending: false });
 
       if (error) throw error;
-      setDocuments(data || []);
+      setDocuments((data as unknown as Document[]) || []);
     } catch (error) {
       console.error('Error fetching documents:', error);
       toast({
@@ -120,7 +120,7 @@ const AIKnowledgeBase = () => {
 
     try {
       const { error } = await supabase
-        .from('documents')
+        .from('documents' as any)
         .delete()
         .eq('id', docId);
 
