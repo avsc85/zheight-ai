@@ -197,6 +197,56 @@ export type Database = {
           },
         ]
       }
+      chat_messages: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          role: string
+          session_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          role: string
+          session_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          role?: string
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "chat_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_sessions: {
+        Row: {
+          created_at: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       checklist_items: {
         Row: {
           city: string | null
@@ -266,6 +316,77 @@ export type Database = {
           user_id?: string
           zip_code?: string | null
           zone_primary?: string | null
+        }
+        Relationships: []
+      }
+      document_embeddings: {
+        Row: {
+          chunk_index: number
+          content: string
+          created_at: string
+          document_id: string
+          embedding: string | null
+          id: string
+        }
+        Insert: {
+          chunk_index: number
+          content: string
+          created_at?: string
+          document_id: string
+          embedding?: string | null
+          id?: string
+        }
+        Update: {
+          chunk_index?: number
+          content?: string
+          created_at?: string
+          document_id?: string
+          embedding?: string | null
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_embeddings_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      documents: {
+        Row: {
+          content: string
+          folder: string
+          id: string
+          indexed_at: string | null
+          name: string
+          size: number
+          status: string
+          type: string
+          uploaded_at: string
+        }
+        Insert: {
+          content: string
+          folder?: string
+          id: string
+          indexed_at?: string | null
+          name: string
+          size: number
+          status?: string
+          type: string
+          uploaded_at?: string
+        }
+        Update: {
+          content?: string
+          folder?: string
+          id?: string
+          indexed_at?: string | null
+          name?: string
+          size?: number
+          status?: string
+          type?: string
+          uploaded_at?: string
         }
         Relationships: []
       }
@@ -802,6 +923,19 @@ export type Database = {
         Returns: boolean
       }
       is_assigned_pm: { Args: { project_id_param: string }; Returns: boolean }
+      match_documents: {
+        Args: {
+          match_count?: number
+          match_threshold?: number
+          query_embedding: string
+        }
+        Returns: {
+          content: string
+          document_id: string
+          id: string
+          similarity: number
+        }[]
+      }
       process_emails_safely: { Args: never; Returns: Json }
       process_pending_emails_batch: { Args: never; Returns: Json }
       restore_deleted_project: {
