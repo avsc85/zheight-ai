@@ -22,6 +22,7 @@ import TeamActivityDashboard from "./pages/TeamActivityDashboard";
 import ProjectDashboardView from "./pages/ProjectDashboardView";
 import ComplianceChat from "./pages/ComplianceChat";
 import AIKnowledgeBase from "./pages/AIKnowledgeBase";
+import ChatbotAnalytics from "./pages/ChatbotAnalytics";
 import NotFound from "./pages/NotFound";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -203,6 +204,14 @@ const App = () => (
               element={
                 <AdminRoute>
                   <AIKnowledgeBase />
+                </AdminRoute>
+              } 
+            />
+            <Route 
+              path="/chatbot-analytics" 
+              element={
+                <AdminRoute>
+                  <ChatbotAnalytics />
                 </AdminRoute>
               } 
             />
