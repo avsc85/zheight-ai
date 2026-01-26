@@ -1512,12 +1512,19 @@ const PMDashboard = () => {
               <Card>
                 <CardHeader className="pb-3 border-b">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-4">
                       <CardTitle className="text-base font-medium">Projects</CardTitle>
                       {Object.keys(pendingChanges).length > 0 && (
                         <Badge variant="started" className="text-xs">
                           {Object.keys(pendingChanges).length} pending changes
                         </Badge>
+                      )}
+                      {/* Disclaimer for due date requirement */}
+                      {isGlobalEditMode && (
+                        <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 px-3 py-1.5 rounded-md border border-amber-200">
+                          <AlertCircle className="h-3.5 w-3.5" />
+                          <span><strong>Note:</strong> Due date is required before assigning an AR</span>
+                        </div>
                       )}
                     </div>
                     <div className="flex items-center gap-2">

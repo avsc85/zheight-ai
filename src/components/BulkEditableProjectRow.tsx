@@ -67,6 +67,7 @@ export const BulkEditableProjectRow = ({
   const [tempARId, setTempARId] = useState<string | null>(null);
   const [isEditingDueDate, setIsEditingDueDate] = useState(false);
   const [tempDueDate, setTempDueDate] = useState<string>("");
+  const [isSavingSingle, setIsSavingSingle] = useState(false);
   
   const latestTask = getLatestTask(project);
   const currentTask = selectedTaskId 
@@ -88,60 +89,77 @@ export const BulkEditableProjectRow = ({
     u.role !== 'pm' && u.role !== 'admin'
   );
 
-  // Single row edit handlers (when not in global edit mode)
-  const handleSaveAR = async () => {
-    if (currentTask?.task_id && tempARId) {
-      if (!currentTask.due_date) {
-        toast({
-          title: "Validation Error",
-          description: `Cannot assign AR without a due date. Please set a due date for "${currentTask.task_name}" first.`,
-          variant: "destructive",
-        });
-        return;
-      }
-      await updateTaskAR(currentTask.task_id, tempARId);
-      setIsEditingAR(false);
-      setTempARId(null);
+  // Check if single row has any pending edits (not global mode)
+  const hasSingleRowPendingChanges = !isGlobalEditMode && (isEditingDueDate || isEditingAR);
+  const hasValidChanges = (isEditingDueDate && tempDueDate) || (isEditingAR && tempARId);
+
+  // Combined save for single row edit
+  const handleSaveSingleRow = async () => {
+    if (!currentTask?.task_id) return;
+    
+    // Validate AR requires due date
+    const effectiveDueDate = tempDueDate || currentTask.due_date;
+    if (tempARId && !effectiveDueDate) {
+      toast({
+        title: "Validation Error",
+        description: `Cannot assign AR without a due date. Please set a due date for "${currentTask.task_name}" first.`,
+        variant: "destructive",
+      });
+      return;
     }
-  };
 
-  const handleCancelEdit = () => {
-    setIsEditingAR(false);
-    setTempARId(null);
-  };
+    setIsSavingSingle(true);
+    try {
+      const updateData: Record<string, any> = {};
+      
+      if (isEditingDueDate && tempDueDate) {
+        updateData.due_date = tempDueDate;
+      }
+      
+      if (isEditingAR && tempARId) {
+        updateData.assigned_ar_id = tempARId;
+        updateData.assigned_skip_flag = 'Y';
+      }
 
-  const handleSaveDueDate = async () => {
-    if (currentTask?.task_id && tempDueDate) {
-      try {
+      if (Object.keys(updateData).length > 0) {
         const { error: updateError } = await supabase
           .from('project_tasks')
-          .update({ due_date: tempDueDate })
+          .update(updateData)
           .eq('task_id', currentTask.task_id);
 
         if (updateError) throw updateError;
 
         toast({
           title: "Success",
-          description: "Task due date updated!",
+          description: "Task updated successfully!",
         });
 
         onRefresh();
-        setIsEditingDueDate(false);
-        setTempDueDate("");
-      } catch (error) {
-        console.error("Error updating due date:", error);
-        toast({
-          title: "Error",
-          description: "Failed to update due date.",
-          variant: "destructive",
-        });
       }
+      
+      // Reset all edit states
+      setIsEditingDueDate(false);
+      setTempDueDate("");
+      setIsEditingAR(false);
+      setTempARId(null);
+    } catch (error) {
+      console.error("Error saving task:", error);
+      toast({
+        title: "Error",
+        description: "Failed to save changes.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingSingle(false);
     }
   };
 
-  const handleCancelDueDateEdit = () => {
+  // Cancel all single row edits
+  const handleCancelSingleRowEdit = () => {
     setIsEditingDueDate(false);
     setTempDueDate("");
+    setIsEditingAR(false);
+    setTempARId(null);
   };
 
   // Global edit mode handlers
@@ -246,31 +264,13 @@ export const BulkEditableProjectRow = ({
                 className={`h-9 w-40 bg-white ${currentPendingChange?.dueDate ? 'border-primary ring-1 ring-primary' : ''}`}
               />
             ) : isEditingDueDate ? (
-              // Single row edit mode
-              <>
-                <Input
-                  type="date"
-                  value={tempDueDate || currentTask.due_date || ""}
-                  onChange={(e) => setTempDueDate(e.target.value)}
-                  className="h-9 w-40 bg-white"
-                />
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-8 w-8 p-0 text-green-600"
-                  onClick={handleSaveDueDate}
-                >
-                  <Save className="h-4 w-4" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-8 w-8 p-0 text-red-600"
-                  onClick={handleCancelDueDateEdit}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </>
+              // Single row edit mode - just show input (save button moved to Action column)
+              <Input
+                type="date"
+                value={tempDueDate || currentTask.due_date || ""}
+                onChange={(e) => setTempDueDate(e.target.value)}
+                className="h-9 w-40 bg-white border-amber-400 ring-1 ring-amber-400"
+              />
             ) : (
               // Read mode
               <>
@@ -324,46 +324,28 @@ export const BulkEditableProjectRow = ({
                 </SelectContent>
               </Select>
             ) : isEditingAR ? (
-              // Single row edit mode
-              <>
-                <Select
-                  value={tempARId || currentTask.assigned_ar_id || ""}
-                  onValueChange={setTempARId}
-                >
-                  <SelectTrigger className="h-9 w-48 bg-white">
-                    <SelectValue placeholder="Select AR..." />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white">
-                    {assignableUsers.map(user => (
-                      <SelectItem 
-                        key={user.id} 
-                        value={user.id}
-                        className="hover:bg-purple-50 focus:bg-purple-100 cursor-pointer"
-                      >
-                        <span className="font-medium text-gray-900">
-                          {user.name} <span className="text-xs text-gray-500">({user.role.replace('ar1_planning', 'AR Planning').replace('ar2_field', 'AR Field')})</span>
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-8 w-8 p-0 text-green-600"
-                  onClick={handleSaveAR}
-                >
-                  <Save className="h-4 w-4" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-8 w-8 p-0 text-red-600"
-                  onClick={handleCancelEdit}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </>
+              // Single row edit mode - just show select (save button moved to Action column)
+              <Select
+                value={tempARId || currentTask.assigned_ar_id || ""}
+                onValueChange={setTempARId}
+              >
+                <SelectTrigger className="h-9 w-48 bg-white border-amber-400 ring-1 ring-amber-400">
+                  <SelectValue placeholder="Select AR..." />
+                </SelectTrigger>
+                <SelectContent className="bg-white">
+                  {assignableUsers.map(user => (
+                    <SelectItem 
+                      key={user.id} 
+                      value={user.id}
+                      className="hover:bg-purple-50 focus:bg-purple-100 cursor-pointer"
+                    >
+                      <span className="font-medium text-gray-900">
+                        {user.name} <span className="text-xs text-gray-500">({user.role.replace('ar1_planning', 'AR Planning').replace('ar2_field', 'AR Field')})</span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             ) : (
               // Read mode
               <>
@@ -386,18 +368,42 @@ export const BulkEditableProjectRow = ({
         )}
       </TableCell>
 
-      {/* View Dashboard Action */}
+      {/* Actions - Single Row Save or View Dashboard */}
       <TableCell>
-        <Button 
-          size="sm" 
-          variant="outline"
-          onClick={(e) => {
-            e.stopPropagation();
-            navigate(`/project-mgmt/dashboard/${project.id}`);
-          }}
-        >
-          <BarChart3 className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-2">
+          {hasSingleRowPendingChanges ? (
+            <>
+              <Button 
+                size="sm" 
+                variant="default"
+                className="bg-green-600 hover:bg-green-700"
+                onClick={handleSaveSingleRow}
+                disabled={isSavingSingle || !hasValidChanges}
+              >
+                <Save className="h-4 w-4" />
+              </Button>
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={handleCancelSingleRowEdit}
+                disabled={isSavingSingle}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </>
+          ) : (
+            <Button 
+              size="sm" 
+              variant="outline"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/project-mgmt/dashboard/${project.id}`);
+              }}
+            >
+              <BarChart3 className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </TableCell>
     </TableRow>
   );
