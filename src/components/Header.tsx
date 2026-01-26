@@ -1,4 +1,4 @@
-import { Bot, User, LogOut, Users, BarChart3, ClipboardList, ListChecks, MessageSquare, Database } from "lucide-react";
+import { Bot, User, LogOut, Users, BarChart3, ClipboardList, ListChecks, MessageSquare, Database, BarChart } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import zHeightLogo from "@/assets/zheight-logo.png";
@@ -156,6 +156,12 @@ export const Header = () => {
                         <Link to="/ai-knowledge-base" className="flex items-center">
                           <Database className="mr-2 h-4 w-4" />
                           <span>AI Knowledge Base</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link to="/chatbot-analytics" className="flex items-center">
+                          <BarChart className="mr-2 h-4 w-4" />
+                          <span>Chatbot Analytics</span>
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
