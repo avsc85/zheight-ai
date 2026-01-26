@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { TaskFilterPanel, TaskFilters, applyTaskFilters, defaultTaskFilters } from "@/components/TaskFilterPanel";
 import { ProjectDateFilter, ProjectDateFilters, applyProjectDateFilters, defaultProjectDateFilters } from "@/components/ProjectDateFilter";
+import { BulkEditableProjectRow } from "@/components/BulkEditableProjectRow";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -883,6 +884,9 @@ const PMDashboard = () => {
   const [currentUserName, setCurrentUserName] = useState<string | null>(null);
   const [taskFilters, setTaskFilters] = useState<TaskFilters>(defaultTaskFilters);
   const [dateFilters, setDateFilters] = useState<ProjectDateFilters>(defaultProjectDateFilters);
+  const [isGlobalEditMode, setIsGlobalEditMode] = useState(false);
+  const [pendingChanges, setPendingChanges] = useState<Record<string, { taskId: string; dueDate?: string; arId?: string }>>({});
+  const [isSaving, setIsSaving] = useState(false);
   const [statsOverview, setStatsOverview] = useState({
     totalProjects: 0,
     activeProjects: 0,
@@ -1136,6 +1140,98 @@ const PMDashboard = () => {
         variant: "destructive",
       });
     }
+  };
+
+  // Handle pending changes for bulk edit mode
+  const handlePendingChange = (taskId: string, change: Partial<{ taskId: string; dueDate?: string; arId?: string }>) => {
+    setPendingChanges(prev => ({
+      ...prev,
+      [taskId]: { ...prev[taskId], ...change, taskId }
+    }));
+  };
+
+  // Save all pending changes
+  const handleBulkSave = async () => {
+    const changes = Object.values(pendingChanges);
+    if (changes.length === 0) {
+      toast({
+        title: "No Changes",
+        description: "No changes to save.",
+      });
+      return;
+    }
+
+    setIsSaving(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const change of changes) {
+      try {
+        const updateData: Record<string, any> = {};
+        
+        if (change.dueDate !== undefined) {
+          updateData.due_date = change.dueDate || null;
+        }
+        
+        if (change.arId !== undefined) {
+          // Validate: due date required when assigning AR
+          const task = allTasks.find(t => t.task_id === change.taskId);
+          const effectiveDueDate = change.dueDate ?? task?.due_date;
+          
+          if (change.arId && !effectiveDueDate) {
+            toast({
+              title: "Validation Error",
+              description: `Cannot assign AR to "${task?.task_name || 'task'}" without a due date.`,
+              variant: "destructive",
+            });
+            errorCount++;
+            continue;
+          }
+          
+          updateData.assigned_ar_id = change.arId || null;
+          if (change.arId) {
+            updateData.assigned_skip_flag = 'Y';
+          }
+        }
+
+        if (Object.keys(updateData).length > 0) {
+          const { error } = await supabase
+            .from('project_tasks')
+            .update(updateData)
+            .eq('task_id', change.taskId);
+
+          if (error) throw error;
+          successCount++;
+        }
+      } catch (error) {
+        console.error("Error updating task:", change.taskId, error);
+        errorCount++;
+      }
+    }
+
+    setIsSaving(false);
+    setPendingChanges({});
+    setIsGlobalEditMode(false);
+
+    if (successCount > 0) {
+      toast({
+        title: "Changes Saved",
+        description: `Successfully updated ${successCount} task(s).${errorCount > 0 ? ` ${errorCount} failed.` : ''}`,
+      });
+      fetchPMProjects();
+    } else if (errorCount > 0) {
+      toast({
+        title: "Error",
+        description: `Failed to update ${errorCount} task(s).`,
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Cancel global edit mode
+  const handleCancelGlobalEdit = () => {
+    setPendingChanges({});
+    setIsGlobalEditMode(false);
   };
 
   // Filter projects and tasks based on active filter, search term, date filters, and task filters
@@ -1414,6 +1510,54 @@ const PMDashboard = () => {
             {/* Projects Table View */}
             {viewMode === "table" && (
               <Card>
+                <CardHeader className="pb-3 border-b">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CardTitle className="text-base font-medium">Projects</CardTitle>
+                      {Object.keys(pendingChanges).length > 0 && (
+                        <Badge variant="started" className="text-xs">
+                          {Object.keys(pendingChanges).length} pending changes
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {!isGlobalEditMode ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setIsGlobalEditMode(true)}
+                          className="gap-2"
+                        >
+                          <Edit className="h-4 w-4" />
+                          Edit All
+                        </Button>
+                      ) : (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="default"
+                            onClick={handleBulkSave}
+                            disabled={isSaving || Object.keys(pendingChanges).length === 0}
+                            className="gap-2 bg-green-600 hover:bg-green-700"
+                          >
+                            <Save className="h-4 w-4" />
+                            {isSaving ? "Saving..." : `Save All (${Object.keys(pendingChanges).length})`}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleCancelGlobalEdit}
+                            disabled={isSaving}
+                            className="gap-2"
+                          >
+                            <X className="h-4 w-4" />
+                            Cancel
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </CardHeader>
                 <CardContent className="p-0">
                   <Table>
                     <TableHeader>
@@ -1421,7 +1565,6 @@ const PMDashboard = () => {
                         <TableHead className="w-[250px]">Project Name</TableHead>
                         <TableHead className="w-[140px]">PM</TableHead>
                         <TableHead className="w-[110px]">Status</TableHead>
-                        <TableHead className="w-[110px]">Health</TableHead>
                         <TableHead className="w-[140px]">Progress</TableHead>
                         <TableHead className="w-[220px]">Task Name</TableHead>
                         <TableHead className="w-[120px]">Task Status</TableHead>
@@ -1432,15 +1575,19 @@ const PMDashboard = () => {
                     </TableHeader>
                     <TableBody>
                       {filteredProjects.map((project) => (
-                        <ProjectRow
+                        <BulkEditableProjectRow
                           key={project.id}
                           project={project}
                           allUsers={allUsers}
                           getStatusBadge={getStatusBadge}
+                          getTaskStatusBadge={getTaskStatusBadge}
                           getLatestTask={getLatestTask}
-                          updateTaskAR={updateTaskAR}
                           navigate={navigate}
+                          isGlobalEditMode={isGlobalEditMode}
+                          pendingChanges={pendingChanges}
+                          onPendingChange={handlePendingChange}
                           onRefresh={fetchPMProjects}
+                          updateTaskAR={updateTaskAR}
                         />
                       ))}
                     </TableBody>
