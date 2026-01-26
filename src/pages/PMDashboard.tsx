@@ -877,7 +877,7 @@ const PMDashboard = () => {
   const [filteredTasks, setFilteredTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
+  const [viewMode, setViewMode] = useState<"grid" | "table">("table");
   const [activeFilter, setActiveFilter] = useState<FilterTab>('total_projects');
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [currentUserName, setCurrentUserName] = useState<string | null>(null);
