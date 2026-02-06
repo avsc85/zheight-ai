@@ -129,21 +129,24 @@ const Index = () => {
             </CardContent>
           </Card>
 
-          {/* AI Agent 4 - Coming Soon */}
-          <Card className="group border-border/30 opacity-60">
+          {/* AI Agent 4 - Fire Compliance */}
+          <Card className="group hover:shadow-lg transition-all duration-300 border-border/50 hover:border-primary/30">
             <CardHeader className="pb-4">
-              <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center mb-3">
-                <Zap className="h-5 w-5 text-muted-foreground" />
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center mb-3 group-hover:bg-primary/20 transition-colors">
+                <Zap className="h-5 w-5 text-primary" />
               </div>
-              <CardTitle className="text-lg text-muted-foreground">Agent 4: Title 24</CardTitle>
+              <CardTitle className="text-lg text-foreground">Agent 4: Fire Compliance</CardTitle>
               <CardDescription className="text-muted-foreground">
-                California Title 24 energy compliance analysis
+                Automated review of building plans against WFPH+ wildfire safety requirements using advanced AI agents.
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-0">
-              <Button className="w-full" variant="secondary" disabled>
-                Coming Soon
-              </Button>
+              <a href="https://compliance-analyzer-361364457105.us-west2.run.app" target="_blank" rel="noopener noreferrer">
+                <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground group-hover:shadow-primary transition-shadow">
+                  Check Fire Compliance
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </a>
             </CardContent>
           </Card>
         </div>
