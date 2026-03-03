@@ -130,13 +130,13 @@ const Index = () => {
             </CardContent>
           </Card>
 
-          {/* AI Agent 4 - Fire Compliance */}
+          {/* AI Agent 4 - IBHS Compliance Checker */}
           <Card className="group hover:shadow-lg transition-all duration-300 border-border/50 hover:border-primary/30">
             <CardHeader className="pb-4">
               <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center mb-3 group-hover:bg-primary/20 transition-colors">
                 <Zap className="h-5 w-5 text-primary" />
               </div>
-              <CardTitle className="text-lg text-foreground">Agent 4: Fire Compliance</CardTitle>
+              <CardTitle className="text-lg text-foreground">Agent 4: IBHS Compliance Checker</CardTitle>
               <CardDescription className="text-muted-foreground">
                 Automated review of building plans against WFPH+ wildfire safety requirements using advanced AI agents.
               </CardDescription>
