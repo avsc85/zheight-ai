@@ -12,7 +12,7 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      
+
       {/* Hero Section */}
       <section className="bg-header py-16 md:py-24">
         <div className="container mx-auto px-6">
@@ -22,9 +22,10 @@ const Index = () => {
               <span className="text-primary block">Compliance & Project Management</span>
             </h1>
             <p className="text-xl text-header-foreground/70 mb-8 leading-relaxed">
-              Streamline your architectural workflow with intelligent tools for code compliance verification and project tracking.
+              Streamline your architectural workflow with intelligent tools for code compliance verification and project
+              tracking.
             </p>
-            
+
             {!user && (
               <Link to="/auth">
                 <Button size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2">
@@ -86,7 +87,7 @@ const Index = () => {
               </Link>
             </CardContent>
           </Card>
-          
+
           {/* AI Agent 2 */}
           <Card className="group hover:shadow-lg transition-all duration-300 border-border/50 hover:border-primary/30">
             <CardHeader className="pb-4">
@@ -141,7 +142,7 @@ const Index = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-0">
-              <a href="https://compliance-analyzer-361364457105.us-central1.run.app/" target="_blank" rel="noopener noreferrer">
+              <a href="https://ibhs-compliance-check.zheight.tech/" target="_blank" rel="noopener noreferrer">
                 <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground group-hover:shadow-primary transition-shadow">
                   Check Fire Compliance
                   <ArrowRight className="h-4 w-4 ml-2" />
