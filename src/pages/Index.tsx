@@ -130,22 +130,22 @@ const Index = () => {
             </CardContent>
           </Card>
 
-          {/* AI Agent 4 - IBHS Compliance Checker */}
+          {/* AI Agent 4 - AI Plan Compliance Checker */}
           <Card className="group hover:shadow-lg transition-all duration-300 border-border/50 hover:border-primary/30">
             <CardHeader className="pb-4">
               <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center mb-3 group-hover:bg-primary/20 transition-colors">
                 <Zap className="h-5 w-5 text-primary" />
               </div>
-              <CardTitle className="text-lg text-foreground">Agent 4: IBHS Compliance Checker</CardTitle>
+              <CardTitle className="text-lg text-foreground">Agent 4: AI Plan Compliance Checker</CardTitle>
               <CardDescription className="text-muted-foreground">
                 Automated review of building plans against wildfire, energy, and city code requirements — using advanced
                 AI agents built by zHeight.
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-0">
-              <a href="https://ibhs-compliance-check.zheight.tech/" target="_blank" rel="noopener noreferrer">
+              <a href="https://ai-compliance-check.zheight.tech/" target="_blank" rel="noopener noreferrer">
                 <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground group-hover:shadow-primary transition-shadow">
-                  Check Fire Compliance
+                  Check Plan Compliance
                   <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>
               </a>
