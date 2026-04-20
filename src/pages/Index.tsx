@@ -138,7 +138,8 @@ const Index = () => {
               </div>
               <CardTitle className="text-lg text-foreground">Agent 4: IBHS Compliance Checker</CardTitle>
               <CardDescription className="text-muted-foreground">
-                Automated review of building plans against WFPH+ wildfire safety requirements using advanced AI agents.
+                Automated review of building plans against wildfire, energy, and city code requirements — using advanced
+                AI agents built by zHeight.
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-0">
