@@ -143,7 +143,7 @@ const Index = () => {
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-0">
-              <a href="https://ai-compliance-check.zheight.tech/" target="_blank" rel="noopener noreferrer">
+              <a href="https://ai-compliance-checker.zheight.tech/" target="_blank" rel="noopener noreferrer">
                 <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground group-hover:shadow-primary transition-shadow">
                   Check Plan Compliance
                   <ArrowRight className="h-4 w-4 ml-2" />
